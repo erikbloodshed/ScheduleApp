@@ -114,7 +114,7 @@ public class RememberedSignInStore
         }
     }
 
-    private class StoredRecord
+    private sealed class StoredRecord
     {
         public string? Username { get; set; }
         public string? ProtectedPassword { get; set; }

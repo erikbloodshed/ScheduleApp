@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Windows;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Attendance;
@@ -75,7 +76,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         EmployeeName = employee.DisplayName;
         EmployeePin = employee.Pin;
         Date = schedule.Date;
-        DateText = schedule.Date.ToString("dddd, MMMM d, yyyy");
+        DateText = schedule.Date.ToString("dddd, MMMM d, yyyy", CultureInfo.CurrentCulture);
         HasSavedOverride = existingPairing is not null;
 
         RequiredText = schedule.WorkTimeHours is { } required

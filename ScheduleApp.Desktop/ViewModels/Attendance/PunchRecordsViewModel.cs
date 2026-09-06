@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
 using Microsoft.Win32;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Attendance;
@@ -329,7 +330,7 @@ public partial class PunchRecordsViewModel : ObservableObject
         {
             var pin = e.Pin;
 
-            bool matches = pin.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
+            bool matches = pin.ToString(CultureInfo.InvariantCulture).Contains(term, StringComparison.OrdinalIgnoreCase)
                 || e.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase)
                 || e.LastName.Contains(term, StringComparison.OrdinalIgnoreCase);
             if (!matches) continue;

@@ -559,7 +559,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
                 // _busy already owns (the Attendance tab's Cancel button, app shutdown),
                 // switchCts for "the person has already moved on to another employee."
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, switchCts.Token);
-                await LoadCoreAsync(linked.Token, adjustmentsOnly: false);
+                await LoadCoreAsync(adjustmentsOnly: false, linked.Token);
             },
             onError: ex =>
             {
@@ -686,7 +686,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// parameter only ever decides which of the two IPayrollComputationService entry points
     /// gets called; everything below this line (Result assignment, SyncAdjustmentGroupRows,
     /// AttendanceRows rebuild, EmployeeNetPayComputed) is identical either way.</summary>
-    private async Task LoadCoreAsync(CancellationToken cancellationToken, bool adjustmentsOnly)
+    private async Task LoadCoreAsync(bool adjustmentsOnly, CancellationToken cancellationToken)
     {
         var employee = SelectedEmployee!;
         var start = DateOnly.FromDateTime(_scope.PeriodStart);
@@ -923,7 +923,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // ever adds a PayrollAdjustment row, never changes attendance, so this reuses
             // the last computed attendance instead of re-running it (see LoadCoreAsync's
             // own doc comment on that parameter).
-            await LoadCoreAsync(cancellationToken, adjustmentsOnly: true);
+            await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
         },
         onError: ex => _statusBarService.ShowError(ex.Message));
     }
@@ -959,7 +959,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
 
             // adjustmentsOnly: true -- a Description edit never touches attendance, see
             // LoadCoreAsync's own doc comment on this parameter.
-            await LoadCoreAsync(cancellationToken, adjustmentsOnly: true);
+            await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
         },
         onError: ex => _statusBarService.ShowError(ex.Message));
     }
@@ -995,7 +995,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
 
             // adjustmentsOnly: true -- an Amount edit never touches attendance, see
             // LoadCoreAsync's own doc comment on this parameter.
-            await LoadCoreAsync(cancellationToken, adjustmentsOnly: true);
+            await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
         },
         onError: ex => _statusBarService.ShowError(ex.Message));
     }
@@ -1028,7 +1028,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
 
             // adjustmentsOnly: true -- deleting a row never touches attendance, see
             // LoadCoreAsync's own doc comment on this parameter.
-            await LoadCoreAsync(cancellationToken, adjustmentsOnly: true);
+            await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
 
             _statusBarService.ShowSuccess("Payroll adjustment deleted.");
         },
@@ -1139,7 +1139,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // be one call, not two nested ones. adjustmentsOnly: true -- a single-value
             // Add/Update never touches attendance, see LoadCoreAsync's own doc comment on
             // this parameter.
-            await LoadCoreAsync(cancellationToken, adjustmentsOnly: true);
+            await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
 
             _statusBarService.ShowSuccess($"Updated {type.ToText()}.");
         },
@@ -1180,7 +1180,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // Same "reload inside this same busy window" reasoning as every other
             // write above. adjustmentsOnly: true -- the waiver flag isn't attendance
             // itself, see LoadCoreAsync's own doc comment on this parameter.
-            await LoadCoreAsync(cancellationToken, adjustmentsOnly: true);
+            await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
 
             _statusBarService.ShowSuccess(waived ? "Undertime disregarded." : "Undertime restored.");
         },

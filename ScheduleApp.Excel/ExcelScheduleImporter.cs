@@ -1,3 +1,4 @@
+using System.Globalization;
 using OfficeOpenXml;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
@@ -77,7 +78,7 @@ public static class ExcelScheduleImporter
                 var idValue = ws.Cells[row, 1].Value;
                 if (idValue is null) continue;
 
-                var pin = Convert.ToInt32(idValue);
+                var pin = Convert.ToInt32(idValue, CultureInfo.InvariantCulture);
                 var (lastName, firstName) = SplitName(ws.Cells[row, 2].Text.Trim());
 
                 if (!employeesByPin.TryGetValue(pin, out var employee))
@@ -95,7 +96,7 @@ public static class ExcelScheduleImporter
                 var endDate = DateOnly.FromDateTime(ws.Cells[row, 5].GetValue<DateTime>());
 
                 var workTimeValue = ws.Cells[row, 6].Value;
-                decimal? workTime = workTimeValue is null ? null : Convert.ToDecimal(workTimeValue);
+                decimal? workTime = workTimeValue is null ? null : Convert.ToDecimal(workTimeValue, CultureInfo.InvariantCulture);
 
                 var runKey = new RunKey(pin, scheduleType, startDate, endDate, workTime);
 

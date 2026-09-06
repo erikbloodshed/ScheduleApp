@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -882,8 +883,19 @@ public static class AttendanceExcelExporter
 
         public bool IncludeDepartment { get; }
 
+        // CA1822 (mark as static) is suppressed here deliberately: these three are
+        // constant only because they sit at or left of the Department insertion point,
+        // so _offset never reaches them. They are still read as `columns.Id` alongside
+        // the _offset-dependent members below, and making just these three static would
+        // break that uniform call shape.
+        [SuppressMessage("Performance", "CA1822:Mark members as static",
+            Justification = "Kept as instance members for symmetry with the offset-dependent columns below.")]
         public int Id => 1;
+        [SuppressMessage("Performance", "CA1822:Mark members as static",
+            Justification = "Kept as instance members for symmetry with the offset-dependent columns below.")]
         public int Name => 2;
+        [SuppressMessage("Performance", "CA1822:Mark members as static",
+            Justification = "Kept as instance members for symmetry with the offset-dependent columns below.")]
         public int Department => 3; // only meaningful when IncludeDepartment is true
 
         /// <summary>Normal/Leave/Flexible/Official Business/Split Shift/Rest Day, written as plain text (see WriteIdentityColumns).

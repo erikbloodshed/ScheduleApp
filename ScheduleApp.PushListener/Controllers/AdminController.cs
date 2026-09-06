@@ -312,12 +312,12 @@ public class AdminController(
             employeeId = parsedPin;
         }
 
-        if (!TryParseOptionalTimestamp(startTime, "startTime", out var start, out var startError))
+        if (!TryParseOptionalTimestamp(startTime, nameof(startTime), out var start, out var startError))
         {
             return BadRequest(startError);
         }
 
-        if (!TryParseOptionalTimestamp(endTime, "endTime", out var end, out var endError))
+        if (!TryParseOptionalTimestamp(endTime, nameof(endTime), out var end, out var endError))
         {
             return BadRequest(endError);
         }

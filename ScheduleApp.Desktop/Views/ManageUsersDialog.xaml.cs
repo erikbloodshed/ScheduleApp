@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using ScheduleApp.Core.Exceptions;
@@ -216,11 +217,11 @@ public partial class ManageUsersDialog : Wpf.Ui.Controls.FluentWindow
     /// <summary>Read-only display row for UsersGrid -- wraps a UserAccount with
     /// formatted Created/Status text rather than a value converter, since only this
     /// one dialog needs it.</summary>
-    private class UserRow(UserAccount account)
+    private sealed class UserRow(UserAccount account)
     {
         public UserAccount Account { get; } = account;
         public string Username => Account.Username;
-        public string CreatedDisplay => Account.CreatedAtUtc.ToLocalTime().ToString("MM/dd/yyyy");
+        public string CreatedDisplay => Account.CreatedAtUtc.ToLocalTime().ToString("MM/dd/yyyy", CultureInfo.CurrentCulture);
         public string StatusDisplay => Account.IsActive ? "Active" : "Inactive";
     }
 }

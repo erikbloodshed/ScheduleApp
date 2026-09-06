@@ -62,7 +62,7 @@ public class PayrollCalculatorPayEligibilityFlagsTests
         // The line itself: gone, not present-at-zero -- only the three
         // always-shown lines (Basic Pay/Overtime/Night Diff) remain.
         Assert.Equal(3, result.ComputedGrossPay.Count);
-        Assert.DoesNotContain(result.ComputedGrossPay, line => line.Label.StartsWith("Rest Day Pay"));
+        Assert.DoesNotContain(result.ComputedGrossPay, line => line.Label.StartsWith("Rest Day Pay", StringComparison.Ordinal));
 
         // RestDayHours stays the real worked-hours figure regardless of
         // eligibility (PayrollResult.RestDayHours' own doc comment: "hours

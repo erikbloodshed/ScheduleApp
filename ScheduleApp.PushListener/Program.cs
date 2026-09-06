@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using ScheduleApp.Core.Attendance;
@@ -17,7 +18,7 @@ const string EventLogSourceName = "ScheduleAppPushListener";
 // use). Deliberately minimal -- anything fancier here is one more thing that could itself
 // fail before logging even works.
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
     .CreateBootstrapLogger();
 
 try
@@ -51,7 +52,7 @@ try
         loggerConfig
             .ReadFrom.Configuration(context.Configuration)
             .Enrich.FromLogContext()
-            .WriteTo.Console()
+            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
             // Rolls daily and by size, keeps a bounded number of files -- this is the same fix
             // RawUploadLogger got (see that class) applied to the structured log too, so neither
             // one grows forever on a service meant to run for months unattended.
@@ -77,7 +78,7 @@ try
         // itself would need admin rights this service account deliberately doesn't have.
         if (WindowsServiceHelpers.IsWindowsService())
         {
-            loggerConfig.WriteTo.EventLog(EventLogSourceName, manageEventSource: false);
+            loggerConfig.WriteTo.EventLog(EventLogSourceName, manageEventSource: false, formatProvider: CultureInfo.InvariantCulture);
         }
     });
 

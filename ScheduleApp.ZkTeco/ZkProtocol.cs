@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace ScheduleApp.ZkTeco;
@@ -25,6 +26,10 @@ namespace ScheduleApp.ZkTeco;
 /// and chunk-framing notes below reflect fixes found by comparing a raw byte
 /// capture against that same device's USB-exported attlog.dat, not guesswork.
 /// </summary>
+[SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores",
+    Justification = "The CMD_* names are the ZKTeco protocol's own command names, reproduced " +
+        "verbatim so this file can be diffed line-for-line against the vendor SDK headers and " +
+        "pyzk. Renaming them to PascalCase would break that correspondence.")]
 public static class ZkProtocol
 {
     // Commands

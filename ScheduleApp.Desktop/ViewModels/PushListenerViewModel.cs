@@ -308,5 +308,6 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         _refreshTimer.Stop();
         _logsRefreshTimer.Stop();
         _client.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

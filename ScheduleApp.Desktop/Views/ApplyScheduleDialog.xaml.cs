@@ -646,7 +646,7 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
     /// Tag, not this text, to decide "no override," so a caller with a real
     /// number just formats it the same "0.##" way ShowBufferDefault always
     /// has.</summary>
-    private void InitializeBufferBox(TextBox box, string overrideText, string defaultDisplayText, bool isExistingSegment)
+    private static void InitializeBufferBox(TextBox box, string overrideText, string defaultDisplayText, bool isExistingSegment)
     {
         if (!string.IsNullOrWhiteSpace(overrideText))
         {
@@ -852,7 +852,7 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
     /// InitializeBufferBox -- <paramref name="unit"/> exists so the warning text
     /// still reads correctly for the rate-percentage boxes, which aren't measured
     /// in hours the way every other caller's box is.</summary>
-    private bool TryReadBufferOverride(TextBox box, string fieldLabel, out double? value, string unit = "hours")
+    private static bool TryReadBufferOverride(TextBox box, string fieldLabel, out double? value, string unit = "hours")
     {
         value = null;
         if (box.Tag is true || string.IsNullOrWhiteSpace(box.Text))

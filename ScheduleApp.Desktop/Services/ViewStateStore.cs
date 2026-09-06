@@ -48,5 +48,6 @@ public class ViewStateStore : IDisposable
     /// call rather than needing App.xaml.cs to change.</summary>
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -309,7 +310,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     [ObservableProperty]
     private DateTime displayedMonth;
 
-    public string DisplayedMonthText => DisplayedMonth.ToString("MMMM yyyy");
+    public string DisplayedMonthText => DisplayedMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
     /// <summary>"Edit..." once any day currently highlighted in the calendar already has a
     /// schedule (there's something to potentially overwrite), "Set..." when none do. Kept

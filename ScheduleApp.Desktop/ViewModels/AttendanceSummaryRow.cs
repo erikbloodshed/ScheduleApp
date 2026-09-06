@@ -1,3 +1,4 @@
+using System.Globalization;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Desktop.Utilities;
@@ -154,7 +155,7 @@ public class AttendanceSummaryRow
         return $"{sign}{(int)abs.TotalHours}:{abs.Minutes:00}";
     }
 
-    private static string FormatHours(double hours) => hours.ToString("0.00");
+    private static string FormatHours(double hours) => hours.ToString("0.00", CultureInfo.CurrentCulture);
 
     // Blanks a duration that would otherwise display as "0:00" -- checks the
     // *formatted* text rather than comparing ts to TimeSpan.Zero directly, so
@@ -185,7 +186,7 @@ public class AttendanceSummaryRow
         if (workDay is not { } wd)
             return Blank;
 
-        string formatted = wd.ToString("0.00");
+        string formatted = wd.ToString("0.00", CultureInfo.CurrentCulture);
         return formatted is "0.00" or "-0.00" ? Blank : formatted;
     }
 }

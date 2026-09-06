@@ -26,7 +26,7 @@ public class AttendanceSettings
     /// <summary>The device's communication password (Menu -> Comm ->
     /// Ethernet/Comm Key). 0 (no password) is the out-of-the-box default on
     /// most units.</summary>
-    public uint DeviceCommKey { get; set; } = 0;
+    public uint DeviceCommKey { get; set; }
 
     /// <summary>"Tcp" or "Udp" -- most deployments use Tcp; a handful of
     /// firmware/installs only accept Udp. Stored as text (not the ZkTeco

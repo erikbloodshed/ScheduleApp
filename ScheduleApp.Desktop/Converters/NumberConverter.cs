@@ -16,7 +16,7 @@ namespace ScheduleApp.Desktop.Converters;
 public class NumberConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is decimal amount ? amount.ToString("N2") : value?.ToString() ?? string.Empty;
+        value is decimal amount ? amount.ToString("N2", CultureInfo.CurrentCulture) : value?.ToString() ?? string.Empty;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -384,10 +385,10 @@ public partial class ManageHolidaysDialog : Wpf.Ui.Controls.FluentWindow
     /// UpdateAsync. Its DateDisplay/Name are never seen -- it's created already in
     /// edit mode -- so the placeholder Holiday behind it only exists to keep those
     /// getters and the Id-based duplicate check non-null.</summary>
-    private partial class HolidayRow : ObservableObject
+    private sealed partial class HolidayRow : ObservableObject
     {
         public Holiday Holiday { get; }
-        public string DateDisplay => Holiday.Date.ToString("MMMM d, yyyy");
+        public string DateDisplay => Holiday.Date.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture);
         public string Name => Holiday.Name;
 
         /// <summary>Persisted holidays always have a positive identity; Id 0 marks the

@@ -185,5 +185,9 @@ public class PushListenerApiClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

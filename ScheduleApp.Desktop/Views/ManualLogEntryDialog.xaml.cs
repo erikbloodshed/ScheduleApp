@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Windows;
 using ScheduleApp.Core.Attendance;
@@ -399,6 +400,9 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow
         }
     }
 
+    [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
+        Justification = "The parameter is only enumerated once into an ItemsSource; keeping the read-only " +
+            "interface stops callers from having to materialise a List just to call this.")]
     private void ShowMachinePunches(IReadOnlyList<string> punches)
     {
         MachinePunchesList.ItemsSource = punches;

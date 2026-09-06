@@ -221,7 +221,7 @@ public class Employee
     ///    so a legacy Leave day resolves the same way this employee's other Leave
     ///    days do rather than always defaulting to Paid regardless of who they are.
     /// </summary>
-    public bool DefaultLeaveIsPaid { get; set; } = false;
+    public bool DefaultLeaveIsPaid { get; set; }
 
     /// <summary>
     /// This employee's usual per-period SSS contribution, in pesos -- read by

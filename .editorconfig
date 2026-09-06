@@ -36,3 +36,34 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+# ---------------------------------------------------------------------------
+# Analyzer suppressions (EnableNETAnalyzers / AnalysisLevel=latest-recommended,
+# see Directory.Build.props). Everything below is a rule that is wrong for this
+# codebase rather than a warning worth fixing -- see each note.
+# ---------------------------------------------------------------------------
+
+[*.cs]
+# CA1716: "rename parameter 'date'/'end', it conflicts with a reserved language
+# keyword" -- the keyword in question is Visual Basic's. This solution is C#
+# only and ships no public API surface, so the rule protects nobody while
+# `date`/`end` are the clearest names for what those parameters are.
+dotnet_diagnostic.CA1716.severity = none
+# CA1822 only for non-public members. Every public hit is a method on a
+# DI-registered singleton (DatabaseBackupService, RememberedSignInStore,
+# SharedConfigWriter, ViewStateStore, ...) that happens to hold no state today, or
+# a XAML-bound property (EmployeeNodeViewModel.HasPin). Making those static would
+# be a source-breaking change that dissolves a deliberate injection seam, or break
+# a binding outright. Private/internal helpers have no such excuse, so keep the
+# rule on for them.
+dotnet_code_quality.CA1822.api_surface = private, internal
+
+# Test method names follow the xUnit Method_Scenario_Expectation convention,
+# which CA1707 (no underscores in member names) flags on every single test.
+[ScheduleApp.{Attendance,Payroll}.Tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
+
+# EF Core scaffolds these; they are never hand-edited, so CA1861's advice to
+# hoist constant array arguments into static readonly fields is unactionable.
+[ScheduleApp.Data/Migrations/**.cs]
+dotnet_diagnostic.CA1861.severity = none
