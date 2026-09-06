@@ -1,0 +1,568 @@
+<Page x:Class="ScheduleApp.Desktop.Views.PayrollPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+      xmlns:views="clr-namespace:ScheduleApp.Desktop.Views"
+      xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+      ScrollViewer.CanContentScroll="False"
+      Title="Payroll">
+    <Page.Resources>
+        <!-- Same "card" look as SchedulePage/EmployeesPage/AttendanceView, so this tab
+             reads as the same kind of Fluent surface as everywhere else - see those
+             files' own copies of this style for why it's duplicated per-page rather
+             than shared. -->
+        <Style x:Key="CardBorder"
+               TargetType="Border">
+            <Setter Property="Background"
+                    Value="#F8FAFC" />
+            <Setter Property="BorderBrush"
+                    Value="#E2E8F0" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="CornerRadius"
+                    Value="4" />
+            <Setter Property="Padding"
+                    Value="10,8" />
+            <Setter Property="Margin"
+                    Value="0,0,0,8" />
+        </Style>
+
+        <Style x:Key="GroupLabel"
+               TargetType="TextBlock">
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Margin"
+                    Value="0,0,8,0" />
+            <Setter Property="Foreground"
+                    Value="#777777" />
+            <Setter Property="FontWeight"
+                    Value="SemiBold" />
+        </Style>
+
+        <!-- Same custom DatePickerTextBox template AttendanceView.xaml's own Period fields
+             (and this page's Period pickers below) use, duplicated here rather than shared
+             for the same reason CardBorder is - just applying a display StringFormat to the
+             picker's text box. Used to live in PayrollSummaryView.xaml, back when the Period
+             pickers themselves were still down there - see this page's own Border below.
+             Full "MMMM d, yyyy" month name (e.g. "September 16, 2026") rather than the
+             abbreviated "MMM" form, so the picker reads the same as every other date display
+             in the app (PayslipLineBuilder's payslip period line, LoadPayrollGroupDialog's run
+             list, etc.) - the DatePicker's own Width below is widened to fit it. -->
+        <Style x:Key="PeriodDatePickerTextBoxStyle"
+               TargetType="DatePickerTextBox">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DatePickerTextBox">
+                        <TextBox Text="{Binding Path=SelectedDate,
+                            RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
+                                 TextAlignment="Center" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <converters:NumberConverter x:Key="Number" />
+
+        <!-- Right-aligned numeric cell / header pair — same shape as
+             PayrollWizardDialog's own review grid copy, duplicated here for
+             the same per-file reason CardBorder is. Used by the Net Pay
+             column below. -->
+        <Style x:Key="RightAlignedCell"
+               TargetType="TextBlock">
+            <Setter Property="TextAlignment"
+                    Value="Right" />
+        </Style>
+        <Style x:Key="RightAlignedHeader"
+               TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Right" />
+        </Style>
+    </Page.Resources>
+
+    <Grid Margin="8"
+          RowDefinitions="Auto,*">
+        <!-- Command row for this page only, same "card sits right below the tab, full page
+             width, above the tree+content split" pattern SchedulePage's Import/Export
+             Schedule row, EmployeesPage's Add/Delete Department/Employee row, and
+             AttendanceView's Import/Fetch from Device row all use - see those files' own
+             copies of this comment. Period pickers plus Print Current Payslip/Print
+             Payslips… used to live inside PayrollSummaryView's own column-scoped card
+             instead (see that file's own doc comment on why they moved) - Print_Feature.md's
+             UI section calls both buttons out as PayrollPage's own actions ("PayrollPage
+             gets a 'Print Current Payslip' action for whoever's selected right now", "'Print
+             Payslips…' opens a dialog with a department/employee checkbox tree"), which is
+             what this row now matches. PayrollHeaderCard is given its own DataContext
+             (payrollViewModel, same as SummaryViewControl/AttendancePanelControl) in
+             code-behind, since this page's own DataContext is MainViewModel, not
+             PayrollViewModel - see this page's code-behind doc comment. -->
+        <Border x:Name="PayrollHeaderCard"
+                Grid.Row="0"
+                Style="{StaticResource CardBorder}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="Period"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0" />
+                <DatePicker Grid.Column="1"
+                            SelectedDate="{Binding PeriodStart}"
+                            IsTodayHighlighted="True"
+                            Width="190"
+                            Margin="0,0,6,0">
+                    <DatePicker.Resources>
+                        <Style TargetType="DatePickerTextBox"
+                               BasedOn="{StaticResource PeriodDatePickerTextBoxStyle}" />
+                    </DatePicker.Resources>
+                </DatePicker>
+                <TextBlock Grid.Column="2"
+                           Text="to"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0" />
+                <DatePicker Grid.Column="3"
+                            SelectedDate="{Binding PeriodEnd}"
+                            IsTodayHighlighted="True"
+                            Width="190">
+                    <DatePicker.Resources>
+                        <Style TargetType="DatePickerTextBox"
+                               BasedOn="{StaticResource PeriodDatePickerTextBoxStyle}" />
+                    </DatePicker.Resources>
+                </DatePicker>
+
+                <!-- Print_Feature.md's UI section: "PayrollPage gets a 'Print
+                     Current Payslip' action for whoever's selected right now"
+                     and "'Print Payslips…' opens a dialog with a
+                     department/employee checkbox tree". "Export Payroll
+                     Report…" opens the same generalized dialog with its own
+                     wording - see PayslipScopeDialog's own doc comment for
+                     why one dialog backs both. "New Payroll Run…" (build-order
+                     step 9, replacing the old "Start Payroll Period…" as of
+                     step 9.4) opens PayrollWizardDialog instead - see its own
+                     doc comment. "Load Payroll Group…" (build-order step 10)
+                     opens LoadPayrollGroupDialog - see
+                     PayrollRunViewModel.LoadPayrollGroupAsync's own doc comment
+                     for how it reopens a run saved in an earlier session. All
+                     five always visible - their own CanExecute (see
+                     PayrollSummaryViewModel.CanPrintCurrentPayslip,
+                     PayrollPrintExportViewModel.CanPrintPayslips/CanExportPayrollReport, and
+                     PayrollRunViewModel.CanNewPayrollRun/CanLoadPayrollGroup) is what
+                     actually disables them,
+                     mid-refresh or before a payslip's ever been loaded. IsBusy itself
+                     (a plain forward of the shared AttendanceBusyState.IsVisiblyRunning
+                     flag - see PayrollViewModel's own doc comment) no longer drives an
+                     inline indicator here at all - that flag now drives the status
+                     bar's own left-aligned progress indicator directly (see
+                     AttendanceBusyState.OnIsVisiblyRunningChanged), the one place it's
+                     shown for every page that shares it, rather than this page
+                     duplicating it in its own toolbar. -->
+                <StackPanel Grid.Column="4"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <Button Content="Print Current Payslip"
+                            Command="{Binding PrintCurrentPayslipCommand}"
+                            Padding="8,3"
+                            Margin="0,0,8,0"
+                            ToolTip="Preview and print/save just this employee's payslip for the period shown above." />
+                    <Button Content="Print Payslips…"
+                            Command="{Binding PrintPayslipsCommand}"
+                            Padding="8,3"
+                            Margin="0,0,10,0"
+                            ToolTip="Choose a department/employee scope and period, then preview and print/save a payslip for each -- 4 per Letter page." />
+                    <Button Content="Export Payroll Report…"
+                            Command="{Binding ExportPayrollReportCommand}"
+                            Padding="8,3"
+                            Margin="0,0,10,0"
+                            ToolTip="Choose a department/employee scope and period, then save an Excel roster of everyone's payroll for it." />
+                    <Button Content="New Payroll Run…"
+                            Command="{Binding NewPayrollRunCommand}"
+                            Padding="8,3"
+                            Margin="0,0,10,0"
+                            ToolTip="Choose who this period covers, review calculated payroll, then save it as a payroll run." />
+                    <Button Content="Load Payroll Group…"
+                            Command="{Binding LoadPayrollGroupCommand}"
+                            Padding="8,3"
+                            Margin="0,0,10,0"
+                            ToolTip="Reopen a payroll run saved earlier -- sets the period and employee checklist back to what was saved." />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Payroll Group table — replaces the old EmployeeTree plus
+                 BatchChecklistCard. Always shows the DataGrid now; the "no group
+                 loaded yet" case is handled once, for the page as a whole, by
+                 EmptyStateOverlay below rather than a second copy of that message
+                 living here too (this column just renders empty behind the overlay
+                 until BatchScopeEmployees is populated). DataContext is set
+                 explicitly in code-behind, same as PayrollHeaderCard/
+                 SummaryViewControl/AttendancePanelControl — this page's own
+                 DataContext is MainViewModel, not PayrollViewModel. -->
+            <Grid x:Name="PayrollGroupPanel"
+                  Grid.Column="0"
+                  Margin="0,0,8,0">
+
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="Payroll Group"
+                               Style="{StaticResource GroupLabel}"
+                               Margin="0,0,0,4" />
+
+                    <!-- Live filter for the table below, same comma-separated Employee
+                         ID/last name/first name/department matching as the Schedule
+                         tab's own tree search box (see
+                         PayrollViewModel.PayrollGroupSearchText) - narrows which rows
+                         are shown, not which employee is selected, so typing here never
+                         changes who the detail panels on the right are showing. -->
+                    <TextBox DockPanel.Dock="Top"
+                             Text="{Binding PayrollGroupSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Margin="0,0,0,8"
+                             ToolTip="Comma-separated Employee ID, last name, first name, or department terms to narrow the table to (e.g. &quot;342, Cruz, Kitchen&quot;). Leave blank to show everyone." />
+
+                    <!-- "Add to group" button - opens AddToPayrollGroupDialog so the
+                         person can check employees from the full roster and append them
+                         to the current saved run's membership. Docked above the grid,
+                         same DockPanel.Dock="Top" pattern the search box uses above it.
+                         Disabled until there is an active saved run (CanEditGroupMembership
+                         requires ActivePayrollRunId non-null) and while a database
+                         operation is running (_busy.IsRunning). Kept alongside the
+                         "Not in group" grid below (rather than replaced by it) since the
+                         dialog is still the faster path for adding several employees at
+                         once - the grid's own right-click Add is for one-at-a-time picks
+                         without leaving the panel. -->
+                    <Button DockPanel.Dock="Top"
+                            Content="Add to group..."
+                            Command="{Binding AddEmployeesToGroupCommand}"
+                            HorizontalAlignment="Left"
+                            Padding="6,2"
+                            Margin="0,0,0,6"
+                            ToolTip="Pick employees from the full roster to add to this payroll group." />
+
+                    <!-- Included (PayrollGroupGrid) on top, Total Net Pay strip in the
+                         middle, Not in group (AvailableEmployeeGrid) on the bottom.
+                         Included keeps the larger share (2*) since that's the grid
+                         actually being reviewed/worked from; Not in group (*) is there
+                         to add from, not to dwell in - the middle row is Auto-sized so
+                         the totals strip doesn't participate in that 2:1 split. This
+                         used to be a plain "2*/6/*" split with a GridSplitter in the
+                         middle row (same shape the right-hand SummaryViewControl/
+                         AttendancePanelControl split still uses); the splitter was
+                         removed to make room for the totals strip here, so Included/Not
+                         in group are no longer independently resizable. The Total Net
+                         Pay figure itself is computed across the whole group regardless
+                         of PayrollGroupSearchText - see PayrollViewModel.TotalNetPay's
+                         own doc comment. This inner Grid is the DockPanel's last child,
+                         so it still fills whatever space is left under the search
+                         box/Add button above. -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0">
+                            <!-- Removed the manual "Reload" button that used to live in this
+                                 DockPanel.Dock="Top" row next to the "Included" label - it
+                                 duplicated what RequestPayrollGroupRefresh's own automatic
+                                 path (period changes) and RecheckOnPageRevisitAsync (page
+                                 revisits after a schedule edit) already keep current on their
+                                 own; the one-off recalculation need it existed for is now
+                                 served by PayrollSummaryView's own per-employee Refresh
+                                 button instead (see that file). -->
+                            <TextBlock DockPanel.Dock="Top"
+                                       Text="Included"
+                                       Style="{StaticResource GroupLabel}"
+                                       Margin="0,0,0,4" />
+
+                            <!-- SelectionChanged drives MainViewModel.SelectedEmployee
+                                 via PayrollGroupGrid_OnSelectionChanged in code-behind
+                                 - same assignment EmployeeTree_OnSelectedItemChanged
+                                 made from a tree click. Selection is persistent (not
+                                 cleared after each click) so the highlighted row tracks
+                                 who is currently loaded in the detail panels on the
+                                 right. -->
+                            <DataGrid x:Name="PayrollGroupGrid"
+                                      ItemsSource="{Binding PayrollGroupRowsView}"
+                                      SelectionChanged="PayrollGroupGrid_OnSelectionChanged"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      CanUserReorderColumns="False"
+                                      CanUserSortColumns="False"
+                                      GridLinesVisibility="Horizontal"
+                                      BorderThickness="0"
+                                      Background="Transparent"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <!-- Removing a row is now the "Exclude" button in the Total
+                                     Net Pay strip below (bound to RemoveEmployeeFromGroupCommand
+                                     with CommandParameter="{Binding SelectedItem.Employee,
+                                     ElementName=PayrollGroupGrid}") rather than a right-click
+                                     ContextMenu on the row itself - see that Border's own doc
+                                     comment. -->
+                                <DataGrid.RowStyle>
+                                    <!-- BasedOn the theme's row style: without it, this Style
+                                         object replaces (rather than extends) whatever the app's
+                                         theme normally applies to a DataGridRow, and the row loses
+                                         its selection highlight entirely, making this grid the only
+                                         one in the app not showing which row is selected.
+                                         EmployeesGrid gets the highlight for free since it sets no
+                                         RowStyle at all; AttendanceView's grid sets its own but
+                                         recreates the highlight explicitly (Background/Foreground
+                                         bound to IsSelected via a converter) rather than relying on
+                                         BasedOn. Either approach works, this one just needs one
+                                         of them and had neither.
+                                         NOTE: WPF-UI (see App.xaml's ui:ControlsDictionary) does
+                                         not register its row look as an implicit {x:Type
+                                         DataGridRow} resource - it keys it explicitly as
+                                         DefaultDataGridRowStyle and assigns it via a Setter inside
+                                         its own DataGrid style. {StaticResource {x:Type
+                                         DataGridRow}} therefore resolves to nothing and fails at
+                                         load time instead of restoring the highlight.
+                                         EmployeesPage.xaml's RightAlignedHeader/CenteredCheckBox
+                                         Header styles show this same pattern already used
+                                         correctly elsewhere in this app, basing on WPF-UI's named
+                                         DefaultDataGridColumnHeaderStyle rather than an implicit
+                                         type key - DefaultDataGridRowStyle is that same
+                                         convention's equivalent for rows. -->
+                                    <Style TargetType="DataGridRow"
+                                           BasedOn="{StaticResource DefaultDataGridRowStyle}" />
+                                </DataGrid.RowStyle>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Employee"
+                                                        Binding="{Binding EmployeeName}"
+                                                        Width="*" />
+                                    <DataGridTextColumn Header="Department"
+                                                        Binding="{Binding DepartmentName}"
+                                                        Width="*" />
+                                    <!-- Optional per the Phase 4 plan (row 9) - surfaces
+                                         EmployeeType so a Monthly-rated employee is visible
+                                         at a glance in the batch group, same idea as
+                                         PayrollSummaryView's header badge (Daily/Monthly
+                                         plain ToString(), no converter). -->
+                                    <DataGridTextColumn Header="Pay Type"
+                                                        Binding="{Binding PayTypeText}"
+                                                        Width="Auto" />
+                                    <!-- Plain "Net Pay" header - this used to be a bound
+                                         TextBlock reading "Net Pay (Computing NN%)" while a
+                                         refresh was in flight, driven by PayrollViewModel's
+                                         own IsPayrollGroupLoading/PayrollGroupLoadPercent.
+                                         Removed on request: the status bar (see
+                                         StatusBarPresenter's ProgressPanel) still shows that
+                                         same progress while a refresh runs, this panel itself
+                                         just no longer duplicates it in the column header. -->
+                                    <DataGridTextColumn Header="Net Pay"
+                                                        Binding="{Binding NetPay,
+                                                            Converter={StaticResource Number}}"
+                                                        ElementStyle="{StaticResource RightAlignedCell}"
+                                                        HeaderStyle="{StaticResource RightAlignedHeader}"
+                                                        Width="Auto" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+
+                        <!-- Include/Exclude replace the two grids' old right-click
+                             ContextMenus (see PayrollGroupGrid's and AvailableEmployeeGrid's
+                             own RowStyle comments) - each acts on whichever row is currently
+                             selected in its grid, via a plain ElementName->SelectedItem.Employee
+                             CommandParameter rather than the ContextMenu's PlacementTarget/Tag
+                             tunnel (no longer needed once the button isn't part of the row
+                             itself). Both commands already null-guard a missing employee (see
+                             RemoveEmployeeFromGroupAsync/AddEmployeeToGroupAsync's own doc
+                             comments), so clicking with nothing selected in the relevant grid
+                             is a silent no-op rather than an error. -->
+                        <Border Grid.Row="1"
+                                Style="{StaticResource CardBorder}"
+                                Margin="0,8">
+                            <DockPanel LastChildFill="False">
+                                <Button DockPanel.Dock="Left"
+                                        Content="Include"
+                                        Command="{Binding AddEmployeeToGroupCommand}"
+                                        CommandParameter="{Binding SelectedItem.Employee, ElementName=AvailableEmployeeGrid}"
+                                        Padding="6,2"
+                                        ToolTip="Add the employee selected below (Not in group) to the payroll group." />
+                                <Button DockPanel.Dock="Left"
+                                        Content="Exclude"
+                                        Command="{Binding RemoveEmployeeFromGroupCommand}"
+                                        CommandParameter="{Binding SelectedItem.Employee, ElementName=PayrollGroupGrid}"
+                                        Padding="6,2"
+                                        Margin="6,0,0,0"
+                                        ToolTip="Remove the employee selected above (Included) from the payroll group." />
+                                <StackPanel DockPanel.Dock="Right"
+                                            Orientation="Horizontal">
+                                    <TextBlock Text="Total Net Pay"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding TotalNetPay, Converter={StaticResource Number}}"
+                                               FontWeight="SemiBold"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <DockPanel Grid.Row="2">
+                            <TextBlock DockPanel.Dock="Top"
+                                       Text="Not in group"
+                                       Style="{StaticResource GroupLabel}"
+                                       Margin="0,8,0,4" />
+
+                            <!-- No SelectionChanged wiring here - unlike PayrollGroupGrid,
+                                 clicking a row here doesn't change MainViewModel.
+                                 SelectedEmployee; these employees aren't part of the group
+                                 yet, so there's nothing of theirs to preview in the detail
+                                 panels on the right. Same borderless/transparent/horizontal-
+                                 gridlines look as PayrollGroupGrid above so the two read as
+                                 one panel split in half, not two different controls. -->
+                            <DataGrid x:Name="AvailableEmployeeGrid"
+                                      ItemsSource="{Binding AvailableEmployeeRowsView}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      CanUserReorderColumns="False"
+                                      CanUserSortColumns="False"
+                                      GridLinesVisibility="Horizontal"
+                                      BorderThickness="0"
+                                      Background="Transparent"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <!-- Adding a row to the group is now the "Include" button in
+                                     the Total Net Pay strip above (bound to
+                                     AddEmployeeToGroupCommand with CommandParameter="{Binding
+                                     SelectedItem.Employee, ElementName=AvailableEmployeeGrid}")
+                                     rather than a right-click ContextMenu on the row itself -
+                                     see that Border's own doc comment. Still BasedOn the
+                                     theme's row style for the selection highlight, same
+                                     reasoning as PayrollGroupGrid's own RowStyle above. -->
+                                <DataGrid.RowStyle>
+                                    <Style TargetType="DataGridRow"
+                                           BasedOn="{StaticResource DefaultDataGridRowStyle}" />
+                                </DataGrid.RowStyle>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Employee"
+                                                        Binding="{Binding EmployeeName}"
+                                                        Width="*" />
+                                    <DataGridTextColumn Header="Department"
+                                                        Binding="{Binding DepartmentName}"
+                                                        Width="*" />
+                                    <!-- Same optional Pay Type column as PayrollGroupGrid
+                                         above, same reasoning - see that column's comment. -->
+                                    <DataGridTextColumn Header="Pay Type"
+                                                        Binding="{Binding PayTypeText}"
+                                                        Width="Auto" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </Grid>
+
+            <!-- Right: split into two rows sharing the same employee+period - top is
+                 PayrollSummaryView (itemized Gross Pay/Deductions/Net Pay), bottom is
+                 EmployeeAttendancePanel (read-only attendance grid for the same
+                 employee/period). Both driven by one PayrollViewModel, set explicitly as
+                 their DataContext in code-behind since this page's own DataContext is
+                 MainViewModel (for the tree above), not PayrollViewModel - see this page's
+                 code-behind doc comment. GridSplitter lets the summary's itemized lists
+                 (which can run long once several adjustment rows are added) be given more
+                 room without the attendance grid disappearing entirely. -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="2*" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <views:PayrollSummaryView x:Name="SummaryViewControl"
+                                           Grid.Row="0" />
+
+                <GridSplitter Grid.Row="1"
+                              Height="6"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              Background="#E2E8F0"
+                              ResizeDirection="Rows" />
+
+                <views:EmployeeAttendancePanel x:Name="AttendancePanelControl"
+                                                Grid.Row="2" />
+            </Grid>
+        </Grid>
+
+        <!-- Empty-state overlay: covers the whole page (header row plus the
+             group/summary/attendance row below it), not just PayrollGroupPanel's own
+             column, as of this refactor - added last within the root Grid so it paints
+             on top of everything else here, spanning both of the root Grid's rows.
+             Shown whenever HasBatchScope is false, which in practice means "the
+             Payroll tab has been selected this session and neither 'New Payroll
+             Run…' nor 'Load Payroll Group…' has been completed yet" - BatchScopeEmployees
+             is only ever replaced by a freshly confirmed scope (see its own doc comment
+             in PayrollViewModel, and the explicit clear at the end of its constructor),
+             never cleared back out afterward, so this never reappears once a group's
+             been loaded/created this session, even navigating back to this tab later.
+             Same solid full-bleed Background plus centered, fixed-Width content idea as
+             MainWindow's own AuthOverlay/SignInPanel (see MainWindow.xaml) - no card
+             border or drop shadow floating over a dimmed scrim, just the page itself
+             replaced by this content the way the sign-in screen replaces the whole
+             window's. The one deliberate difference from AuthOverlay: this Border only
+             spans PayrollPage's own root Grid, not RootNavigationView's top pane the way
+             AuthOverlay's Grid.RowSpan="2" spans MainWindow's - so the Employees/
+             Schedule/Attendance/… tabs stay visible and clickable above it, since
+             switching tabs is exactly how someone would back out of this empty state
+             without loading/creating a payroll group. DataContext is set explicitly in
+             code-behind, same as PayrollHeaderCard/SummaryViewControl/
+             AttendancePanelControl/PayrollGroupPanel above, since this page's own
+             DataContext is MainViewModel, not PayrollViewModel. -->
+        <Border x:Name="EmptyStateOverlay"
+                Grid.Row="0"
+                Grid.RowSpan="2"
+                Background="White"
+                Visibility="{Binding HasBatchScope,
+                    Converter={StaticResource InverseBoolToVisibility}}">
+            <!-- Same Width="380" fixed-width-card-on-a-solid-background shape as
+                 SignInPanel (see MainWindow.xaml's own AuthOverlay/SignInPanel), and the
+                 same title/subtitle/fields-stacked-then-buttons reading order, just with
+                 two action buttons instead of sign-in fields. -->
+            <StackPanel Width="380"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <TextBlock Text="No payroll group loaded"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           TextAlignment="Center"
+                           Margin="0,0,0,8" />
+                <TextBlock Text="Start a new payroll run or reopen one you saved earlier to get going."
+                           FontSize="14"
+                           Foreground="#64748B"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,24" />
+                <Button Content="New Payroll Run…"
+                        Command="{Binding NewPayrollRunCommand}"
+                        HorizontalAlignment="Stretch"
+                        Padding="8,8"
+                        Margin="0,0,0,10"
+                        ToolTip="Choose who this period covers, review calculated payroll, then save it as a payroll run." />
+                <Button Content="Load Payroll Group…"
+                        Command="{Binding LoadPayrollGroupCommand}"
+                        HorizontalAlignment="Stretch"
+                        Padding="8,8"
+                        ToolTip="Reopen a payroll run saved earlier -- sets the period and employee checklist back to what was saved." />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Page>

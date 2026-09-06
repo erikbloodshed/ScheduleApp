@@ -1,0 +1,36 @@
+<Window x:Class="ScheduleApp.Desktop.Views.AddUserDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Add User" Width="340" Height="320"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Account name" Margin="0,0,0,4" />
+        <TextBox x:Name="UsernameBox" Grid.Row="1" Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="2" Text="Password (at least 8 characters)" Margin="0,0,0,4" />
+        <PasswordBox x:Name="PasswordBoxControl" Grid.Row="3" Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="4" Text="Confirm password" Margin="0,0,0,4" />
+        <PasswordBox x:Name="ConfirmPasswordBoxControl" Grid.Row="5" Margin="0,0,0,4" />
+
+        <TextBlock x:Name="ErrorText" Grid.Row="6" Foreground="#DC2626" TextWrapping="Wrap"
+                   Visibility="Collapsed" Margin="0,8,0,0" VerticalAlignment="Top" />
+
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Add" Width="80" Margin="0,0,8,0" IsDefault="True" Click="AddButton_Click" />
+            <Button Content="Cancel" Width="80" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

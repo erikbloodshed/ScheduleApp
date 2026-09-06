@@ -1,0 +1,19 @@
+<Solution>
+  <Project Path="ScheduleApp.Core/ScheduleApp.Core.csproj" />
+  <Project Path="ScheduleApp.Desktop/ScheduleApp.Desktop.csproj" DefaultStartup="true"/>
+  <Project Path="ScheduleApp.ZkTeco/ScheduleApp.ZkTeco.csproj" />
+  <Project Path="ScheduleApp.Data/ScheduleApp.Data.csproj" />
+  <Project Path="ScheduleApp.Excel/ScheduleApp.Excel.csproj" />
+  <Project Path="ScheduleApp.Payroll/ScheduleApp.Payroll.csproj" />
+  <Project Path="ScheduleApp.Payroll.Tests/ScheduleApp.Payroll.Tests.csproj" />
+  <Project Path="ScheduleApp.Payroll.Pdf/ScheduleApp.Payroll.Pdf.csproj" />
+  <Project Path="ScheduleApp.PushListener/ScheduleApp.PushListener.csproj" />
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="ScheduleApp.Attendance.Tests/ScheduleApp.Attendance.Tests.csproj" />
+  <Project Path="ScheduleApp.Attendance/ScheduleApp.Attendance.csproj">
+    <Platform Solution="Debug|x64" Project="x64" />
+  </Project>
+</Solution>

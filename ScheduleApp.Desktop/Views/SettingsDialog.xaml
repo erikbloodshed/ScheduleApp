@@ -1,0 +1,250 @@
+<Window x:Class="ScheduleApp.Desktop.Views.SettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
+        Title="Settings" Width="460" Height="600"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        utilities:WindowSizing.ConstrainToWorkArea="True">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+            <Grid Margin="0,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <!-- Rows 36-37: Late in / early out grace period, inserted right after
+                         the Clock-out grace period field (35) so the two grace-period
+                         settings sit next to each other; everything from the old row 36
+                         (Night differential start) on down shifts by two to make room. -->
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <!-- Rows 47-50: Payslip section, appended after the last row Sign-in
+                         page already uses (46) so nothing above has to renumber - same
+                         "Grid, not a second row" reasoning the connection-string row's own
+                         comment gives, just at file scope instead of one row's scope. -->
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Text="Saved to the shared, machine-wide config file both Schedule Manager and the Push Listener service read -- set once per machine instead of once per app. Takes effect the next time each one starts. (The Attendance Policy below only affects Schedule Manager -- Push Listener doesn't use it -- but lives in the same file for one place to manage all of this.)"
+                           TextWrapping="Wrap"
+                           Foreground="#475569"
+                           Margin="0,0,0,4" />
+
+                <TextBlock x:Name="FilePathText" Grid.Row="1"
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="#94A3B8"
+                           Margin="0,0,0,16" />
+
+                <TextBlock Grid.Row="2" Text="Database" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Grid.Row="3" Text="Connection string" Margin="0,0,0,4" />
+                <!-- Grid, not a second row, so adding this button doesn't renumber every
+                     row below it. See DatabaseSetupDialog/CreateDatabaseButton_Click. -->
+                <Grid Grid.Row="4" Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="ConnectionStringBox" Grid.Column="0" Margin="0,0,8,0"
+                             FontFamily="Consolas"
+                             ToolTip="The SQL Server connection string both apps use to reach the ScheduleDb / AttendanceLogs database." />
+                    <Button Grid.Column="1" Content="Create New Database / Login…" Padding="8,4"
+                            Click="CreateDatabaseButton_Click"
+                            ToolTip="Opens a wizard to create a database and SQL Server login, then fills the connection string above with the result -- still needs Save below to apply it." />
+                </Grid>
+
+                <TextBlock Grid.Row="5" Text="Attendance device defaults" FontWeight="SemiBold" Margin="0,0,0,2" />
+                <TextBlock Grid.Row="6"
+                           Text="Used every time Fetch from Device runs on the Attendance tab -- this app talks to a single terminal, so there's no per-fetch override. Leave blank and Fetch from Device will just remind you to set it here."
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="#475569"
+                           Margin="0,0,0,10" />
+
+                <TextBlock Grid.Row="7" Text="Device IP" Margin="0,0,0,4" />
+                <TextBox x:Name="DeviceIpBox" Grid.Row="8" Margin="0,0,0,12"
+                         ToolTip="The terminal's IP address -- check Menu → Comm → Ethernet on the device itself." />
+
+                <TextBlock Grid.Row="9" Text="Port" Margin="0,0,0,4" />
+                <TextBox x:Name="PortBox" Grid.Row="10" Margin="0,0,0,12"
+                         ToolTip="4370 is the standard ZKTeco port -- almost never needs to change." />
+
+                <TextBlock Grid.Row="11" Text="Comm key" Margin="0,0,0,4" />
+                <TextBox x:Name="CommKeyBox" Grid.Row="12" Margin="0,0,0,12"
+                         ToolTip="The device's communication password (Menu → Comm → Ethernet/Comm Key). 0 = no password, the out-of-the-box default on most units." />
+
+                <CheckBox x:Name="UseUdpCheckBox" Grid.Row="13" Content="Use UDP" Margin="0,0,0,16"
+                          ToolTip="Most deployments use TCP (unchecked). Check this only if the device is configured for UDP-only communication." />
+
+                <TextBlock Grid.Row="14" Text="Scheduling defaults" FontWeight="SemiBold" Margin="0,0,0,2" />
+                <TextBlock Grid.Row="15"
+                           Text="Pre-filled into the work time field whenever you set a schedule for days that don't already have one -- you can still change it per entry, this is just the starting point."
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="#475569"
+                           Margin="0,0,0,10" />
+
+                <TextBlock Grid.Row="16" Text="Default work time (hours)" Margin="0,0,0,4" />
+                <TextBox x:Name="DefaultWorkTimeHoursBox" Grid.Row="17" Margin="0,0,0,16"
+                         ToolTip="Starting value for a new Normal/Official Business/Flexible schedule entry's work-time-hours field. Default 10." />
+
+                <TextBlock Grid.Row="18" Text="Attendance policy" FontWeight="SemiBold" Margin="0,0,0,2" />
+                <TextBlock Grid.Row="19"
+                           Text="Tunable rules for matching punches to a scheduled shift and computing hours. Values are in hours unless noted otherwise; the out-of-the-box defaults work for most deployments."
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="#475569"
+                           Margin="0,0,0,10" />
+
+                <TextBlock Grid.Row="20" Text="Clock-in buffer, before scheduled time" Margin="0,0,0,4" />
+                <TextBox x:Name="ClockInBufferBeforeBox" Grid.Row="21" Margin="0,0,0,10"
+                         ToolTip="How far before a shift's scheduled start a punch still counts as that shift's clock-in. Default 2." />
+
+                <TextBlock Grid.Row="22" Text="Clock-in buffer, after scheduled time" Margin="0,0,0,4" />
+                <TextBox x:Name="ClockInBufferAfterBox" Grid.Row="23" Margin="0,0,0,10"
+                         ToolTip="How far after a shift's scheduled start a punch still counts as that shift's clock-in. Default 2." />
+
+                <TextBlock Grid.Row="24" Text="Clock-out buffer, before scheduled time" Margin="0,0,0,4" />
+                <TextBox x:Name="ClockOutBufferBeforeBox" Grid.Row="25" Margin="0,0,0,10"
+                         ToolTip="How far before a shift's scheduled end a punch still counts as that shift's clock-out. Default 6." />
+
+                <TextBlock Grid.Row="26" Text="Clock-out buffer, after scheduled time" Margin="0,0,0,4" />
+                <TextBox x:Name="ClockOutBufferAfterBox" Grid.Row="27" Margin="0,0,0,10"
+                         ToolTip="How far after a shift's scheduled end a punch still counts as that shift's clock-out. Default 6." />
+
+                <TextBlock Grid.Row="28" Text="Split shift segment clock-in buffer" Margin="0,0,0,4" />
+                <TextBox x:Name="FlexInBufferBox" Grid.Row="29" Margin="0,0,0,10"
+                         ToolTip="Same idea as the clock-in buffers above, but for one segment of a split shift -- tighter by default since a segment is usually much shorter than a full shift. Default 1." />
+
+                <TextBlock Grid.Row="30" Text="Split shift segment clock-out buffer" Margin="0,0,0,4" />
+                <TextBox x:Name="FlexOutBufferBox" Grid.Row="31" Margin="0,0,0,10"
+                         ToolTip="Same as above, for a split shift segment's clock-out. Default 1." />
+
+                <TextBlock Grid.Row="32" Text="Flexible minimum break gap" Margin="0,0,0,4" />
+                <TextBox x:Name="FlexMinBreakGapBox" Grid.Row="33" Margin="0,0,0,10"
+                         ToolTip="Affects every Flexible day: every punch that day counts, paired off in order. Two consecutive punch-pairs count as separate work stretches only if at least this many hours separate them -- a shorter gap is treated as a duplicate/stray punch and folded into one continuous stretch instead. Default 1." />
+
+                <TextBlock Grid.Row="34" Text="Clock-out grace period" Margin="0,0,0,4" />
+                <TextBox x:Name="GracePeriodBox" Grid.Row="35" Margin="0,0,0,12"
+                         ToolTip="Extra time after a shift's scheduled end that's still treated as on-time rather than overtime. Default 0.5." />
+
+                <TextBlock Grid.Row="36" Text="Late in / early out grace period (minutes)" Margin="0,0,0,4" />
+                <TextBox x:Name="LateEarlyGraceMinutesBox" Grid.Row="37" Margin="0,0,0,12"
+                         ToolTip="How many minutes late clocking in, or early clocking out, still count as exactly on time -- so a couple minutes' slack doesn't get flagged as Late In/Early Out or dock pay. Past this many minutes, the full difference counts, not just the amount beyond it. Default 5." />
+
+                <TextBlock Grid.Row="38" Text="Night differential start" Margin="0,0,0,4" />
+                <TextBox x:Name="NightDiffStartBox" Grid.Row="39" Margin="0,0,0,10"
+                         ToolTip="Start of the night-differential window, based on actual clocked-in/out time (not the scheduled shift). Default 10:00 PM. Official Business never earns night diff, regardless of this setting." />
+
+                <TextBlock Grid.Row="40" Text="Night differential end" Margin="0,0,0,4" />
+                <TextBox x:Name="NightDiffEndBox" Grid.Row="41" Margin="0,0,0,12"
+                         ToolTip="End of the night-differential window. Default 6:00 AM -- earlier than the start, which is how this (and every other time field here) marks a window that crosses midnight." />
+
+                <StackPanel Grid.Row="42" Margin="0,0,0,2">
+                    <CheckBox x:Name="CapEarlyClockInCheckBox" Content="Cap early clock-in at the scheduled start time" Margin="0,0,0,8"
+                              ToolTip="If checked, clocking in early doesn't count extra time before the shift was due to start." />
+                    <CheckBox x:Name="StrictOvertimeCheckBox" Content="Count overtime strictly from the shift's scheduled end" Margin="0,0,0,8"
+                              ToolTip="If checked, overtime is measured from the scheduled shift end rather than from the grace period's cutoff." />
+                    <CheckBox x:Name="UseExcelFormulaCheckBox" Content="Use live formulas in exported Excel summaries" Margin="0,0,0,10"
+                              ToolTip="If checked, Generate Reports writes recalculating Excel formulas instead of literal computed values, so the workbook stays correct if these numbers are tweaked by hand afterward." />
+
+                    <TextBlock Text="Net pay rounding (nearest multiple)" Margin="0,0,0,4" />
+                    <TextBox x:Name="NetPayRoundingMultipleBox" Width="120" HorizontalAlignment="Left"
+                             ToolTip="Rounds each employee's Net Pay to the nearest multiple of this amount, the same way Excel's MROUND(number, multiple) function works -- e.g. 1 rounds to the nearest whole unit, 5 to the nearest 5, 0.25 to the nearest quarter. 0.01 (the default) keeps Net Pay at its normal 2-decimal precision -- effectively no extra rounding. Must be greater than 0." />
+                </StackPanel>
+
+                <TextBlock Grid.Row="43" Text="Sign-in page" FontWeight="SemiBold" Margin="0,16,0,2" />
+                <TextBlock Grid.Row="44"
+                           Text="The logo shown above the sign-in form and the first-run setup screen. Choose an image to replace the default; Reset to Default goes back to the built-in logo."
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="#475569"
+                           Margin="0,0,0,10" />
+
+                <StackPanel Grid.Row="45" Orientation="Horizontal" Margin="0,0,0,6">
+                    <Border BorderBrush="#CBD5E1" BorderThickness="1" Width="120" Height="80">
+                        <Image x:Name="LogoPreviewImage" Source="/Assets/Tinapayan_Logo.png" Stretch="Uniform" Margin="4" />
+                    </Border>
+                    <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Button x:Name="ChooseLogoButton" Content="Choose Image..." Width="140" Margin="0,0,0,6"
+                                Click="ChooseLogoButton_Click" />
+                        <Button x:Name="ResetLogoButton" Content="Reset to Default" Width="140"
+                                Click="ResetLogoButton_Click" />
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock x:Name="LogoStatusText" Grid.Row="46" FontSize="11" Foreground="#94A3B8"
+                           TextWrapping="Wrap" />
+
+                <TextBlock Grid.Row="47" Text="Payslip" FontWeight="SemiBold" Margin="0,16,0,2" />
+                <TextBlock Grid.Row="48"
+                           Text="The company name printed at the top of every generated payslip, both the Print Current Payslip / Print Payslips… preview and the saved PDF."
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="#475569"
+                           Margin="0,0,0,10" />
+
+                <TextBlock Grid.Row="49" Text="Company name" Margin="0,0,0,4" />
+                <TextBox x:Name="CompanyNameBox" Grid.Row="50"
+                         ToolTip="Printed centered at the top of every payslip, above the PAYSLIP heading. Required." />
+            </Grid>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Save" Width="80" Margin="0,0,8,0" IsDefault="True" Click="SaveButton_Click" />
+            <Button Content="Cancel" Width="80" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

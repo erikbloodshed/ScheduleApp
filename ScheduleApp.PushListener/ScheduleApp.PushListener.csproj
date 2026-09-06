@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ScheduleApp.PushListener</RootNamespace>
+    <!--
+      This is deliberately a plain console/web host, not WinExe — it has no UI and is meant
+      to run headless as a Windows Service (see Program.cs and the README in this folder),
+      independent of whether ScheduleApp.Desktop is even installed on the machine.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.11" />
+    <!-- Serilog replaces the old builder.Logging.AddEventLog(...) plus plain-console setup,
+         see Program.cs. Serilog.AspNetCore wires UseSerilog() into the generic host;
+         Serilog.Sinks.File and Serilog.Formatting.Compact give the rolling, JSON-per-line log
+         file; Serilog.Sinks.EventLog replaces Microsoft.Extensions.Logging.EventLog so Event
+         Viewer stays in the picture for a service-hosted run. If the SDK later flags any of
+         these as already transitively available (the same NU1510 case the old EventLog
+         reference used to hit), drop the explicit reference the same way that one was
+         removed - don't re-add it just to silence the warning. -->
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Gets us AttendanceLog, AttendanceLogSource, IAttendanceLogRepository — the push
+         listener speaks ScheduleApp's own domain model directly, unlike the old AdmsServer
+         prototype which had its own separate AttendancePunch/AttendanceDbContext. -->
+    <ProjectReference Include="..\ScheduleApp.Core\ScheduleApp.Core.csproj" />
+    <!-- Gets us ScheduleDbContext + SqlAttendanceLogRepository, so a pushed punch lands in
+         the exact same AttendanceLogs table (and goes through the exact same dedup index)
+         that "Import Punch Log" and "Fetch from Device" already write to. -->
+    <ProjectReference Include="..\ScheduleApp.Data\ScheduleApp.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

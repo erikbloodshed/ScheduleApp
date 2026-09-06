@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ScheduleApp.Payroll.Pdf</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      QuestPDF Community license: free for individuals, non-profits,
+      open-source projects, and organizations under $1M USD annual gross
+      revenue/infrastructure cost - see PayslipFonts.EnsureConfigured's own
+      comment for where that's actually acknowledged in code (Settings.License
+      must be set before generating anything, the same "must configure exactly
+      once" shape ScheduleApp.Excel.ExcelLicense follows for EPPlus). Confirmed
+      acceptable per Print_Feature.md's own "PDF engine" bullet; re-confirm
+      before shipping if this app's situation changes, same caveat
+      ExcelLicense's own doc comment gives.
+    -->
+    <PackageReference Include="QuestPDF" Version="2026.7.3" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScheduleApp.Payroll\ScheduleApp.Payroll.csproj" />
+  </ItemGroup>
+
+  <!--
+    PayslipFonts.cs now calls SkiaSharp.SKFontManager.Default.MatchFamily(...)
+    directly, to check whether Iosevka is actually installed on this machine
+    before deciding what FontFamily(...) name to hand QuestPDF. No extra
+    PackageReference for SkiaSharp itself: QuestPDF already depends on it for
+    its own rendering, and that dependency's assembly flows through to this
+    project for compilation the normal PackageReference-transitive way. If a
+    future QuestPDF upgrade ever stops exposing it that way, add
+    <PackageReference Include="SkiaSharp" /> here explicitly, matching
+    whatever version `dotnet list package -include-transitive` reports
+    QuestPDF pulling in.
+  -->
+
+</Project>

@@ -1,0 +1,156 @@
+<Window x:Class="ScheduleApp.Desktop.Views.ManualLogEntryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
+        Title="Add Manual Entry" Width="380"
+        Height="600"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        utilities:WindowSizing.ConstrainToWorkArea="True">
+    <Window.Resources>
+        <!-- Full "MMMM d, yyyy" month name (e.g. "September 16, 2026") rather than the
+             short default date, matching AttendanceView.xaml/PayrollPage.xaml's own
+             Period pickers - see those files' own copy of this style. Applies to
+             DateBox below via implicit TargetType match (no x:Key needed - this
+             dialog has no other DatePicker to accidentally catch). Those other
+             pickers get away with Width="190", but that's the bare-WPF DatePicker
+             chrome; WPF-UI's own DatePicker style (ControlsDictionary, see
+             App.xaml) adds its own calendar-button chrome and TextBox padding on
+             top of that, so 190 here still clipped the long-format text. DateBox's
+             own Width below is widened past that shared precedent to give the
+             longest rendered strings ("September 16, 2026" and friends) enough
+             room including that extra chrome. -->
+        <Style TargetType="DatePickerTextBox">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DatePickerTextBox">
+                        <TextBox Text="{Binding Path=SelectedDate,
+                            RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
+                                 TextAlignment="Center" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <!-- DockPanel instead of a bare Grid so Add/Cancel (docked Bottom) stay
+         visible and reachable no matter how tall the form above them gets.
+         A fixed Height on the Window (above) keeps the window itself at a
+         size that fits comfortably even on a 768px-tall laptop screen, and
+         the ScrollViewer below picks up whatever doesn't fit - e.g. this dialog
+         now that the Machine Punches list (see that ListBox's own comment)
+         added ~90px it didn't have before. Same reasoning, same shape, as
+         ApplyScheduleDialog.xaml/EmployeeDialog.xaml's own fix for this exact
+         problem. Previously the root was a single Grid with no scroll
+         fallback and no window size cap, so a short screen (or Machine
+         Punches showing several rows) could push Add/Cancel below the
+         visible screen area with nothing to scroll them back into view. -->
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="SaveButton" Content="Add" Width="80" Margin="0,0,8,0" IsDefault="True" Click="SaveButton_Click" />
+            <Button Content="Cancel" Width="80" IsCancel="True" />
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="0,0,4,0" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <TextBlock Grid.Row="0"
+                   Text="Log a punch by hand for an employee who forgot to clock in/out -- stored separately from device punches and only used to fill in a clock-in/out the device has nothing for."
+                   TextWrapping="Wrap"
+                   Foreground="#475569"
+                   Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="1" Text="Employee" Margin="0,0,0,4" />
+        <Grid Grid.Row="2" Margin="0,0,0,12">
+            <TextBox x:Name="EmployeeBox"
+                     ToolTip="Type an Employee ID or name -- matching employees show up as you type."
+                     TextChanged="EmployeeBox_TextChanged"
+                     PreviewKeyDown="EmployeeBox_PreviewKeyDown"
+                     LostFocus="EmployeeBox_LostFocus" />
+            <Popup x:Name="EmployeeSuggestionsPopup"
+                   PlacementTarget="{Binding ElementName=EmployeeBox}"
+                   Placement="Bottom" AllowsTransparency="True" StaysOpen="False"
+                   Width="{Binding ElementName=EmployeeBox, Path=ActualWidth}">
+                <Border Background="White" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4">
+                    <ListBox x:Name="EmployeeSuggestionsList" MaxHeight="160" BorderThickness="0"
+                             MouseLeftButtonUp="EmployeeSuggestionsList_MouseLeftButtonUp" />
+                </Border>
+            </Popup>
+        </Grid>
+
+        <TextBlock Text="Date" Grid.Row="3" Margin="0,0,0,4" />
+        <!-- DateBox no longer carries its own fixed Width: now that the calendar-tile
+             constructor sets DateBox.IsEnabled = false (see that constructor's own
+             comment), the WPF-UI-restyled DatePicker's disabled visual state stopped
+             honoring a Width set directly on the control - the same Width="230" that
+             fixed the clipped long-format text while enabled (see the
+             DatePickerTextBox style above) shrank right back down the moment it went
+             disabled. Wrapping it in this fixed-width Border and letting DateBox
+             stretch to fill it (default HorizontalAlignment="Stretch", so no
+             HorizontalAlignment/Width set on DateBox itself) sidesteps that: Border
+             isn't one of the controls WPF-UI's ControlsDictionary restyles, so its
+             Width holds regardless of DateBox's own IsEnabled state. DateBox's own
+             MinWidth below is a second, independent floor in case whatever's
+             overriding Width on disable leaves MinWidth alone. -->
+        <Border Grid.Row="4" Width="230" HorizontalAlignment="Left" Margin="0,0,0,12">
+            <DatePicker x:Name="DateBox" MinWidth="230"
+                        SelectedDateChanged="DateBox_SelectedDateChanged" />
+        </Border>
+
+        <!-- Time + Type side by side to save vertical space: self-contained
+             2-column sub-grid (label row, then combo row) so it drops into a
+             single outer row without touching any other row's index. -->
+        <Grid Grid.Row="5" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Time (e.g. 5:01 PM)" Margin="0,0,0,4" />
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="Type" Margin="0,0,0,4" />
+
+            <ComboBox x:Name="TimeCombo" Grid.Row="1" Grid.Column="0" IsEditable="True" />
+            <ComboBox x:Name="PunchTypeCombo" Grid.Row="1" Grid.Column="2" SelectedIndex="0">
+                <ComboBoxItem Content="Clock In" />
+                <ComboBoxItem Content="Clock Out" />
+            </ComboBox>
+        </Grid>
+
+        <TextBlock Text="Machine Punches" Grid.Row="6" Margin="0,0,0,4" />
+        <Grid Grid.Row="7" Margin="0,0,0,12">
+            <!-- Reference-only: shows the day's device punches for whoever's
+                 picked above so the person doesn't have to flip to Punch
+                 Records to see what the device already has: clicking a row
+                 here does not pre-fill Time/Type. This placeholder text is
+                 one of three swapped in from code-behind depending on state
+                 (see RefreshMachinePunchesAsync/ShowMachinePunches/
+                 ShowMachinePunchesUnresolved/ShowMachinePunchesError): no
+                 employee/date resolved yet (the default below, matching
+                 what's shown the instant this dialog opens with EmployeeBox
+                 still blank), a resolved fetch that genuinely found nothing,
+                 or the fetch itself failing. The list is otherwise just left
+                 showing nothing rather than blocking Save either way: this
+                 is a decoration, not something the rest of the dialog
+                 depends on. -->
+            <ListBox x:Name="MachinePunchesList" Height="80" />
+            <TextBlock x:Name="MachinePunchesPlaceholder"
+                       Text="Pick an employee to see that day's machine punches."
+                       Foreground="#94A3B8"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsHitTestVisible="False" />
+        </Grid>
+
+        <TextBlock Text="Reason (required)" Grid.Row="8" Margin="0,0,0,4" />
+        <TextBox x:Name="ReasonBox" Grid.Row="9" Margin="0,0,0,12"
+                 ToolTip="Why this punch couldn't come from the device, e.g. &quot;Forgot to badge in&quot;."
+                 TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
+
+        <TextBlock Text="Entered by" Grid.Row="10" Margin="0,0,0,4" />
+        <TextBox x:Name="EnteredByBox" Grid.Row="11" VerticalAlignment="Top" Margin="0,0,0,4" />
+        </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

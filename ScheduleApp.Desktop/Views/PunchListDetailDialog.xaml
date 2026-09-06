@@ -1,0 +1,70 @@
+<Window x:Class="ScheduleApp.Desktop.Views.PunchListDetailDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Punch Detail" Width="780" Height="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <!-- No local style/converter resources needed here, unlike
+         AttendanceStatusDetailDialog: none of these columns need special
+         alignment or a status-color converter, so they pick up the ambient
+         WPF-UI Fluent header/cell styling automatically, the same way the
+         Punch Records grid's own unstyled columns already do. -->
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Same column set as the Punch Records tab's grid, since both are
+             built from StoredPunchLogRow via the same factory. -->
+        <DataGrid x:Name="RowsGrid"
+                  Grid.Row="0"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserReorderColumns="False"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="PIN"
+                                    Binding="{Binding EmployeeId}"
+                                    Width="90" />
+                <DataGridTextColumn Header="Employee Name"
+                                    Binding="{Binding EmployeeName}"
+                                    Width="200" />
+                <DataGridTextColumn Header="Department"
+                                    Binding="{Binding DepartmentName}"
+                                    Width="140" />
+                <DataGridTextColumn Header="Date"
+                                    Binding="{Binding Timestamp, StringFormat={}{0:MM/dd/yyyy}}"
+                                    Width="100" />
+                <DataGridTextColumn Header="Time"
+                                    Binding="{Binding Timestamp, StringFormat={}{0:hh:mm tt}}"
+                                    Width="90" />
+                <DataGridTextColumn Header="Type"
+                                    Binding="{Binding PunchTypeText}"
+                                    Width="90" />
+                <DataGridTextColumn Header="Source"
+                                    Binding="{Binding Source}"
+                                    Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <Button x:Name="ExportButton"
+                    Content="Export…"
+                    Width="90"
+                    Margin="0,0,8,0"
+                    Click="ExportButton_Click" />
+            <Button Content="Close"
+                    Width="90"
+                    IsCancel="True"
+                    IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ScheduleApp.Payroll</RootNamespace>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core only. See PayrollCalculator's doc comment for why this doesn't
+         also reference ScheduleApp.Attendance the way the original plan sketched.
+         PayrollCalculator.Calculate is pure (Employee/AttendanceSummary/PayrollPolicy/
+         PayrollAdjustment in, PayrollResult out, no I/O), and every one of those types
+         already lives in ScheduleApp.Core, AttendanceSummary included, despite the
+         "Attendance" name (see ScheduleApp.Core/Attendance/AttendanceSummary.cs). -->
+    <ProjectReference Include="..\ScheduleApp.Core\ScheduleApp.Core.csproj" />
+  </ItemGroup>
+
+</Project>

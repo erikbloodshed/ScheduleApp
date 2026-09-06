@@ -1,0 +1,226 @@
+﻿<UserControl x:Class="ScheduleApp.Desktop.Controls.DayPunchPairingEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels.Attendance"
+             xmlns:conv="clr-namespace:ScheduleApp.Desktop.Converters"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:DayPunchPairingEditorViewModel}"
+             d:DesignWidth="620"
+             d:DesignHeight="560">
+    <UserControl.Resources>
+        <conv:PunchStatusToBrushConverter x:Key="StatusBrush" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisible" />
+        <conv:NotNullToVisibilityConverter x:Key="NotNullToVisible" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisible" />
+
+        <!-- One punch card. The whole card is the drag handle; the slot Border
+             that hosts it carries the mouse/drop handlers (see code-behind), so
+             there's nothing draggable to wire up here. -->
+        <DataTemplate x:Key="PunchCellTemplate" DataType="{x:Type vm:DayPunchPairingCellViewModel}">
+            <Border x:Name="Card"
+                    CornerRadius="6"
+                    Background="White"
+                    BorderBrush="#D9DCE1"
+                    BorderThickness="1"
+                    Padding="8,4"
+                    ToolTip="{Binding ReasonText}"
+                    ToolTipService.IsEnabled="{Binding IsManual}">
+                <!-- Time and badges on one line rather than stacked: a punch card
+                     carries very little, and a two-line card made every row (and so
+                     the whole grid) about twice as tall as it needed to be. The
+                     badges sit right of the time and centered against it, so the
+                     card's height is just the time's own line. -->
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding TimeText}"
+                               FontWeight="SemiBold"
+                               FontSize="14"
+                               VerticalAlignment="Center" />
+                    <!-- Source badge: a manual entry is always called out, so a
+                         hand-typed time is never mistaken for a recorded one. -->
+                    <Border x:Name="SourceBadge"
+                            CornerRadius="3"
+                            Background="#EEF2F7"
+                            Padding="5,1"
+                            VerticalAlignment="Center"
+                            Margin="8,0,0,0">
+                        <TextBlock Text="{Binding SourceText}"
+                                   FontSize="10"
+                                   Foreground="#5B6774" />
+                    </Border>
+                    <TextBlock x:Name="UnpairedBadge"
+                               Text="unpaired"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="#D97706"
+                               VerticalAlignment="Center"
+                               Margin="6,0,0,0"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsManual}" Value="True">
+                    <Setter TargetName="SourceBadge" Property="Background" Value="#F3EEFF" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsUnpaired}" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="#D97706" />
+                    <Setter TargetName="Card" Property="BorderThickness" Value="1.5" />
+                    <Setter TargetName="UnpairedBadge" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsBeingDragged}" Value="True">
+                    <Setter TargetName="Card" Property="Opacity" Value="0.35" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="#2D6CDF" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- One segment = two slots. Each slot is a fixed drop target (present
+             whether or not it holds a punch) so an empty slot can still receive a
+             drag. Tag tells the code-behind which column the drop landed in; the
+             Border's DataContext is this DayPunchPairingRowViewModel. -->
+        <DataTemplate x:Key="PairingRowTemplate" DataType="{x:Type vm:DayPunchPairingRowViewModel}">
+            <Grid ColumnDefinitions="Auto,Auto" Margin="0,0,0,6" HorizontalAlignment="Left">
+                <Border x:Name="InSlot"
+                        Grid.Column="0"
+                        Tag="In"
+                        Width="190"
+                        MinHeight="40"
+                        CornerRadius="8"
+                        Background="Transparent"
+                        BorderBrush="#E2E5EA"
+                        BorderThickness="1.5"
+                        Padding="4"
+                        AllowDrop="True"
+                        PreviewMouseLeftButtonDown="Slot_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="Slot_PreviewMouseMove"
+                        MouseRightButtonUp="Slot_MouseRightButtonUp"
+                        DragEnter="Slot_DragEnter"
+                        DragOver="Slot_DragOver"
+                        DragLeave="Slot_DragLeave"
+                        Drop="Slot_Drop">
+                    <Grid>
+                        <TextBlock Text="missing punch"
+                                   Foreground="#9AA3AF"
+                                   FontStyle="Italic"
+                                   FontSize="11"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   ToolTip="Double-click or right-click to add a manual punch."
+                                   Visibility="{Binding InPunch, Converter={StaticResource NullToVisible}}" />
+                        <!-- Collapsed rather than left to render an empty card: a
+                             ContentControl still applies its ContentTemplate when Content
+                             is null, and that template's root Border is opaque. An
+                             empty slot was drawing a blank white card (badge and all)
+                             directly over the placeholder behind it. -->
+                        <ContentControl Content="{Binding InPunch}"
+                                        ContentTemplate="{StaticResource PunchCellTemplate}"
+                                        Visibility="{Binding InPunch, Converter={StaticResource NotNullToVisible}}" />
+                    </Grid>
+                </Border>
+
+                <Border x:Name="OutSlot"
+                        Grid.Column="1"
+                        Tag="Out"
+                        Width="190"
+                        Margin="12,0,0,0"
+                        MinHeight="40"
+                        CornerRadius="8"
+                        Background="Transparent"
+                        BorderBrush="#E2E5EA"
+                        BorderThickness="1.5"
+                        Padding="4"
+                        AllowDrop="True"
+                        PreviewMouseLeftButtonDown="Slot_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="Slot_PreviewMouseMove"
+                        MouseRightButtonUp="Slot_MouseRightButtonUp"
+                        DragEnter="Slot_DragEnter"
+                        DragOver="Slot_DragOver"
+                        DragLeave="Slot_DragLeave"
+                        Drop="Slot_Drop">
+                    <Grid>
+                        <TextBlock Text="missing punch"
+                                   Foreground="#9AA3AF"
+                                   FontStyle="Italic"
+                                   FontSize="11"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   ToolTip="Double-click or right-click to add a manual punch."
+                                   Visibility="{Binding OutPunch, Converter={StaticResource NullToVisible}}" />
+                        <!-- Collapsed rather than left to render an empty card: a
+                             ContentControl still applies its ContentTemplate when Content
+                             is null, and that template's root Border is opaque. An
+                             empty slot was drawing a blank white card (badge and all)
+                             directly over the placeholder behind it. -->
+                        <ContentControl Content="{Binding OutPunch}"
+                                        ContentTemplate="{StaticResource PunchCellTemplate}"
+                                        Visibility="{Binding OutPunch, Converter={StaticResource NotNullToVisible}}" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,*,Auto">
+        <!-- Who / when -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{Binding EmployeeName}" FontWeight="Bold" FontSize="16" />
+            <TextBlock Text="{Binding DateText}" Foreground="#64748B" FontSize="12" Margin="0,2,0,0" />
+        </StackPanel>
+
+        <!-- Column headers, on the same two fixed tracks the rows use. -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto" Margin="0,0,0,6" HorizontalAlignment="Left">
+            <TextBlock Grid.Column="0" Text="Time In" Width="190" TextAlignment="Center"
+                       FontWeight="Bold" FontSize="13" />
+            <TextBlock Grid.Column="1" Text="Time Out" Width="190" TextAlignment="Center" Margin="12,0,0,0"
+                       FontWeight="Bold" FontSize="13" />
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Add Segment" Command="{Binding AddRowCommand}" Padding="10,4" />
+            <Button Content="Remove" Command="{Binding RemoveRowCommand}" Padding="10,4" Margin="8,0,0,0" />
+            <TextBlock Text="Drag to re-pair · double-click to add"
+                       Foreground="#64748B" FontSize="12" VerticalAlignment="Center" Margin="14,0,0,0" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Rows}"
+                          ItemTemplate="{StaticResource PairingRowTemplate}" />
+        </ScrollViewer>
+
+        <!-- Live footer: what the Summary grid will say once this is saved. -->
+        <Border Grid.Row="4" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1"
+                CornerRadius="6" Padding="12,9" Margin="0,10,0,0">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                <StackPanel Grid.Column="0" Margin="0,0,22,0">
+                    <TextBlock Text="Worked" FontSize="10" Foreground="#64748B" />
+                    <TextBlock Text="{Binding WorkedText}" FontWeight="SemiBold" FontSize="14"
+                               FontFamily="Consolas, Segoe UI" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="0,0,22,0">
+                    <TextBlock Text="Required" FontSize="10" Foreground="#64748B" />
+                    <TextBlock Text="{Binding RequiredText}" FontWeight="SemiBold" FontSize="14"
+                               FontFamily="Consolas, Segoe UI" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="{Binding RemainderLabel}" FontSize="10" Foreground="#64748B" />
+                    <TextBlock Text="{Binding RemainderText}" FontWeight="SemiBold" FontSize="14"
+                               FontFamily="Consolas, Segoe UI" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                 Fill="{Binding PreviewStatus, Converter={StaticResource StatusBrush}}" />
+                        <TextBlock Text="{Binding PreviewStatusText}" Margin="7,0,0,0"
+                                   FontWeight="Bold" FontSize="14"
+                                   Foreground="{Binding PreviewStatus, Converter={StaticResource StatusBrush}}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding UnpairedCount, StringFormat={}{0} punch still unpaired}"
+                               FontSize="11" Foreground="#D97706" HorizontalAlignment="Right" Margin="0,2,0,0"
+                               Visibility="{Binding HasUnpairedPunches, Converter={StaticResource BoolToVisible}}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

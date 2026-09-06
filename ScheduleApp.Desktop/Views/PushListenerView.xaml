@@ -1,0 +1,161 @@
+<UserControl x:Class="ScheduleApp.Desktop.Views.PushListenerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:PushListenerViewModel}">
+    <UserControl.Resources>
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
+
+        <!-- Same "card" look AttendanceView.xaml uses for its toolbar strip, so this tab
+             reads as part of the same app rather than a bolted-on utility. -->
+        <Style x:Key="CardBorder" TargetType="Border">
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#E2E8F0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+
+        <Style x:Key="GroupLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Foreground" Value="#777777" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="10" RowDefinitions="Auto, *">
+        <!-- Connection bar -->
+        <Border Grid.Row="0" Style="{StaticResource CardBorder}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Push Listener URL:" Style="{StaticResource GroupLabel}" />
+                <TextBox Width="220" Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" />
+                <Button Content="Test Connection" Margin="10,0,0,0" Command="{Binding TestConnectionCommand}" />
+                <TextBlock Text="{Binding ConnectionStatusText}" Margin="14,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+
+                <!-- Health summary: only shown once a refresh has actually returned something,
+                     so this stays blank rather than misleadingly showing stale/default values
+                     before the first successful poll. -->
+                <StackPanel Orientation="Horizontal" Margin="20,0,0,0"
+                            Visibility="{Binding Health, Converter={StaticResource NotNullToVisibility}}">
+                    <Ellipse Width="10" Height="10" VerticalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="#F59E0B" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Health.Status}" Value="Healthy">
+                                        <Setter Property="Fill" Value="#22C55E" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Health.Status}" Value="Degraded">
+                                        <Setter Property="Fill" Value="#EF4444" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="{Binding Health.Status}" Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding UptimeDisplay, StringFormat='uptime {0}'}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#777777" />
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#777777">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="DB reachable" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Health.DbReachable}" Value="False">
+                                        <Setter Property="Text" Value="DB unreachable" />
+                                        <Setter Property="Foreground" Value="#EF4444" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <TabControl Grid.Row="1">
+            <TabItem Header="Devices">
+                <Grid Margin="8" RowDefinitions="Auto, *, Auto">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Refresh Now" Command="{Binding RefreshDevicesCommand}" />
+                        <CheckBox Content="Auto-refresh every 10s" IsChecked="{Binding AutoRefresh}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Serial Number" Binding="{Binding SerialNumber}" Width="160" />
+                            <DataGridTextColumn Header="Last Seen (UTC)" Binding="{Binding LastSeenUtc}" Width="190" />
+                            <DataGridTextColumn Header="ATTLOG Stamp" Binding="{Binding AttLogStamp}" Width="110" />
+                            <DataGridTextColumn Header="OPERLOG Stamp" Binding="{Binding OperLogStamp}" Width="110" />
+                            <DataGridTextColumn Header="Pending Commands" Binding="{Binding PendingCommandCount}" Width="130" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Resync Attendance for Selected Device" Command="{Binding ResyncSelectedDeviceCommand}" />
+                        <Button Content="Force Recheck Selected Device" Command="{Binding ForceRecheckSelectedDeviceCommand}" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Attendance">
+                <Grid Margin="8" RowDefinitions="Auto, *">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="SN:" Style="{StaticResource GroupLabel}" />
+                        <TextBox Width="100" Margin="0,0,12,0" Text="{Binding FilterSn, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="PIN (Employee ID):" Style="{StaticResource GroupLabel}" />
+                        <TextBox Width="80" Margin="0,0,12,0" Text="{Binding FilterPin, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Start (yyyy-MM-dd HH:mm:ss):" Style="{StaticResource GroupLabel}" />
+                        <TextBox Width="150" Margin="0,0,12,0" Text="{Binding FilterStartTime, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="End:" Style="{StaticResource GroupLabel}" />
+                        <TextBox Width="150" Margin="0,0,12,0" Text="{Binding FilterEndTime, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Search" Command="{Binding SearchAttendanceCommand}" />
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding AttendanceRows}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Device" Binding="{Binding DeviceSerialNumber}" Width="120" />
+                            <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="90" />
+                            <DataGridTextColumn Header="Punch Time (PH)" Binding="{Binding Timestamp}" Width="160" />
+                            <DataGridTextColumn Header="Punch Type" Binding="{Binding PunchTypeText}" Width="100" />
+                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="80" />
+                            <DataGridTextColumn Header="Imported (UTC)" Binding="{Binding ImportedAt}" Width="160" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Logs">
+                <Grid Margin="8" RowDefinitions="Auto, *">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Min level:" Style="{StaticResource GroupLabel}" />
+                        <ComboBox Width="110" Margin="0,0,12,0" ItemsSource="{Binding LogLevelOptions}" SelectedItem="{Binding LogLevelFilter}" />
+                        <TextBlock Text="SN contains:" Style="{StaticResource GroupLabel}" />
+                        <TextBox Width="120" Margin="0,0,12,0" Text="{Binding LogSnFilter, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Content="Refresh Now" Command="{Binding RefreshLogsCommand}" />
+                        <!-- Deliberately opt-in, unlike the Devices tab's auto-refresh (defaults on):
+                             tailing the log file every 10s is wasted work when no one's looking at this tab. -->
+                        <CheckBox Content="Auto-refresh every 10s" IsChecked="{Binding LogAutoRefresh}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding LogEntries}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Time (UTC)" Binding="{Binding TimestampUtc}" Width="160" />
+                            <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="90" />
+                            <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="320" />
+                            <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="260" />
+                            <DataGridTextColumn Header="Exception" Binding="{Binding Exception}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

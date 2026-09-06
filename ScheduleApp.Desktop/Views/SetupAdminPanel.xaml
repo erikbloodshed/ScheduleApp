@@ -1,0 +1,43 @@
+<UserControl x:Class="ScheduleApp.Desktop.Views.SetupAdminPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="380">
+    <Grid Margin="0,32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Image x:Name="LogoImage" Grid.Row="0" Source="/Assets/Tinapayan_Logo.png" Height="140" Stretch="Uniform"
+               HorizontalAlignment="Center" Margin="0,0,0,12" />
+        <TextBlock Grid.Row="1" TextWrapping="Wrap" FontSize="14" Foreground="#64748B" Margin="0,0,0,24"
+                   HorizontalAlignment="Center" TextAlignment="Center"
+                   Text="No accounts exist yet -- create the first one to continue. You can create additional accounts afterward from Manage Users (in the main window)." />
+
+        <TextBlock Grid.Row="2" Text="Account name" Margin="0,0,0,4" />
+        <TextBox x:Name="UsernameBox" Grid.Row="3" Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="4" Text="Password (at least 8 characters)" Margin="0,0,0,4" />
+        <PasswordBox x:Name="PasswordBoxControl" Grid.Row="5" Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="6" Text="Confirm password" Margin="0,0,0,4" />
+        <PasswordBox x:Name="ConfirmPasswordBoxControl" Grid.Row="7" Margin="0,0,0,4" />
+
+        <TextBlock x:Name="ErrorText" Grid.Row="8" Foreground="#DC2626" TextWrapping="Wrap"
+                   Visibility="Collapsed" Margin="0,8,0,0" VerticalAlignment="Top" />
+
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="CreateButton" Content="Create Account" Width="130" Margin="0,0,8,0"
+                    IsDefault="True" Click="CreateButton_Click" />
+            <Button Content="Exit" Width="80" Click="ExitButton_Click" />
+        </StackPanel>
+    </Grid>
+</UserControl>

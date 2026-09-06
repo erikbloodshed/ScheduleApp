@@ -1,0 +1,228 @@
+<UserControl x:Class="ScheduleApp.Desktop.Controls.MonthCalendarControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:ScheduleApp.Desktop.Converters"
+             xmlns:coreAttendance="clr-namespace:ScheduleApp.Core.Attendance;assembly=ScheduleApp.Core"
+             x:Name="Root">
+    <UserControl.Resources>
+        <conv:CalendarDayToBrushConverter x:Key="DayBrushConverter" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <UniformGrid Columns="7"
+                     Grid.Row="0"
+                     Margin="2,0,2,4">
+            <TextBlock Text="Sun"
+                       FontWeight="Bold"
+                       Foreground="#D32F2F"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Mon"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Tue"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Wed"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Thu"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Fri"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Sat"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center" />
+        </UniformGrid>
+
+        <ItemsControl x:Name="DaysList"
+                      Grid.Row="1"
+                      ItemsSource="{Binding Days, ElementName=Root}"
+                      MouseMove="DaysList_MouseMove"
+                      MouseLeftButtonUp="DaysList_MouseLeftButtonUp">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="7" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:CalendarDayViewModel}">
+                    <!-- ToolTip carries the holiday's name; ToolTipService.IsEnabled keeps it
+                         from showing an empty box on the (many) non-holiday days, where
+                         HolidayName is "". A holiday itself shows only as a red day number
+                         (see the IsHoliday MultiDataTrigger below) - same treatment as the
+                         Sunday column, no fill and no badge. InitialShowDelay/ShowDuration
+                         override the WPF defaults (~1s to appear, 5s visible) so a quick
+                         "which holiday is this?" hover is responsive and stays up long
+                         enough to read. -->
+                    <Border x:Name="DayBorder"
+                            CornerRadius="4"
+                            BorderBrush="#DDDDDD"
+                            BorderThickness="1.0"
+                            Margin="1"
+                            MinHeight="70"
+                            Background="{Binding Converter={StaticResource DayBrushConverter}}"
+                            Cursor="Hand"
+                            ToolTip="{Binding HolidayName}"
+                            ToolTipService.IsEnabled="{Binding IsHoliday}"
+                            ToolTipService.InitialShowDelay="300"
+                            ToolTipService.ShowDuration="20000"
+                            MouseLeftButtonDown="DayBorder_MouseLeftButtonDown"
+                            MouseRightButtonDown="DayBorder_MouseRightButtonDown">
+                        <Grid>
+                            <Grid Margin="4" RowDefinitions="Auto,*">
+                                <TextBlock x:Name="DayNumberText"
+                                           Grid.Row="0"
+                                           Text="{Binding DayNumber}"
+                                           FontWeight="SemiBold"
+                                           FontSize="15" />
+                                <TextBlock Text="{Binding DisplayText}"
+                                           Grid.Row="1"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           FontFamily="Segoe UI Variable"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center" />
+                            </Grid>
+
+                            <!-- Attendance completion marker, bottom-left corner: a green
+                                 checkmark for Complete, an orange dot for Partial, a red dot
+                                 for Absent (which also covers "hasn't punched in yet" for a
+                                 day that hasn't happened; Absent just means "no punches
+                                 found," see PunchStatus), and a purple star for Official
+                                 Business. Same colors as the status tiles/conditional
+                                 formatting on the Attendance tab's Summary report, for
+                                 consistency. Hidden by default; DataTriggers below show
+                                 exactly one, and only when CalendarDayViewModel.AttendanceStatus
+                                 is set (null, the default, leaves all four collapsed). Leave
+                                 gets no marker of its own - the cell's own background color
+                                 (see CalendarDayToBrushConverter) is enough, and Leave never
+                                 sets AttendanceStatus in the first place (see MainViewModel). -->
+                            <Path x:Name="CompleteMarker"
+                                  Data="M1,5.5 L4,8.5 L9,1.5"
+                                  Stroke="#16A34A"
+                                  StrokeThickness="2"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  Width="10"
+                                  Height="10"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Bottom"
+                                  HorizontalAlignment="Right"
+                                  Margin="4"
+                                  Visibility="Collapsed"
+                                  ToolTip="Complete" />
+                            <Ellipse x:Name="PartialMarker"
+                                     Width="8"
+                                     Height="8"
+                                     Fill="#D97706"
+                                     VerticalAlignment="Bottom"
+                                     HorizontalAlignment="Right"
+                                     Margin="4"
+                                     Visibility="Collapsed"
+                                     ToolTip="Partial" />
+                            <Ellipse x:Name="AbsentMarker"
+                                     Width="8"
+                                     Height="8"
+                                     Fill="#DC2626"
+                                     VerticalAlignment="Bottom"
+                                     HorizontalAlignment="Right"
+                                     Margin="4"
+                                     Visibility="Collapsed"
+                                     ToolTip="Absent" />
+                            <Path x:Name="OfficialBusinessMarker"
+                                  Data="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.63L12,2L9.19,8.63L2,9.24L7.46,13.97L5.82,21L12,17.27Z"
+                                  Fill="#7C3AED"
+                                  Width="10"
+                                  Height="10"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Bottom"
+                                  HorizontalAlignment="Right"
+                                  Margin="4"
+                                  Visibility="Collapsed"
+                                  ToolTip="Official Business" />
+                        </Grid>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsCurrentMonth}"
+                                     Value="False">
+                            <Setter TargetName="DayNumberText"
+                                    Property="Foreground"
+                                    Value="#AAAAAA" />
+                        </DataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsSunday}"
+                                           Value="True" />
+                                <Condition Binding="{Binding IsCurrentMonth}"
+                                           Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="DayNumberText"
+                                    Property="Foreground"
+                                    Value="#D32F2F" />
+                        </MultiDataTrigger>
+                        <!-- A holiday reads as a red day number, same colour and same
+                             in-month-only rule as the Sunday column above. An out-of-month
+                             holiday stays greyed like any other adjacent-month day (the
+                             IsCurrentMonth=False trigger already covers it, and this one
+                             doesn't fire). The name is on the cell's tooltip (see DayBorder
+                             above), so there's no visible badge. -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsHoliday}"
+                                           Value="True" />
+                                <Condition Binding="{Binding IsCurrentMonth}"
+                                           Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="DayNumberText"
+                                    Property="Foreground"
+                                    Value="#D32F2F" />
+                        </MultiDataTrigger>
+                        <DataTrigger Binding="{Binding IsSelected}"
+                                     Value="True">
+                            <Setter TargetName="DayBorder"
+                                    Property="BorderBrush"
+                                    Value="#2D6CDF" />
+                            <Setter TargetName="DayBorder"
+                                    Property="BorderThickness"
+                                    Value="2.5" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding AttendanceStatus}"
+                                     Value="{x:Static coreAttendance:PunchStatus.Complete}">
+                            <Setter TargetName="CompleteMarker"
+                                    Property="Visibility"
+                                    Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding AttendanceStatus}"
+                                     Value="{x:Static coreAttendance:PunchStatus.Partial}">
+                            <Setter TargetName="PartialMarker"
+                                    Property="Visibility"
+                                    Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding AttendanceStatus}"
+                                     Value="{x:Static coreAttendance:PunchStatus.Absent}">
+                            <Setter TargetName="AbsentMarker"
+                                    Property="Visibility"
+                                    Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding AttendanceStatus}"
+                                     Value="{x:Static coreAttendance:PunchStatus.OfficialBusiness}">
+                            <Setter TargetName="OfficialBusinessMarker"
+                                    Property="Visibility"
+                                    Value="Visible" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

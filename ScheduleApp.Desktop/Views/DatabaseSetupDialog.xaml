@@ -1,0 +1,116 @@
+<Window x:Class="ScheduleApp.Desktop.Views.DatabaseSetupDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
+        Title="Database Setup" Width="460" Height="600"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        utilities:WindowSizing.ConstrainToWorkArea="True">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+            <Grid Margin="0,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <!-- Row 5: AdminConnectionPanel, one row instead of the four (old
+                         rows 5-8) its "Admin connection" content used to occupy
+                         individually - collapsed as a whole for isRequiredFirstRun,
+                         same reasoning as LoginProvisioningPanel just below it (see
+                         DatabaseSetupDialog.xaml.cs's own constructor). -->
+                    <RowDefinition Height="Auto" />
+                    <!-- Row 6: LoginProvisioningPanel, one row instead of the nine
+                         (old rows 9-17) its "New login"/"Access level" content used to
+                         occupy individually. -->
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Foreground="#475569" Margin="0,0,0,16" />
+
+                <TextBlock Grid.Row="1" Text="Server" Margin="0,0,0,4" />
+                <TextBox x:Name="ServerBox" Grid.Row="2" Margin="0,0,0,12"
+                         ToolTip="The SQL Server instance name, e.g. .\SQLEXPRESS for a local SQL Server Express install." />
+
+                <TextBlock Grid.Row="3" Text="Database name" Margin="0,0,0,4" />
+                <TextBox x:Name="DatabaseNameBox" Grid.Row="4" Margin="0,0,0,16"
+                         ToolTip="Created if it doesn't already exist. Letters, digits, and underscores only." />
+
+                <!-- Collapsed entirely for isRequiredFirstRun - see this dialog's own
+                     doc comment and DatabaseSetupDialog.xaml.cs's constructor/
+                     CreateButton_Click for why first run needs no admin connection at
+                     all: it never runs any SQL Server statement itself, so there's
+                     nothing here for admin credentials to authorize in the first
+                     place. -->
+                <StackPanel x:Name="AdminConnectionPanel" Grid.Row="5">
+                    <TextBlock Text="Admin connection" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#475569" Margin="0,0,0,8"
+                               Text="Used once, to create the database and login below -- never saved anywhere. Needs rights to create databases and logins on this server (a sysadmin account, most commonly)." />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <RadioButton x:Name="AdminWindowsAuthRadio" GroupName="AdminAuth" Content="Windows (integrated)"
+                                     Margin="0,0,16,0" IsChecked="True" Checked="AdminAuthRadio_CheckedChanged" />
+                        <RadioButton x:Name="AdminSqlAuthRadio" GroupName="AdminAuth" Content="SQL Server login"
+                                     Checked="AdminAuthRadio_CheckedChanged" />
+                    </StackPanel>
+                    <StackPanel x:Name="AdminCredentialsPanel" Margin="0,0,0,16" Visibility="Collapsed">
+                        <TextBlock Text="Admin username" Margin="0,0,0,4" />
+                        <TextBox x:Name="AdminUsernameBox" Margin="0,0,0,8" />
+                        <TextBlock Text="Admin password" Margin="0,0,0,4" />
+                        <PasswordBox x:Name="AdminPasswordBox" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Collapsed entirely for isRequiredFirstRun - see this dialog's own
+                     doc comment and DatabaseSetupDialog.xaml.cs's constructor/
+                     CreateButton_Click for why first run never creates a SQL Server
+                     login: the only username/password that flow collects is
+                     SetupAdminPanel's own app-account credentials, further down in
+                     startup, and Create hands back a Windows-Authenticated connection
+                     string directly instead, with no SQL Server round trip of any
+                     kind. -->
+                <StackPanel x:Name="LoginProvisioningPanel" Grid.Row="6">
+                    <TextBlock Text="New login" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TextBlock Text="Username" Margin="0,0,0,4" />
+                    <TextBox x:Name="NewLoginUsernameBox" Margin="0,0,0,8"
+                             ToolTip="Letters, digits, and underscores only." />
+                    <TextBlock Text="Password" Margin="0,0,0,4" />
+                    <PasswordBox x:Name="NewLoginPasswordBox" Margin="0,0,0,8" />
+                    <TextBlock Text="Confirm password" Margin="0,0,0,4" />
+                    <PasswordBox x:Name="ConfirmPasswordBox" Margin="0,0,0,16" />
+
+                    <TextBlock Text="Access level" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <StackPanel Margin="0,0,0,8">
+                        <RadioButton x:Name="FullAccessRadio" GroupName="AccessLevel" Content="Full access (db_owner)"
+                                     Margin="0,0,0,4" IsChecked="True"
+                                     ToolTip="Needed by Schedule Manager itself, which creates and updates the database schema on startup. Use this for the connection string Schedule Manager will use." />
+                        <RadioButton x:Name="ReadWriteRadio" GroupName="AccessLevel" Content="Read &amp; write only (db_datareader + db_datawriter)"
+                                     ToolTip="Enough for the Push Listener service, which only ever reads and writes rows in tables that already exist -- see its own README. Not enough for Schedule Manager, which needs to create/alter the schema." />
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock x:Name="ErrorText" Grid.Row="7" Foreground="#DC2626" TextWrapping="Wrap"
+                           Visibility="Collapsed" Margin="0,0,0,8" />
+
+                <StackPanel x:Name="ProgressPanel" Grid.Row="8" Orientation="Horizontal"
+                            Margin="0,0,0,8" Visibility="Collapsed">
+                    <ProgressBar IsIndeterminate="True" Width="200" Height="6" Margin="0,0,10,0" />
+                    <TextBlock Text="Setting up…" VerticalAlignment="Center" Foreground="#475569" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="CreateButton" Content="Create" Width="90" Margin="0,0,8,0"
+                    IsDefault="True" Click="CreateButton_Click" />
+            <Button x:Name="CancelButton" Content="Cancel" Width="90" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

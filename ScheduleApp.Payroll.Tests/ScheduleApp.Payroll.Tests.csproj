@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ScheduleApp.Payroll.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Test project, not something anyone else references - same reason
+         ScheduleApp.Payroll itself stays Core-only (see its own .csproj
+         comment): this project's only job is to exercise
+         PayrollCalculator.Calculate as a pure function, so it references
+         ScheduleApp.Payroll (which pulls in ScheduleApp.Core transitively)
+         and nothing else - no ScheduleApp.Attendance, no ScheduleApp.Data,
+         no EF Core. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bump these if they don't resolve against your local NuGet feed -
+         same caveat ScheduleApp.Payroll.Pdf's own .csproj gives for QuestPDF. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScheduleApp.Payroll\ScheduleApp.Payroll.csproj" />
+  </ItemGroup>
+
+</Project>

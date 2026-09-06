@@ -1,0 +1,763 @@
+<UserControl x:Class="ScheduleApp.Desktop.Views.AttendanceSummaryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+             xmlns:coreAttendance="clr-namespace:ScheduleApp.Core.Attendance;assembly=ScheduleApp.Core"
+             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters">
+    <!-- One of three views the "Attendance" drawer item's submenu navigates between
+         (see MainWindow.xaml's AttendanceSummaryPage/PunchRecordsPage/ManualEntriesPage
+         MenuItems, and AttendanceSummaryPage.xaml.cs) - this one is the Summary section
+         that used to be the "Summary" TabItem inside a single AttendanceView/AttendancePage.
+         All three still share one AttendanceViewModel (DI-Scoped to the app's one lifetime
+         scope - see App.xaml.cs's own comment on that registration), so switching between
+         them keeps whatever was already loaded rather than re-querying the database; see
+         AttendanceViewModel.EnsureInitializedAsync/ActivateSummaryTab for how a page
+         navigation now drives what a TabItem selection used to. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <converters:PunchStatusToBrushConverter x:Key="StatusToBrush" />
+        <converters:SummaryRowBackgroundConverter x:Key="SummaryRowBackground" />
+        <converters:SelectedRowForegroundConverter x:Key="SelectedRowForeground" />
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
+        <converters:StatusFilterHighlightConverter x:Key="StatusFilterHighlight" />
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+        <!-- Right-aligns the time/duration/hours columns (Check In through
+             Overtime (h)) in the Attendance Summary grid, so the digits line
+             up column to column the way they would in a spreadsheet. -->
+        <Style x:Key="RightAlignedCell"
+               TargetType="TextBlock">
+            <Setter Property="TextAlignment"
+                    Value="Right" />
+            <Setter Property="Margin"
+                    Value="0,0,8,0" />
+        </Style>
+
+        <!-- Matching header alignment for the same columns, so the column
+             titles sit over the right-aligned values below them instead of
+             staying left-aligned above right-aligned numbers. WPF-UI's
+             ui:ControlsDictionary (see App.xaml) has no *implicit*
+             {x:Type DataGridColumnHeader} style to base this on - it styles
+             headers by pointing DataGrid.ColumnHeaderStyle at a *named*
+             resource, DefaultDataGridColumnHeaderStyle, which is what the
+             first five/Status columns pick up simply by leaving HeaderStyle
+             unset. BasedOn has to name that same key explicitly, or this
+             style falls back to WPF's bare default header template instead
+             of Fluent's. -->
+        <Style x:Key="RightAlignedHeader"
+               TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Right" />
+        </Style>
+
+        <!-- Shared "card" look for the toolbar/status strips, so they read as
+             one consistent surface instead of a stack of GroupBox chrome. Kept
+             as its own per-file copy rather than a shared merged dictionary -
+             same "each page keeps its own copy of a small style resource"
+             convention this project already follows (see PayrollSummaryView's
+             and SchedulePage's own copies). -->
+        <Style x:Key="CardBorder"
+               TargetType="Border">
+            <Setter Property="Background"
+                    Value="#F8FAFC" />
+            <Setter Property="BorderBrush"
+                    Value="#E2E8F0" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="CornerRadius"
+                    Value="4" />
+            <Setter Property="Padding"
+                    Value="10,8" />
+            <Setter Property="Margin"
+                    Value="0,0,0,8" />
+        </Style>
+
+        <Style x:Key="GroupLabel"
+               TargetType="TextBlock">
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Margin"
+                    Value="0,0,8,0" />
+            <Setter Property="Foreground"
+                    Value="#777777" />
+            <Setter Property="FontWeight"
+                    Value="SemiBold" />
+        </Style>
+
+        <!-- Strips all Button chrome (border/background/focus rect) down to
+             just its content, so a status tile in the counts strip below
+             still looks like the plain label+count pair it replaces; only
+             the hand cursor and the hover underline (added per-tile below)
+             hint that it's clickable. -->
+        <Style x:Key="StatusCountButton"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="Transparent" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Padding"
+                    Value="0" />
+            <Setter Property="Cursor"
+                    Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Report-scope tree visibility, driven by ReportScopeViewModel.SearchText
+             (see ApplySearchFilter). Two separate styles because TreeView.
+             ItemContainerStyle only reaches the root level (DepartmentGroupViewModel);
+             the nested EmployeeNodeViewModel level is styled via the
+             HierarchicalDataTemplate's own ItemContainerStyle instead - see the
+             TreeView below. -->
+        <Style x:Key="ReportScopeDepartmentItemStyle"
+               TargetType="TreeViewItem">
+            <Setter Property="Visibility"
+                    Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
+            <Setter Property="IsExpanded"
+                    Value="{Binding IsExpanded, Mode=TwoWay}" />
+        </Style>
+
+        <Style x:Key="ReportScopeEmployeeItemStyle"
+               TargetType="TreeViewItem">
+            <Setter Property="Visibility"
+                    Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
+        </Style>
+
+        <!-- Icon-only header action button - the Summary tab's own Refresh button (see
+             the Period row further down), restyled to match PayrollSummaryView's and
+             SchedulePage's own IconHeaderActionButton (see either file's copy of this
+             style for the fuller doc comment) - duplicated here rather than shared via a
+             merged resource dictionary, same "each page keeps its own copy of a small
+             style resource" convention CardBorder above already follows on this page. -->
+        <Style x:Key="IconHeaderActionButton"
+               TargetType="Button">
+            <Setter Property="FontFamily"
+                    Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+            <Setter Property="FontSize"
+                    Value="14" />
+            <Setter Property="Background"
+                    Value="Transparent" />
+            <Setter Property="Foreground"
+                    Value="#2563EB" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Cursor"
+                    Value="Hand" />
+            <Setter Property="Width"
+                    Value="28" />
+            <Setter Property="Height"
+                    Value="28" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter Property="Background"
+                                        Value="#E2E8F0"
+                                        TargetName="Bg" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.4"
+                                        TargetName="Bg" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="10"
+          RowDefinitions="Auto,*">
+        <!-- Global "something's running" indicator + Cancel, same shared
+             AttendanceBusyState this page's siblings (Punch Records/Manual Entries) each
+             show their own copy of - see PunchRecordsView.xaml's own comment on this same
+             strip for why it isn't just one shared control anymore now that Summary/Punch
+             Records/Manual Entries are three separate pages instead of three tabs on one. -->
+        <Border Grid.Row="0"
+                Style="{StaticResource CardBorder}"
+                Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Right"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Button Content="Cancel"
+                            Command="{Binding CancelCommand}"
+                            ToolTip="Stop whatever's currently running (Generate Reports, an Import/Fetch started from Punch Records, or a manual entry save/delete)." />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1"
+              Margin="0,0,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="255" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Report scope tree - same Department/Employee shape as the
+             Schedule tab's tree (see EmployeeTreeBuilder), but checkboxes
+             are always on here, since scoping a report is this tree's
+             only job. Every employee starts checked = whole company;
+             un-checking a department un-checks every employee in it;
+             un-checking individuals narrows further. See
+             AttendanceViewModel.SelectionScopeText and GetSelectedPins.
+             Checking/un-checking a box here also re-runs the report itself,
+             same as editing a Period date below - there's no separate
+             "Generate Reports" step anymore; see ReportViewModel.TryAutoRun. -->
+            <DockPanel Grid.Column="0"
+                       Margin="0,0,10,0">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Report Scope"
+                           FontWeight="Bold"
+                           FontSize="13"
+                           Margin="2,0,0,8" />
+
+                <!-- Live filter for the tree below, same comma-separated
+                 Employee ID/last name/first name/department matching as the
+                 Punch Records tab's search box (see
+                 ReportScopeViewModel.SearchText) - narrows which nodes are
+                 visible, not which are checked, so typing here never changes
+                 what a report would actually include. -->
+                <StackPanel DockPanel.Dock="Top"
+                            Margin="2,0,0,8">
+                    <TextBlock Text="Search"
+                               Style="{StaticResource GroupLabel}"
+                               Margin="0,0,0,4" />
+                    <TextBox Text="{Binding ReportScopeSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Comma-separated Employee ID, last name, first name, or department terms to narrow the tree to (e.g. &quot;342, Cruz, Kitchen&quot;). Leave blank to show everyone -- this only changes what's shown, not what's checked." />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom"
+                            Margin="2,8,0,0">
+                    <TextBlock Text="{Binding SelectionScopeText}"
+                               FontSize="11"
+                               Foreground="#475569"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,8" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Select All"
+                                Command="{Binding SelectAllTreeCommand}"
+                                Padding="8,3"
+                                Margin="0,0,6,0"
+                                ToolTip="Check every employee -- the whole-company default." />
+                        <Button Content="Clear"
+                                Command="{Binding ClearTreeSelectionCommand}"
+                                Padding="8,3"
+                                Margin="0,0,6,0"
+                                ToolTip="Uncheck everyone, so you can hand-pick specific employees or departments." />
+                        <Button Content="↻ Refresh"
+                                Command="{Binding LoadEmployeeTreeCommand}"
+                                Padding="8,3"
+                                ToolTip="Reload the employee list -- use this after adding, editing, or importing employees on the Schedule tab. Resets the checkboxes back to everyone checked." />
+                    </StackPanel>
+                </StackPanel>
+
+                <TreeView ItemsSource="{Binding Departments}"
+                          BorderThickness="1"
+                          BorderBrush="#D9D9D9"
+                          ItemContainerStyle="{StaticResource ReportScopeDepartmentItemStyle}">
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
+                                                  ItemsSource="{Binding Employees}"
+                                                  ItemContainerStyle="{StaticResource ReportScopeEmployeeItemStyle}">
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox IsChecked="{Binding IsSelected}"
+                                          IsThreeState="False"
+                                          VerticalAlignment="Center"
+                                          ToolTip="Include/exclude every employee in this department"
+                                          Margin="0,0,4,0" />
+                                <TextBlock Text="{Binding Name}"
+                                           FontWeight="Bold" />
+                            </StackPanel>
+                            <HierarchicalDataTemplate.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:EmployeeNodeViewModel}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox IsChecked="{Binding IsSelected}"
+                                                  VerticalAlignment="Center"
+                                                  Margin="0,0,4,0" />
+                                        <TextBlock Text="{Binding Employee.DisplayName}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasPin}"
+                                                                     Value="False">
+                                                            <Setter Property="Foreground"
+                                                                    Value="#9CA3AF" />
+                                                            <Setter Property="ToolTip"
+                                                                    Value="No Employee ID set for this person -- they won't match any punch log. Set it in the Add/Edit Employee dialog on the Schedule tab." />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </HierarchicalDataTemplate.ItemTemplate>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </DockPanel>
+
+            <!-- Right: period, results status strip, and the summary grid -
+             everything specific to generating and viewing an attendance
+             summary. There's no "Generate Reports" button here anymore -
+             changing either Period date below, or a checkbox in the Report
+             Scope tree at left, re-runs the report by itself (see
+             ReportViewModel.TryAutoRun); the progress bar in the last column
+             is the only sign a run is actually happening. -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0"
+                      Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="Period"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <!-- Steps PeriodStart/PeriodEnd to the adjacent cut-off
+                         (1st-15th / 16th-end of month) either side of whatever's
+                         currently set; see ReportViewModel.PreviousPeriod. Setting
+                         both properties still routes through TryAutoRun same as
+                         hand-editing either DatePicker. -->
+                    <Button Grid.Column="1"
+                            Content="◀"
+                            Command="{Binding PreviousPeriodCommand}"
+                            Padding="8,3"
+                            Margin="0,0,6,0"
+                            ToolTip="Previous cut-off period." />
+                    <DatePicker Grid.Column="2"
+                                SelectedDate="{Binding PeriodStart}"
+                                IsTodayHighlighted="True"
+                                Width="190"
+                                Margin="0,0,6,0">
+                        <DatePicker.Resources>
+                            <Style TargetType="DatePickerTextBox">
+                                <Setter Property="Control.Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="DatePickerTextBox">
+                                            <!-- Overriding the text binding to apply the custom string format -->
+                                            <TextBox Text="{Binding Path=SelectedDate,
+                                                RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
+                                                     TextAlignment="Center" />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </DatePicker.Resources>
+                    </DatePicker>
+                    <TextBlock Grid.Column="3"
+                               Text="to"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <DatePicker Grid.Column="4"
+                                IsTodayHighlighted="True"
+                                SelectedDate="{Binding PeriodEnd}"
+                                Width="190"
+                                Margin="0,0,6,0">
+                        <DatePicker.Resources>
+                            <Style TargetType="DatePickerTextBox">
+                                <Setter Property="Control.Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="DatePickerTextBox">
+                                            <!-- Overriding the text binding to apply the custom string format -->
+                                            <TextBox Text="{Binding Path=SelectedDate, RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
+                                                     TextAlignment="Center" />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </DatePicker.Resources>
+                    </DatePicker>
+                    <!-- See PreviousPeriodCommand's own comment above;
+                         NextPeriodCommand is the same step in the other
+                         direction. -->
+                    <Button Grid.Column="5"
+                            Content="▶"
+                            Command="{Binding NextPeriodCommand}"
+                            Padding="8,3"
+                            ToolTip="Next cut-off period." />
+
+                    <!-- Manual fallback for the auto-refresh every Period/tree edit
+                         already triggers (see ReportViewModel.RefreshSummaryAsync's
+                         own doc comment for the exact gap this closes) - the
+                         rightmost element in this row, same icon-button look as
+                         SchedulePage's and PayrollSummaryView's own Refresh buttons
+                         (see IconHeaderActionButton above). Column 6 (the "*" star)
+                         absorbs whatever's left between the ◀/▶ buttons and this,
+                         so it stays pinned to the row's true right edge regardless
+                         of window width. -->
+                    <Button Grid.Column="7"
+                            Style="{StaticResource IconHeaderActionButton}"
+                            Content="&#xE72C;"
+                            Command="{Binding RefreshSummaryCommand}"
+                            ToolTip="Re-run this report now -- useful right after editing the schedule on the Schedule page." />
+                </Grid>
+
+                <!-- Status counts + Export Summary, one slim strip. -->
+                <Border Grid.Row="1"
+                        Style="{StaticResource CardBorder}"
+                        Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel LastChildFill="False">
+                        <StackPanel DockPanel.Dock="Left"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="Total punches"
+                                       Foreground="#475569" />
+                            <TextBlock Text="{Binding TotalLogs}"
+                                       FontWeight="Bold"
+                                       Margin="4,0,20,0" />
+
+                            <!-- Each tile below is a borderless Button (see
+                                 StatusCountButton) wrapped in a Border, rather than a
+                                 plain TextBlock pair, so clicking it narrows the Summary
+                                 grid below (SummaryRowsView) down to just that status in
+                                 place - see ReportViewModel.ShowStatusDetail/
+                                 SelectedStatusFilter. A second click of the same tile (or
+                                 the Clear Filter button that appears alongside Refresh)
+                                 goes back to showing every status. The wrapping Border's
+                                 Background lights up via StatusFilterHighlightConverter
+                                 while that tile's status is the active filter, so at most
+                                 one tile is ever highlighted at a time. Every status is
+                                 reachable the same way here, not just Partial/Absent. -->
+                            <Border CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,10,0"
+                                    Background="{Binding SelectedStatusFilter, Converter={StaticResource StatusFilterHighlight}, ConverterParameter={x:Static coreAttendance:PunchStatus.Complete}}">
+                                <Button Style="{StaticResource StatusCountButton}"
+                                        Command="{Binding ShowStatusDetailCommand}"
+                                        CommandParameter="{x:Static coreAttendance:PunchStatus.Complete}"
+                                        ToolTip="Click to filter the summary grid to Complete records only. Click again to show every status.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Complete"
+                                                   Foreground="#16A34A" />
+                                        <TextBlock Text="{Binding CompleteCount}"
+                                                   FontWeight="Bold"
+                                                   Foreground="#16A34A"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                            <Border CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,10,0"
+                                    Background="{Binding SelectedStatusFilter, Converter={StaticResource StatusFilterHighlight}, ConverterParameter={x:Static coreAttendance:PunchStatus.Partial}}">
+                                <Button Style="{StaticResource StatusCountButton}"
+                                        Command="{Binding ShowStatusDetailCommand}"
+                                        CommandParameter="{x:Static coreAttendance:PunchStatus.Partial}"
+                                        ToolTip="Click to filter the summary grid to Partial records only. Click again to show every status.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Partial"
+                                                   Foreground="#D97706" />
+                                        <TextBlock Text="{Binding PartialCount}"
+                                                   FontWeight="Bold"
+                                                   Foreground="#D97706"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                            <Border CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,10,0"
+                                    Background="{Binding SelectedStatusFilter, Converter={StaticResource StatusFilterHighlight}, ConverterParameter={x:Static coreAttendance:PunchStatus.Absent}}">
+                                <Button Style="{StaticResource StatusCountButton}"
+                                        Command="{Binding ShowStatusDetailCommand}"
+                                        CommandParameter="{x:Static coreAttendance:PunchStatus.Absent}"
+                                        ToolTip="Click to filter the summary grid to Absent records only. Click again to show every status.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Absent"
+                                                   Foreground="#DC2626" />
+                                        <TextBlock Text="{Binding AbsentCount}"
+                                                   FontWeight="Bold"
+                                                   Foreground="#DC2626"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                            <Border CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,10,0"
+                                    Background="{Binding SelectedStatusFilter, Converter={StaticResource StatusFilterHighlight}, ConverterParameter={x:Static coreAttendance:PunchStatus.Leave}}">
+                                <Button Style="{StaticResource StatusCountButton}"
+                                        Command="{Binding ShowStatusDetailCommand}"
+                                        CommandParameter="{x:Static coreAttendance:PunchStatus.Leave}"
+                                        ToolTip="Click to filter the summary grid to Leave records only. Click again to show every status.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Leave"
+                                                   Foreground="#475569" />
+                                        <TextBlock Text="{Binding LeaveCount}"
+                                                   FontWeight="Bold"
+                                                   Foreground="#475569"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                            <Border CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,10,0"
+                                    Background="{Binding SelectedStatusFilter, Converter={StaticResource StatusFilterHighlight}, ConverterParameter={x:Static coreAttendance:PunchStatus.OfficialBusiness}}">
+                                <Button Style="{StaticResource StatusCountButton}"
+                                        Command="{Binding ShowStatusDetailCommand}"
+                                        CommandParameter="{x:Static coreAttendance:PunchStatus.OfficialBusiness}"
+                                        ToolTip="Click to filter the summary grid to Official Business records only. Click again to show every status.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Official Business"
+                                                   Foreground="#7C3AED" />
+                                        <TextBlock Text="{Binding OfficialBusinessCount}"
+                                                   FontWeight="Bold"
+                                                   Foreground="#7C3AED"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+                            <Border CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,10,0"
+                                    Background="{Binding SelectedStatusFilter, Converter={StaticResource StatusFilterHighlight}, ConverterParameter={x:Static coreAttendance:PunchStatus.RestDay}}">
+                                <Button Style="{StaticResource StatusCountButton}"
+                                        Command="{Binding ShowStatusDetailCommand}"
+                                        CommandParameter="{x:Static coreAttendance:PunchStatus.RestDay}"
+                                        ToolTip="Click to filter the summary grid to Rest Day records only. Click again to show every status.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Rest Day"
+                                                   Foreground="#0D9488" />
+                                        <TextBlock Text="{Binding RestDayCount}"
+                                                   FontWeight="Bold"
+                                                   Foreground="#0D9488"
+                                                   Margin="4,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </Border>
+
+                            <!-- Unlike the six tiles above, these two aren't
+                                 PunchStatus-based: they're raw punches with no
+                                 matched shift to summarize, so there's no
+                                 SummaryRowsView row for them to filter to. They
+                                 keep opening a small read-only dialog instead -
+                                 PunchListDetailDialog (StoredPunchLogRow-shaped,
+                                 same as Punch Records) - and take no
+                                 CommandParameter since each command already knows
+                                 which list it opens. -->
+                            <Button Style="{StaticResource StatusCountButton}"
+                                    Command="{Binding ShowOrphanedDetailCommand}"
+                                    Margin="0,0,14,0"
+                                    ToolTip="Click to see every Orphaned punch for this period.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Orphaned"
+                                               Foreground="#7C3AED" />
+                                    <TextBlock Text="{Binding OrphanedCount}"
+                                               FontWeight="Bold"
+                                               Foreground="#7C3AED"
+                                               Margin="4,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource StatusCountButton}"
+                                    Command="{Binding ShowUnscheduledDetailCommand}"
+                                    Margin="0,0,14,0"
+                                    ToolTip="Click to see every Unscheduled punch for this period.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Unscheduled"
+                                               Foreground="#0891B2" />
+                                    <TextBlock Text="{Binding UnscheduledCount}"
+                                               FontWeight="Bold"
+                                               Foreground="#0891B2"
+                                               Margin="4,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <StackPanel DockPanel.Dock="Right"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <!-- Only shows once a status tile has narrowed the grid (see
+                                 SelectedStatusFilter/ShowStatusDetail) - same effect as
+                                 clicking that same tile a second time, just reachable without
+                                 hunting down the exact tile that's currently lit. -->
+                            <Button Content="✕ Clear Filter"
+                                    Command="{Binding ClearStatusFilterCommand}"
+                                    Padding="8,3"
+                                    Margin="0,0,6,0"
+                                    Visibility="{Binding SelectedStatusFilter, Converter={StaticResource NotNullToVisibility}}"
+                                    ToolTip="Show every status in the summary grid again." />
+                            <Button Content="Export Summary…"
+                                    Command="{Binding ExportSummaryCommand}"
+                                    Padding="8,3"
+                                    ToolTip="Choose where to save the attendance summary as an Excel file." />
+                            <Button Content="Open"
+                                    Command="{Binding OpenSummaryCommand}"
+                                    Padding="8,3"
+                                    Margin="6,0,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Grid Grid.Row="2">
+                    <DataGrid Margin="4"
+                              ColumnWidth="Auto"
+                              ItemsSource="{Binding SummaryRowsView}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="False"
+                              RowHeight="25"
+                              FrozenColumnCount="2"
+                              GridLinesVisibility="All"
+                              HeadersVisibility="Column"
+                              Visibility="{Binding HasSummaryRows, Converter={StaticResource BoolToVisibility}}">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <!-- One computed value instead of a Setter that a Trigger has
+                                 to fight and win back - see SummaryRowBackgroundConverter's
+                                 doc comment for why the Setter+Trigger version needed the
+                                 Trigger at all. -->
+                                <Setter Property="Background">
+                                    <Setter.Value>
+                                        <MultiBinding Converter="{StaticResource SummaryRowBackground}">
+                                            <Binding Path="Status" />
+                                            <Binding RelativeSource="{RelativeSource Self}"
+                                                     Path="IsSelected" />
+                                        </MultiBinding>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="Foreground"
+                                        Value="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected, Converter={StaticResource SelectedRowForeground}}" />
+                                <!-- Right-click "Add Manual Entry…" for a Partial/Absent row -
+                                     same feature as the Schedule page's calendar tile
+                                     right-click, just for a Summary row. Built in code-behind
+                                     (see AttendanceSummaryView.xaml.cs's
+                                     SummaryRow_MouseRightButtonDown) rather than a ContextMenu
+                                     declared here, for the same DataContext reason
+                                     MonthCalendarControl's own DayBorder_MouseRightButtonDown
+                                     already explains. -->
+                                <EventSetter Event="MouseRightButtonDown"
+                                             Handler="SummaryRow_MouseRightButtonDown" />
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="PIN"
+                                                Binding="{Binding EmployeeId}" />
+                            <DataGridTextColumn Header="Name"
+                                                Binding="{Binding EmployeeName}" />
+                            <DataGridTextColumn Header="Department"
+                                                Binding="{Binding Department}" />
+                            <DataGridTextColumn Header="Type"
+                                                Binding="{Binding TypeText}" />
+                            <DataGridTextColumn Header="Date"
+                                                Binding="{Binding ShiftDate, StringFormat={}{0:MM/dd/yy ddd}}" />
+                            <DataGridTextColumn Header="Check In"
+                                                Binding="{Binding CheckInText}" />
+                            <DataGridTextColumn Header="Check Out"
+                                                Binding="{Binding CheckOutText}" />
+                            <DataGridTextColumn Header="Clock In"
+                                                Binding="{Binding ClockInText}" >
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader"
+                                           BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+                                        <Setter Property="ToolTip"
+                                                Value="A trailing * means this time came from a manual entry, not a device punch." />
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Clock Out"
+                                                Binding="{Binding ClockOutText}" >
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader"
+                                           BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+                                        <Setter Property="ToolTip"
+                                                Value="A trailing * means this time came from a manual entry, not a device punch." />
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Work Day"
+                                                Binding="{Binding WorkDayText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Late In"
+                                                Binding="{Binding LateInText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Early Out"
+                                                Binding="{Binding EarlyOutText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Remain"
+                                                Binding="{Binding RemainText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Remain (h)"
+                                                Binding="{Binding RemainHoursText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Overtime"
+                                                Binding="{Binding OvertimeText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Overtime (h)"
+                                                Binding="{Binding OvertimeHoursText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Night Diff"
+                                                Binding="{Binding NightDiffText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Night Diff (h)"
+                                                Binding="{Binding NightDiffHoursText}"
+                                                ElementStyle="{StaticResource RightAlignedCell}"
+                                                HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            <DataGridTextColumn Header="Status"
+                                                Binding="{Binding StatusText}">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontWeight"
+                                                Value="SemiBold" />
+                                        <Setter Property="Foreground"
+                                                Value="{Binding Status, Converter={StaticResource StatusToBrush}}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Text="Generate a report to see attendance summary results here."
+                               Foreground="#94A3B8"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding HasSummaryRows, Converter={StaticResource InverseBoolToVisibility}}" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ScheduleApp.Attendance</RootNamespace>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScheduleApp.Core\ScheduleApp.Core.csproj" />
+    <ProjectReference Include="..\ScheduleApp.Data\ScheduleApp.Data.csproj" />
+  </ItemGroup>
+
+</Project>

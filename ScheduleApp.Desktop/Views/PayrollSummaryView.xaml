@@ -1,0 +1,842 @@
+<UserControl x:Class="ScheduleApp.Desktop.Views.PayrollSummaryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+             xmlns:payroll="clr-namespace:ScheduleApp.Payroll;assembly=ScheduleApp.Payroll"
+             xmlns:corePayroll="clr-namespace:ScheduleApp.Core.Payroll;assembly=ScheduleApp.Core"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:PayrollViewModel}">
+    <UserControl.Resources>
+        <!-- Same "card" look as SchedulePage/AttendanceView's toolbar strips - see those
+             files' own copies of this style for why it's duplicated per-file rather than
+             shared. -->
+        <Style x:Key="CardBorder"
+               TargetType="Border">
+            <Setter Property="Background"
+                    Value="#F8FAFC" />
+            <Setter Property="BorderBrush"
+                    Value="#E2E8F0" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="CornerRadius"
+                    Value="4" />
+            <Setter Property="Padding"
+                    Value="10,8" />
+            <Setter Property="Margin"
+                    Value="0,0,0,8" />
+        </Style>
+
+        <converters:NumberConverter x:Key="NumberConverter" />
+        <converters:PayrollAdjustmentTypeToLabelConverter x:Key="AdjustmentTypeLabelConverter" />
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
+        <converters:WaivedToExcludeIncludeLabelConverter x:Key="WaivedToExcludeIncludeLabel" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- Right-aligned figure, used for the two section totals (Total Gross Pay/Total
+             Deductions in the DockPanel below) - the one roll-up level above even a category
+             subtotal, so it stays plain text rather than boxed like ValueTextBox below. Every
+             genuinely itemized category's subtotal (Incentive/Other Charges) uses the
+             boxed ValueTextBox look instead - see that style's own doc comment. Net Pay itself
+             (bottom of the page) uses a bigger, unstyled TextBlock instead, since it isn't one
+             line among many the way everything else here is. -->
+        <Style x:Key="AmountText"
+               TargetType="TextBlock">
+            <Setter Property="TextAlignment"
+                    Value="Right" />
+            <Setter Property="MinWidth"
+                    Value="92" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+        </Style>
+
+        <!-- White bordered card, shared by every category section (Basic Pay/Overtime/Night
+             Diff/Undertime same as Allowance/Incentive/SSS/etc.) so all of them read as the
+             same kind of thing rather than the computed lines floating outside a card the way
+             they used to. Factored out of what used to be AdjustmentGroupTemplate's own inline
+             Border properties. -->
+        <Style x:Key="LineCardBorder"
+               TargetType="Border">
+            <Setter Property="Background"
+                    Value="White" />
+            <Setter Property="BorderBrush"
+                    Value="#E2E8F0" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="CornerRadius"
+                    Value="4" />
+            <Setter Property="Padding"
+                    Value="8,6" />
+            <Setter Property="Margin"
+                    Value="0,0,0,6" />
+        </Style>
+
+        <!-- A single line's own value (Basic Pay's amount, an Allowance/SSS/etc. row's
+             amount) shown inside a boxed, textbox-styled control rather than a plain
+             TextBlock - same look every single-value line, every itemized row, AND
+             Incentive/Other Charges' own Subtotal all share, per the Payroll Feature's
+             "consistent with Allowance/Incentive/SSS" ask. Only the two section totals (Total
+             Gross Pay/Total Deductions) sit a level above that and keep using the plain
+             AmountText style above instead. Always IsReadOnly - editing still goes through the
+             row's own Delete button (or isn't offered at all for the computed lines) or, for a
+             single-value category, EditableAmountTextBox below instead of this style
+             entirely - this is about the boxed look, not turning this into a live inline
+             editor. -->
+        <Style x:Key="ValueTextBox"
+               TargetType="TextBox"
+               BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="IsReadOnly"
+                    Value="True" />
+            <Setter Property="IsReadOnlyCaretVisible"
+                    Value="False" />
+            <Setter Property="TextAlignment"
+                    Value="Right" />
+            <Setter Property="VerticalContentAlignment"
+                    Value="Center" />
+            <Setter Property="Padding"
+                    Value="6,3" />
+            <Setter Property="MinWidth"
+                    Value="92" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+        </Style>
+
+        <!-- Same boxed look as ValueTextBox, but grayed out once Waived is true - used only
+             for DeductionLineTemplate's own Amount box below, the one place a line can be
+             excluded without changing what Amount shows (see PayrollLineItem.Waived's own doc
+             comment: the figure stays the real computed value either way, un-struck-through -
+             this is purely a "disregarded" visual cue alongside the toggle's own Exclude/
+             Include text, not a change to the value or to IsEnabled/editability, which stay
+             exactly as ValueTextBox already sets them). Basic Pay/Overtime/Night Diff also
+             bind to a PayrollLineItem (ComputedLineTemplate above) and so also have a Waived
+             property, but it's always false there (no toggle ever sets it), so this trigger
+             never fires for those - scoped to its own style anyway, rather than added to
+             ValueTextBox directly, so that stays a plain shared box style with no PayrollLineItem-specific
+             assumptions baked in. -->
+        <Style x:Key="UndertimeAmountTextBox"
+               TargetType="TextBox"
+               BasedOn="{StaticResource ValueTextBox}">
+            <Setter Property="Foreground"
+                    Value="#DC2626" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Waived}"
+                             Value="True">
+                    <Setter Property="Background"
+                            Value="#F1F5F9" />
+                    <Setter Property="Foreground"
+                            Value="#94A3B8" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Same boxed look as ValueTextBox, but actually editable - used only for a
+             single-value category's (Allowance/SSS/PhilHealth/Pag-IBIG/Cash Advance) own
+             inline amount box, the one place on this page where typing directly into the box
+             IS the edit action rather than opening a dialog first. Committed on LostFocus/
+             Enter via PayrollSummaryView.xaml.cs's SingleValueAmountBox_LostFocus/KeyDown,
+             which call PayrollViewModel.SetSingleValueAsync - see that method's own doc
+             comment. -->
+        <Style x:Key="EditableAmountTextBox"
+               TargetType="TextBox"
+               BasedOn="{StaticResource ValueTextBox}">
+            <Setter Property="IsReadOnly"
+                    Value="False" />
+            <Setter Property="IsReadOnlyCaretVisible"
+                    Value="True" />
+            <Setter Property="Background"
+                    Value="White" />
+        </Style>
+
+        <!-- Same boxed, directly-editable look as EditableAmountTextBox, but left-aligned and
+             not fixed-width - used only for an inline-itemized row's own Description box (see
+             InlineAdjustmentRowTemplate below), the itemized counterpart to
+             EditableAmountTextBox's single-value amount box: typing into it IS the edit
+             action, committed on LostFocus/Enter via PayrollSummaryView.xaml.cs's
+             InlineDescriptionBox_LostFocus/KeyDown, which call
+             PayrollViewModel.UpdateInlineDescriptionAsync. -->
+        <Style x:Key="EditableDescriptionTextBox"
+               TargetType="TextBox"
+               BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="TextAlignment"
+                    Value="Left" />
+            <Setter Property="TextWrapping"
+                    Value="Wrap" />
+            <Setter Property="AcceptsReturn"
+                    Value="False" />
+            <Setter Property="VerticalContentAlignment"
+                    Value="Center" />
+            <Setter Property="Padding"
+                    Value="6,3" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Background"
+                    Value="White" />
+        </Style>
+
+        <!-- Small Edit/Delete/"+ Add" buttons sitting at the right of a row - same "compact,
+             row-scoped action" role as the Edit/Delete buttons in AttendanceView's own manual
+             entries grid, just not DataGrid-column-hosted here since these rows live in plain
+             ItemsControls, not a DataGrid. -->
+        <Style x:Key="RowActionButton"
+               TargetType="Button">
+            <Setter Property="Padding"
+                    Value="8,2" />
+            <Setter Property="FontSize"
+                    Value="11" />
+            <Setter Property="Margin"
+                    Value="6,0,0,0" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+        </Style>
+
+        <!-- Transparent, borderless header-action look - originally just Undertime's own
+             Exclude/Include toggle in DeductionLineTemplate below, now shared by every
+             category header's own action button (single-value's "Edit", inline-itemized's
+             "+ Add Row", dialog-itemized's "+ Add") so all of them read as an inline label
+             sitting beside the category's own Label rather than a bordered button off on the
+             far right the way RowActionButton above still looks for the per-row Edit/Delete
+             buttons. A Button (not RowActionButton) so it keeps Click's built-in mouse+Space/
+             Enter activation and correct button automation semantics, but templated down to
+             bare text. Default WPF focus-visual (dotted rectangle on Tab) is deliberately left
+             in place rather than suppressed, since that's the one piece of keyboard-accessible
+             affordance this control gets "for free" by being a real Button. IsMouseOver/
+             IsEnabled just dim the whole thing rather than adding an underline or color swap,
+             to keep the template itself trivial. -->
+        <Style x:Key="TransparentHeaderActionButton"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="Transparent" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Cursor"
+                    Value="Hand" />
+            <Setter Property="FontSize"
+                    Value="11" />
+            <Setter Property="Foreground"
+                    Value="#2563EB" />
+            <Setter Property="Padding"
+                    Value="4,3" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter Property="Opacity"
+                                        Value="0.7"
+                                        TargetName="Bg" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.4"
+                                        TargetName="Bg" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Icon-only header action button - currently just the payslip Refresh button
+             at the right edge of the employee-name header below. A small, roughly square
+             hit target with a rounded hover background, rather than
+             TransparentHeaderActionButton's plain text-link look above - a lone glyph
+             needs its own visible affordance instead of blending into the header row
+             until hovered the way a "+ Add Row" text link can. FontFamily lists Segoe
+             Fluent Icons first, falling back to Segoe MDL2 Assets - both fonts share the
+             same glyph codepoints for common icons (Refresh, E72C, included), but Segoe
+             Fluent Icons only ships with Windows 11 by default, so a Windows 10 machine
+             without it installed still renders the glyph correctly from the older,
+             still-present MDL2 font instead of showing a missing-glyph box. -->
+        <Style x:Key="IconHeaderActionButton"
+               TargetType="Button">
+            <Setter Property="FontFamily"
+                    Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+            <Setter Property="FontSize"
+                    Value="14" />
+            <Setter Property="Background"
+                    Value="Transparent" />
+            <Setter Property="Foreground"
+                    Value="#2563EB" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Cursor"
+                    Value="Hand" />
+            <Setter Property="Width"
+                    Value="28" />
+            <Setter Property="Height"
+                    Value="28" />
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter Property="Background"
+                                        Value="#E2E8F0"
+                                        TargetName="Bg" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.4"
+                                        TargetName="Bg" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One PayrollLineItem (Basic Pay, Overtime, Night Diff) - computed, never
+             editable (no edit affordance at all, unlike an itemized row's own Delete button
+             below), but styled as its own card with the value boxed the same way an
+             Allowance/SSS/etc. row is, so it
+             reads as the same kind of line rather than looking like a leftover plain row
+             sitting outside a card. Gross Pay has no waive concept at all, so this stays a
+             plain Label/Amount template - see DeductionLineTemplate below for the
+             SupportsWaiver-gated version ComputedDeductions uses instead. -->
+        <DataTemplate x:Key="ComputedLineTemplate"
+                      DataType="{x:Type payroll:PayrollLineItem}">
+            <Border Style="{StaticResource LineCardBorder}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Label}"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1"
+                             Text="{Binding Amount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                             Style="{StaticResource ValueTextBox}"
+                             Margin="8,0,0,0" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Every ComputedDeductions line (today, just Undertime; see PayrollCalculator.
+             Calculate) - same boxed card/value look as ComputedLineTemplate above, plus an
+             Exclude/Include toggle button shown only when SupportsWaiver is true, so a future
+             second deduction line without a waive concept renders identically to
+             ComputedLineTemplate instead of either being skipped (the old ContentControl's
+             failure mode) or wrongly getting a toggle that doesn't apply to it. Toggling
+             doesn't hide or change Amount - it's still the real computed figure (see
+             PayrollLineItem.Waived's own doc comment) - it only stops this line from counting
+             into Total Deductions/Net Pay below, which is why the amount box stays visible and
+             un-struck-through either way; UndertimeAmountTextBox's own Waived trigger grays the
+             box out when excluded, alongside the toggle's own "Exclude"/"Include" text, as a
+             second indicator of the waived state. Click goes through PayrollSummaryView.xaml.cs's
+             UndertimeWaivedToggle_Click, same reach-past-the-DataTemplate-to-the-UserControl's-
+             own-DataContext idea InlineAdjustmentRowTemplate's own Delete button uses, since
+             this template's
+             DataContext is the PayrollLineItem, not the PayrollViewModel - the handler reads
+             Waived off that same PayrollLineItem to know which way to flip it, then calls
+             SetUndertimeWaivedAsync directly (see that method's own doc comment for why this is
+             EmployeeId/period-scoped rather than keyed off which line was clicked). IsEnabled
+             bound to the UserControl's own CanEditAdjustmentsNow, same as EditableAmountTextBox
+             elsewhere on this page, so the toggle can't be clicked while nothing's selected or
+             a refresh is already in flight. -->
+        <DataTemplate x:Key="DeductionLineTemplate"
+                      DataType="{x:Type payroll:PayrollLineItem}">
+            <Border Style="{StaticResource LineCardBorder}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Label}"
+                               FontWeight="SemiBold"
+                               Foreground="#DC2626"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Content="{Binding Waived, Converter={StaticResource WaivedToExcludeIncludeLabel}}"
+                            Style="{StaticResource TransparentHeaderActionButton}"
+                            Visibility="{Binding SupportsWaiver, Converter={StaticResource BoolToVisibility}}"
+                            IsEnabled="{Binding DataContext.CanEditAdjustmentsNow,
+                                                 RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Click="UndertimeWaivedToggle_Click"
+                            Margin="0,0,4,0"
+                            ToolTip="Excludes this employee's Undertime deduction from Total Deductions/Net Pay for this period. The figure stays visible - it's still calculated, just disregarded." />
+                    <TextBox Grid.Column="2"
+                             Text="{Binding Amount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                             Style="{StaticResource UndertimeAmountTextBox}"
+                             Margin="8,0,0,0" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- One inline-itemized PayrollAdjustment row (Incentive/Other Charges) -
+             Description and Amount are both directly editable TextBoxes right in the row
+             itself, per the Payroll Feature's "no popup, type description and amount
+             directly" follow-up ask, committed the same LostFocus/Enter way
+             SingleValueAmountBox commits (see PayrollSummaryView.xaml.cs's
+             InlineDescriptionBox_LostFocus/KeyDown and InlineAmountBox_LostFocus/KeyDown, and
+             PayrollViewModel.UpdateInlineDescriptionAsync/UpdateInlineAmountAsync). No Edit
+             button or dialog round trip - Delete is the only action button, same
+             DeleteAdjustmentCommand every other row uses. -->
+        <DataTemplate x:Key="InlineAdjustmentRowTemplate"
+                      DataType="{x:Type corePayroll:PayrollAdjustment}">
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding Description, Mode=OneWay}"
+                         Style="{StaticResource EditableDescriptionTextBox}"
+                         LostFocus="InlineDescriptionBox_LostFocus"
+                         KeyDown="InlineDescriptionBox_KeyDown"
+                         IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                <TextBox Grid.Column="1"
+                         Text="{Binding Amount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                         Style="{StaticResource EditableAmountTextBox}"
+                         Margin="8,0,0,0"
+                         LostFocus="InlineAmountBox_LostFocus"
+                         KeyDown="InlineAmountBox_KeyDown"
+                         IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                <Button Grid.Column="2"
+                        Content="Delete"
+                        Style="{StaticResource RowActionButton}"
+                        Command="{Binding DataContext.DeleteAdjustmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- Deductions-only copy of InlineAdjustmentRowTemplate above, red Description/Amount -
+             InlineAdjustmentRowTemplate is DataType-bound to PayrollAdjustment, which has no
+             "is this a deduction" flag of its own - only which ItemsControl/column it's
+             plugged into says that - same reasoning as DeductionAdjustmentGroupTemplate
+             below. -->
+        <DataTemplate x:Key="DeductionInlineAdjustmentRowTemplate"
+                      DataType="{x:Type corePayroll:PayrollAdjustment}">
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0"
+                         Text="{Binding Description, Mode=OneWay}"
+                         Style="{StaticResource EditableDescriptionTextBox}"
+                         Foreground="#DC2626"
+                         LostFocus="InlineDescriptionBox_LostFocus"
+                         KeyDown="InlineDescriptionBox_KeyDown"
+                         IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                <TextBox Grid.Column="1"
+                         Text="{Binding Amount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                         Style="{StaticResource EditableAmountTextBox}"
+                         Foreground="#DC2626"
+                         Margin="8,0,0,0"
+                         LostFocus="InlineAmountBox_LostFocus"
+                         KeyDown="InlineAmountBox_KeyDown"
+                         IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                <Button Grid.Column="2"
+                        Content="Delete"
+                        Style="{StaticResource RowActionButton}"
+                        Command="{Binding DataContext.DeleteAdjustmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- One PayrollAdjustmentGroup - a category's own mini card. Two entirely different
+             bodies depending on PayrollAdjustmentGroup.IsSingleValue/IsInlineItemized,
+             toggled by the mutually-exclusive Visibility bindings below rather than one shared
+             layout with conditional pieces, since the two kinds of category don't actually
+             share a shape:
+             
+             - Single-value (Allowance/Premium Pay/SSS/PhilHealth/Pag-IBIG/Cash Advance): label
+               + a transparent "Edit" button beside it (only shows once a value exists) + one
+               inline, directly-editable amount box (bound to SingleValueAdjustment). The Edit
+               button is plain UI, not a bound command (see PayrollSummaryView.xaml.cs's
+               EditSingleValueButton_Click) - clicking it just focuses the amount box and
+               selects its text so a new figure can be typed straight over the old one; the
+               box was always directly editable on its own, the button just saves a manual
+               Ctrl+A first. No subtotal (the box's own value already is the subtotal), no
+               separate Add step (typing into the box does both create and update), no
+               dialog. See SingleValueAdjustment's and EditableAmountTextBox's own doc
+               comments. Premium Pay
+               used to be its own third, dialog-based shape (an itemized "+ Add" opening a
+               PayrollAdjustmentDialog) until that dialog was dropped - it only ever collected
+               a single amount per line anyway, same as this group, so it moved here instead.
+             
+             - Inline-itemized (Incentive/OtherCharge): label + a transparent "+ Add Row"
+               button beside it that creates a blank row in place (AddInlineRowCommand) + the
+               subtotal, over a row list where each row's own Description/Amount are typed
+               directly into it - no dialog. See InlineAdjustmentRowTemplate above and
+               PayrollViewModel.AddInlineRowAsync's own doc comments.
+             
+             Both headers put their own action button in the same slot (right after the
+             Label, styled via TransparentHeaderActionButton) that Undertime's Exclude/Include
+             toggle uses in DeductionLineTemplate above, so every category on this page reads
+             the button as sitting beside its Label rather than off past the amount - see that
+             style's own doc comment.
+             
+             The inline-itemized row list is always rendered even when Adjustments is empty, so
+             the category keeps its add action available before anything's been entered - an
+             empty ItemsControl below the header just shows nothing. -->
+        <DataTemplate x:Key="AdjustmentGroupTemplate"
+                      DataType="{x:Type vm:PayrollAdjustmentGroupRow}">
+            <Border Style="{StaticResource LineCardBorder}">
+                <StackPanel>
+                    <!-- Single-value body -->
+                    <Grid Visibility="{Binding IsSingleValue, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Type, Converter={StaticResource AdjustmentTypeLabelConverter}}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Content="Edit"
+                                Style="{StaticResource TransparentHeaderActionButton}"
+                                Click="EditSingleValueButton_Click"
+                                Visibility="{Binding SingleValueAdjustment, Converter={StaticResource NotNullToVisibility}}"
+                                Margin="0,0,4,0" />
+                        <TextBox Grid.Column="2"
+                                 Text="{Binding SingleValueAmount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                                 Style="{StaticResource EditableAmountTextBox}"
+                                 Margin="8,0,0,0"
+                                 LostFocus="SingleValueAmountBox_LostFocus"
+                                 KeyDown="SingleValueAmountBox_KeyDown"
+                                 IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    </Grid>
+
+                    <!-- Inline-itemized body -->
+                    <StackPanel Visibility="{Binding IsInlineItemized, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Type, Converter={StaticResource AdjustmentTypeLabelConverter}}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1"
+                                    Content="+ Add Row"
+                                    Style="{StaticResource TransparentHeaderActionButton}"
+                                    Command="{Binding DataContext.AddInlineRowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding Type}"
+                                    Margin="0,0,4,0" />
+                            <TextBox Grid.Column="2"
+                                     Text="{Binding Subtotal, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                                     Style="{StaticResource ValueTextBox}"
+                                     Margin="8,0,0,0" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Adjustments}"
+                                      ItemTemplate="{StaticResource InlineAdjustmentRowTemplate}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- Deductions-only copy of AdjustmentGroupTemplate above. PayrollAdjustmentGroup
+             carries no "is this a deduction" flag of its own - IsSingleValue/IsInlineItemized
+             only say which of the two bodies to show, not which column it's
+             in - so the shared template can't tell Allowance (Gross Pay) apart from SSS
+             (Deductions) to color just one of them. Kept as a full copy (not a shared style
+             behind a DataTrigger) for the same reason CardBorder/PeriodDatePickerTextBoxStyle
+             are copied per-file elsewhere in this codebase rather than parameterized - only
+             the DeductionAdjustmentGroups ItemsControl below points at this one; Gross Pay
+             keeps using the plain AdjustmentGroupTemplate above, unchanged. -->
+        <DataTemplate x:Key="DeductionAdjustmentGroupTemplate"
+                      DataType="{x:Type vm:PayrollAdjustmentGroupRow}">
+            <Border Style="{StaticResource LineCardBorder}">
+                <StackPanel>
+                    <!-- Single-value body -->
+                    <Grid Visibility="{Binding IsSingleValue, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Type, Converter={StaticResource AdjustmentTypeLabelConverter}}"
+                                   FontWeight="SemiBold"
+                                   Foreground="#DC2626"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Content="Edit"
+                                Style="{StaticResource TransparentHeaderActionButton}"
+                                Click="EditSingleValueButton_Click"
+                                Visibility="{Binding SingleValueAdjustment, Converter={StaticResource NotNullToVisibility}}"
+                                Margin="0,0,4,0" />
+                        <TextBox Grid.Column="2"
+                                 Text="{Binding SingleValueAmount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                                 Style="{StaticResource EditableAmountTextBox}"
+                                 Foreground="#DC2626"
+                                 Margin="8,0,0,0"
+                                 LostFocus="SingleValueAmountBox_LostFocus"
+                                 KeyDown="SingleValueAmountBox_KeyDown"
+                                 IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    </Grid>
+
+                    <!-- Inline-itemized body -->
+                    <StackPanel Visibility="{Binding IsInlineItemized, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Type, Converter={StaticResource AdjustmentTypeLabelConverter}}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#DC2626"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1"
+                                    Content="+ Add Row"
+                                    Style="{StaticResource TransparentHeaderActionButton}"
+                                    Command="{Binding DataContext.AddInlineRowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding Type}"
+                                    Margin="0,0,4,0" />
+                            <TextBox Grid.Column="2"
+                                     Text="{Binding Subtotal, Converter={StaticResource NumberConverter}, Mode=OneWay}"
+                                     Style="{StaticResource ValueTextBox}"
+                                     Foreground="#DC2626"
+                                     Margin="8,0,0,0" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Adjustments}"
+                                      ItemTemplate="{StaticResource DeductionInlineAdjustmentRowTemplate}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel Margin="0,0,0,8">
+        <!-- Employee name - same header role AttendanceView's summary tab and Schedule's
+             calendar give the currently selected employee. Period pickers, Print Current
+             Payslip/Print Payslips, and the busy indicator all moved up to PayrollPage.xaml's
+             own page-level CardBorder (see that file) - same "command row sits right below
+             the tab, above the tree+content split" pattern SchedulePage/EmployeesPage/
+             AttendanceView already use, which this tab wasn't following (those buttons used
+             to live down here instead, confined to just this UserControl's own column).
+             A DockPanel rather than the plain horizontal StackPanel this used to be - the
+             Refresh button below needs to dock against the row's own right edge regardless
+             of how wide HeaderText/the Pay Type badge happen to be, which a StackPanel has
+             no way to express (its children just line up left to right, one after another).
+             LastChildFill="False" so nothing here stretches to fill the gap in between -
+             HeaderText/the badge dock Left in the order they're declared, Refresh docks
+             Right, and the space between the two sides just stays empty, the same "label on
+             one side, action on the other" shape PayrollPage's own Included/Not-in-group
+             card headers already use elsewhere on this tab. -->
+        <DockPanel DockPanel.Dock="Top"
+                   Margin="0,0,0,8"
+                   LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Text="{Binding HeaderText}"
+                       VerticalAlignment="Center" />
+
+            <!-- Pay Type badge - bound straight to SelectedEmployee.EmployeeType, no
+                 converter needed since Daily/Monthly are already display-ready via plain
+                 ToString() (unlike ScheduleType/PunchStatus). Visibility piggybacks on the
+                 same NotNullToVisibility this file already uses for the empty-state
+                 Border/breakdown Grid toggle below, so the badge disappears along with
+                 everything else in the "no employee selected" state rather than showing
+                 next to the "Select an employee" placeholder HeaderText falls back to. -->
+            <Border DockPanel.Dock="Left"
+                    Background="#F1F5F9"
+                    BorderBrush="#E2E8F0"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="6,2"
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                    Visibility="{Binding SelectedEmployee, Converter={StaticResource NotNullToVisibility}}">
+                <TextBlock Text="{Binding SelectedEmployee.EmployeeType}"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="#475569" />
+            </Border>
+
+            <!-- Recalculate/refresh this employee's payslip on demand - the per-employee
+                 replacement for the payroll group panel's own manual "Reload" button (see
+                 PayrollGroupViewModel's doc comments for why that one was removed), living
+                 right next to the payslip it actually recalculates instead of off in the
+                 group grid's own header. Icon-only (the Segoe Fluent Icons/Segoe MDL2
+                 Assets "Refresh" glyph, U+E72C - see IconHeaderActionButton's own doc
+                 comment for the font fallback) rather than a text button, since this is a
+                 single, self-explanatory action sitting in a header row that's already
+                 tight on space. Same NotNullToVisibility toggle as the Pay Type badge above
+                 - there's nothing to recalculate with no employee selected, so this
+                 disappears right alongside it; RecalculatePayslipCommand's own CanExecute
+                 (Result is not null, !_busy.IsRunning) additionally disables it whenever a
+                 payslip hasn't loaded yet or a refresh is already running. -->
+            <Button DockPanel.Dock="Right"
+                    Style="{StaticResource IconHeaderActionButton}"
+                    Content="&#xE72C;"
+                    Command="{Binding RecalculatePayslipCommand}"
+                    Visibility="{Binding SelectedEmployee, Converter={StaticResource NotNullToVisibility}}"
+                    ToolTip="Recalculate this employee's payslip using the latest attendance and adjustments for this period." />
+        </DockPanel>
+
+        <!-- Empty-state placeholder and the itemized breakdown occupy the same Grid cell,
+             toggled by mutually-exclusive Visibility bindings (Result is null exactly when
+             EmptyStateMessage isn't - see PayrollViewModel's doc comments on each), rather
+             than being separate DockPanel children - a DockPanel's LastChildFill only fills
+             for whichever element is *literally* last in this collection, regardless of which
+             one is actually Visible at a given moment, so keeping both inside one Grid (the
+             genuine last DockPanel child) is what lets whichever one is showing actually fill
+             the remaining space the original placeholder Border relied on. -->
+        <Grid>
+            <Border Style="{StaticResource CardBorder}"
+                    Margin="0"
+                    Visibility="{Binding EmptyStateMessage, Converter={StaticResource NotNullToVisibility}}">
+                <TextBlock Text="{Binding EmptyStateMessage}"
+                           Foreground="#94A3B8"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding Result, Converter={StaticResource NotNullToVisibility}}">
+                <StackPanel>
+                    <!-- Gross Pay (left) / Deductions (right), side by side rather than
+                         stacked - each column sized independently (VerticalAlignment="Top"
+                         on both cards) since Gross Pay and Deductions rarely have the same
+                         number of rows, so forcing equal heights would just leave one card
+                         padded with empty space. Net Pay stays its own full-width strip
+                         below both, same reasoning as before (see its own comment) - it's
+                         the page's bottom line, not a third column. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Gross Pay -->
+                        <Border Grid.Column="0"
+                                Style="{StaticResource CardBorder}"
+                                VerticalAlignment="Top">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Gross Pay"
+                                               FontSize="15"
+                                               FontWeight="Bold" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Result.TotalGrossPay, Converter={StaticResource NumberConverter}}"
+                                               Style="{StaticResource AmountText}"
+                                               FontSize="15"
+                                               Padding="0,0,2,0"
+                                               FontWeight="Bold" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Result.ComputedGrossPay}"
+                                              ItemTemplate="{StaticResource ComputedLineTemplate}"
+                                              Margin="0,0,0,4" />
+                                <ItemsControl ItemsSource="{Binding GrossPayAdjustmentGroupRows}"
+                                              ItemTemplate="{StaticResource AdjustmentGroupTemplate}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Deductions -->
+                        <Border Grid.Column="2"
+                                Style="{StaticResource CardBorder}"
+                                VerticalAlignment="Top">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Deductions"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#DC2626" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Result.TotalDeductions, Converter={StaticResource NumberConverter}}"
+                                               Style="{StaticResource AmountText}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="#DC2626" />
+                                </Grid>
+                                <!-- Same shape as the Gross Pay column's ComputedGrossPay ItemsControl
+                                     above - DeductionLineTemplate's own SupportsWaiver check is what
+                                     keeps the Exclude/Include toggle scoped to just Undertime, not this
+                                     binding. -->
+                                <ItemsControl ItemsSource="{Binding Result.ComputedDeductions}"
+                                              ItemTemplate="{StaticResource DeductionLineTemplate}"
+                                              Margin="0,0,0,4" />
+                                <ItemsControl ItemsSource="{Binding DeductionAdjustmentGroupRows}"
+                                              ItemTemplate="{StaticResource DeductionAdjustmentGroupTemplate}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Net Pay - the one total that isn't inside a CardBorder-styled card,
+                         since it's the page's own bottom line rather than one section among
+                         several; dark background makes it read as a summary strip rather than
+                         another itemized card. Can legitimately show a negative figure (see
+                         PayrollResult.NetPay's own doc comment, e.g. a Cash Advance bigger
+                         than what was earned) - NumberConverter's plain "-1,234.56" already
+                         says as much on its own, so this doesn't otherwise call it out further
+                         (no red highlight). -->
+                    <Border Background="#1E293B"
+                            CornerRadius="4"
+                            Padding="10,10"
+                            Margin="0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="Net Pay"
+                                       FontSize="17"
+                                       FontWeight="Bold"
+                                       Foreground="White"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Result.NetPay, Converter={StaticResource NumberConverter}}"
+                                       FontSize="17"
+                                       FontWeight="Bold"
+                                       Foreground="White"
+                                       TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</UserControl>

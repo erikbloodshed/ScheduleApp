@@ -1,0 +1,11 @@
+<UserControl x:Class="ScheduleApp.Desktop.Controls.TimePicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Left" VerticalAlignment="Center">
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <ComboBox x:Name="HourCombo" Width="65" SelectionChanged="Part_SelectionChanged" />
+        <TextBlock Text=":" VerticalAlignment="Center" Margin="3,0" FontWeight="Bold" />
+        <ComboBox x:Name="MinuteCombo" Width="67" SelectionChanged="Part_SelectionChanged" />
+        <ComboBox x:Name="AmPmCombo" Width="75" Margin="6,0,0,0" SelectionChanged="Part_SelectionChanged" />
+    </StackPanel>
+</UserControl>

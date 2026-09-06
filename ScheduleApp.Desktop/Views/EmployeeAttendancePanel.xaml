@@ -1,0 +1,145 @@
+<UserControl x:Class="ScheduleApp.Desktop.Views.EmployeeAttendancePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:PayrollViewModel}">
+    <UserControl.Resources>
+        <!-- Same "card" look as PayrollSummaryView's - see that file's own copy of this
+             style for why it's duplicated per-file rather than shared. -->
+        <Style x:Key="CardBorder"
+               TargetType="Border">
+            <Setter Property="Background"
+                    Value="#F8FAFC" />
+            <Setter Property="BorderBrush"
+                    Value="#E2E8F0" />
+            <Setter Property="BorderThickness"
+                    Value="1" />
+            <Setter Property="CornerRadius"
+                    Value="4" />
+            <Setter Property="Padding"
+                    Value="10,8" />
+        </Style>
+
+        <Style x:Key="GroupLabel"
+               TargetType="TextBlock">
+            <Setter Property="VerticalAlignment"
+                    Value="Center" />
+            <Setter Property="Margin"
+                    Value="0,0,8,0" />
+            <Setter Property="Foreground"
+                    Value="#777777" />
+            <Setter Property="FontWeight"
+                    Value="SemiBold" />
+        </Style>
+
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
+        <converters:PunchStatusToBrushConverter x:Key="StatusToBrush" />
+
+        <!-- Right-aligns the hours columns, same idea (and same key names, so both grids
+             read consistently) as AttendanceView's own Summary grid - see that file's copy
+             of these two styles for the DefaultDataGridColumnHeaderStyle explanation
+             RightAlignedHeader's BasedOn depends on. -->
+        <Style x:Key="RightAlignedCell"
+               TargetType="TextBlock">
+            <Setter Property="TextAlignment"
+                    Value="Right" />
+            <Setter Property="Margin"
+                    Value="0,0,8,0" />
+        </Style>
+
+        <Style x:Key="RightAlignedHeader"
+               TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Right" />
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top"
+                   Text="Attendance for the period"
+                   Style="{StaticResource GroupLabel}"
+                   Margin="0,0,0,4" />
+
+        <!-- Empty-state placeholder and the grid occupy the same Grid cell, same
+             mutually-exclusive-Visibility idea as PayrollSummaryView's own placeholder/
+             breakdown pair (see that file's doc comment on its own Grid for why a Grid
+             rather than separate DockPanel children). AttendanceEmptyStateMessage falls
+             through to PayrollViewModel.EmptyStateMessage first (no employee, no Pin, bad
+             period) and only adds its own "no records" reason once those are all fine but
+             this employee simply has nothing for the period. -->
+        <Grid>
+            <Border Style="{StaticResource CardBorder}"
+                    Visibility="{Binding AttendanceEmptyStateMessage, Converter={StaticResource NotNullToVisibility}}">
+                <TextBlock Text="{Binding AttendanceEmptyStateMessage}"
+                           Foreground="#94A3B8"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+
+            <!-- Slim on purpose - see this control's own doc comment (code-behind) for why
+                 this isn't the full AttendanceView grid: just the columns that actually feed
+                 PayrollCalculator's Basic Pay/Overtime/Night Diff/Undertime lines above, plus
+                 enough identifying context (Date/Type/Status/Clock In/Clock Out) to make
+                 sense of them, not the full Attendance tab's PIN/Name/Department/Check In/
+                 Check Out/Late In/Early Out set - those either don't apply (this grid is
+                 already scoped to one employee) or don't bear on payroll math. -->
+            <DataGrid Margin="0"
+                      ColumnWidth="Auto"
+                      ItemsSource="{Binding AttendanceRows}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserReorderColumns="False"
+                      RowHeight="25"
+                      GridLinesVisibility="All"
+                      HeadersVisibility="Column"
+                      Visibility="{Binding HasAttendanceRows, Converter={StaticResource BoolToVisibility}}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Date"
+                                        Binding="{Binding ShiftDate, StringFormat={}{0:MM/dd/yy ddd}}" />
+                    <DataGridTextColumn Header="Type"
+                                        Binding="{Binding TypeText}" />
+                    <DataGridTextColumn Header="Status"
+                                        Binding="{Binding StatusText}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontWeight"
+                                        Value="SemiBold" />
+                                <Setter Property="Foreground"
+                                        Value="{Binding Status, Converter={StaticResource StatusToBrush}}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Clock In"
+                                        Binding="{Binding ClockInText}" />
+                    <DataGridTextColumn Header="Clock Out"
+                                        Binding="{Binding ClockOutText}" />
+                    <DataGridTextColumn Header="Work Day"
+                                        Binding="{Binding WorkDayText}"
+                                        ElementStyle="{StaticResource RightAlignedCell}"
+                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
+                    <DataGridTextColumn Header="Overtime (h)"
+                                        Binding="{Binding OvertimeHoursText}"
+                                        ElementStyle="{StaticResource RightAlignedCell}"
+                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
+                    <DataGridTextColumn Header="Night Diff (h)"
+                                        Binding="{Binding NightDiffHoursText}"
+                                        ElementStyle="{StaticResource RightAlignedCell}"
+                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
+                    <DataGridTextColumn Header="Undertime (h)"
+                                        Binding="{Binding RemainHoursText}"
+                                        ElementStyle="{StaticResource RightAlignedCell}"
+                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </DockPanel>
+</UserControl>

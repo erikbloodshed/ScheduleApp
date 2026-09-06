@@ -1,0 +1,55 @@
+<UserControl x:Class="ScheduleApp.Desktop.Controls.PercentProgressBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             VerticalAlignment="Center">
+    <!-- Standard determinate ProgressBar with the percentage label centered on top
+         of it, instead of riding along the fill's moving edge the way the original
+         implementation did. That version used a two-column Grid whose
+         ColumnDefinitions were re-bound to freshly-computed Star GridLengths on
+         every single Value change (via ProgressBarValueToWidthConverter/
+         InverseProgressBarValueToWidthConverter, since removed) - that's a
+         documented WPF bug: dynamically-bound Star-width ColumnDefinitions can
+         trigger a genuine infinite measure/layout pass and hang the UI thread
+         (there's a dedicated compat switch for it,
+         StarDefinitionsCanExceedAvailableSpace). PayrollViewModel's payroll-group
+         compute loop updates this control's Value once per employee, which made
+         that loop exactly the kind of tight, repeated-update case the bug bites.
+         This version never touches Star sizing at all - the label is just centered
+         text over one ordinary ProgressBar, so a rapid string of Value updates
+         only ever costs a cheap TextBlock.Text change, not a Grid relayout.
+
+         IsIndeterminate (see the code-behind) is the one other caller shape this
+         needs to support - AttendanceBusyState.IsVisiblyRunning has no per-item
+         percent the way the payroll-group loop does, just "something is running."
+         Bound straight through to the ProgressBar's own built-in IsIndeterminate
+         (WPF's native marquee animation, not something this control reimplements),
+         and the percent label hides itself via the DataTrigger below rather than
+         trying to show a number that would mean nothing in that mode. -->
+    <Grid>
+        <ProgressBar Minimum="0" Maximum="100"
+                     IsIndeterminate="{Binding ElementName=Root, Path=IsIndeterminate}"
+                     Value="{Binding ElementName=Root, Path=Value, Mode=OneWay}"
+                     Height="14"
+                     Foreground="#2D6CDF"
+                     Background="#DDDDDD"
+                     BorderThickness="0" />
+        <TextBlock Text="{Binding ElementName=Root, Path=Value, StringFormat={}{0:F0}%}"
+                   FontSize="10"
+                   FontWeight="SemiBold"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#333333">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=Root, Path=IsIndeterminate}"
+                                     Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+    </Grid>
+</UserControl>

@@ -1,0 +1,54 @@
+<Window x:Class="ScheduleApp.Desktop.Views.PunchTimeEntryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Add Manual Punch"
+        Width="380" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Context header. Employee, date and slot all come from the cell that was
+             right-clicked, so none of them are editable here. -->
+        <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1"
+                CornerRadius="6" Padding="10,8" Margin="0,0,0,14">
+            <StackPanel>
+                <TextBlock x:Name="ContextEmployeeText" FontWeight="SemiBold" />
+                <TextBlock x:Name="ContextSlotText" Foreground="#64748B" FontSize="12"
+                           Margin="0,2,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="1" Text="Time" Margin="0,0,0,4" />
+        <ComboBox x:Name="TimeCombo" Grid.Row="2" IsEditable="True" Margin="0,0,0,4" />
+        <TextBlock Grid.Row="3" Text="Pick a time or type an exact one, e.g. 5:11 PM."
+                   Foreground="#94A3B8" FontSize="11" Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="4" Text="Reason" Margin="0,0,0,4" />
+        <TextBox x:Name="ReasonBox" Grid.Row="5" Margin="0,0,0,12" />
+
+        <TextBlock Grid.Row="6" Text="Entered by" Margin="0,0,0,4" />
+        <TextBox x:Name="EnteredByBox" Grid.Row="7" Margin="0,0,0,4" />
+
+        <TextBlock x:Name="ErrorText" Grid.Row="8" Foreground="#DC2626" TextWrapping="Wrap"
+                   Visibility="Collapsed" Margin="0,8,0,0" />
+
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="SaveButton" Content="Add" Width="86" Margin="0,0,8,0"
+                    IsDefault="True" Click="SaveButton_Click" />
+            <Button Content="Cancel" Width="86" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

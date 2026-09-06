@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows7.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ScheduleApp.Desktop</RootNamespace>
+    <AssemblyName>ScheduleApp</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
+    <!-- Needed for configuration.GetSection("Attendance").Get&lt;AttendanceSettings&gt;() in App.xaml.cs -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <!-- DPAPI (ProtectedData.Protect/Unprotect) for RememberedSignInStore's encrypted
+         password on disk - not part of the shared framework, needs this package even
+         on a Windows-only TFM like net10.0-windows. Bump the version if it doesn't
+         resolve against your local NuGet feed. -->
+  </ItemGroup>
+
+<ItemGroup>
+    <ProjectReference Include="..\ScheduleApp.Core\ScheduleApp.Core.csproj" />
+    <ProjectReference Include="..\ScheduleApp.Data\ScheduleApp.Data.csproj" />
+    <ProjectReference Include="..\ScheduleApp.Excel\ScheduleApp.Excel.csproj" />
+<ProjectReference Include="..\ScheduleApp.Attendance\ScheduleApp.Attendance.csproj" />
+    <ProjectReference Include="..\ScheduleApp.Payroll\ScheduleApp.Payroll.csproj" />
+    <ProjectReference Include="..\ScheduleApp.Payroll.Pdf\ScheduleApp.Payroll.Pdf.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Build action "Resource" (not "Content"/CopyToOutputDirectory) embeds this
+       straight into the assembly, so it's always available via the "/Assets/..."
+       pack URI in SignInPanel.xaml/SetupAdminPanel.xaml regardless of working
+       directory - no separate file to remember to ship alongside the .exe. -->
+  <ItemGroup>
+    <Resource Include="Assets\Tinapayan_Logo.png" />
+  </ItemGroup>
+
+</Project>

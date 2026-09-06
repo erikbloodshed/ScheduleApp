@@ -1,0 +1,54 @@
+<Window x:Class="ScheduleApp.Desktop.Views.ManageUsersDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manage Users" Width="520" Height="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Accounts that can sign in to Schedule Manager. Every account can do everything the app already lets anyone do -- there are no separate roles."
+                   TextWrapping="Wrap"
+                   Foreground="#475569"
+                   Margin="0,0,0,12" />
+
+        <DataGrid x:Name="UsersGrid"
+                  Grid.Row="1"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserReorderColumns="False"
+                  SelectionMode="Single"
+                  SelectionUnit="FullRow"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  SelectionChanged="UsersGrid_SelectionChanged">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Account name" Binding="{Binding Username}" Width="*" />
+                <DataGridTextColumn Header="Created" Binding="{Binding CreatedDisplay}" Width="140" />
+                <DataGridTextColumn Header="Status" Binding="{Binding StatusDisplay}" Width="90" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <TextBlock x:Name="ErrorText" Grid.Row="2" Foreground="#DC2626" TextWrapping="Wrap"
+                   Visibility="Collapsed" Margin="0,8,0,0" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+            <Button x:Name="AddButton" Content="Add User…" Width="Auto" Margin="0,0,8,0" Click="AddButton_Click" />
+            <Button x:Name="ResetPasswordButton" Content="Reset Password…" Width="Auto" Margin="0,0,8,0"
+                    IsEnabled="False" Click="ResetPasswordButton_Click" />
+            <Button x:Name="ToggleActiveButton" Content="Deactivate" Width="Auto" Margin="0,0,8,0"
+                    IsEnabled="False" Click="ToggleActiveButton_Click" />
+            <Button x:Name="DeleteButton" Content="Delete" Width="Auto" Margin="0,0,8,0"
+                    IsEnabled="False" Click="DeleteButton_Click" />
+            <Button Content="Close" Width="Auto" IsCancel="True" IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</Window>

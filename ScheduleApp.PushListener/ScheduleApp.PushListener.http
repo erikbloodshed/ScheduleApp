@@ -1,0 +1,57 @@
+@PushListener_HostAddress = http://localhost:8080
+
+### Handshake — what a device sends on connect (options=all)
+GET {{PushListener_HostAddress}}/iclock/cdata?SN=TEST0001&options=all&pushver=2.4.1
+
+### Simulate a punch upload (ATTLOG) -- 1001 should match a real Employee.LegacyId in
+### ScheduleAppDb if you want to see it actually land as a matchable punch; any numeric PIN
+### will still be accepted and stored, it just won't match an employee in the app's reports.
+POST {{PushListener_HostAddress}}/iclock/cdata?SN=TEST0001&table=ATTLOG
+Content-Type: text/plain
+
+1001	2026-07-08 08:01:15	0	1	0
+
+### Re-send the same line -- should come back processed but the console log (and
+### PunchRecordImportResult) should show it as a duplicate, not a second row.
+POST {{PushListener_HostAddress}}/iclock/cdata?SN=TEST0001&table=ATTLOG
+Content-Type: text/plain
+
+1001	2026-07-08 08:01:15	0	1	0
+
+### A PIN that isn't a plain integer -- should be skipped and counted, not stored as garbage.
+POST {{PushListener_HostAddress}}/iclock/cdata?SN=TEST0001&table=ATTLOG
+Content-Type: text/plain
+
+VISITOR-42	2026-07-08 09:00:00	0	1	0
+
+### Command poll — what a device sends periodically to check for queued commands.
+### Replies OK if nothing's queued, or C:<id>:<text> if the admin API below queued
+### something for this SN.
+GET {{PushListener_HostAddress}}/iclock/getrequest?SN=TEST0001
+
+### Heartbeat
+GET {{PushListener_HostAddress}}/iclock/ping?SN=TEST0001
+
+### --- Admin API (not part of the ADMS protocol -- for you/the Control Panel) ---
+
+### Every device the listener has heard from
+GET {{PushListener_HostAddress}}/admin/devices
+
+### Browse stored punches -- sn/pin/startTime/endTime all optional
+GET {{PushListener_HostAddress}}/admin/attendance?sn=TEST0001&take=100
+
+### Same, filtered to one employee and a date range
+GET {{PushListener_HostAddress}}/admin/attendance?pin=1001&startTime=2026-07-01 00:00:00&endTime=2026-07-31 23:59:59
+
+### Queue a raw command -- picked up on TEST0001's next /iclock/getrequest poll
+POST {{PushListener_HostAddress}}/admin/devices/TEST0001/command
+Content-Type: text/plain
+
+CHECK
+
+### Ask a device to re-push its attendance history (everything, since no range given)
+POST {{PushListener_HostAddress}}/admin/devices/TEST0001/resync-attendance
+
+### The spec's other resync mechanism -- resets sync stamps to 0 and queues CHECK
+POST {{PushListener_HostAddress}}/admin/devices/TEST0001/force-recheck
+

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ScheduleApp.ZkTeco</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    Deliberately has zero ProjectReferences (not even ScheduleApp.Core). This is
+    a standalone client for the ZKTeco/ZKSoftware device wire protocol - it
+    knows nothing about AttendanceLog, Employee, or anything else in this
+    solution's domain model. ScheduleApp.Data/Attendance/ZkTecoAttendanceLogReader.cs
+    is the adapter that converts ZkProtocol.AttendanceRecord into this app's own
+    AttendanceLog; this project only ever produces the former. Keeping the two
+    separate means this project could be reused as-is (or even lifted into a
+    standalone NuGet package) without dragging EF Core or the rest of the
+    solution along with it.
+  -->
+
+</Project>
