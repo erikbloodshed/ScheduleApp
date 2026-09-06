@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         Title="Add Manual Entry" Width="380"
         Height="600"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
@@ -112,10 +113,14 @@
 
         <!-- Time + Type side by side to save vertical space: self-contained
              2-column sub-grid (label row, then combo row) so it drops into a
-             single outer row without touching any other row's index. -->
+             single outer row without touching any other row's index. The Time
+             column is Auto-width (rather than matching Type's "*") since it
+             sizes to TimeInput's own fixed compact footprint - a star width
+             here would stretch the field for no reason and leave Type with an
+             inconsistent share of whatever's left. -->
         <Grid Grid.Row="5" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
@@ -124,11 +129,12 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Time (e.g. 5:01 PM)" Margin="0,0,0,4" />
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Time" Margin="0,0,0,4" />
             <TextBlock Grid.Row="0" Grid.Column="2" Text="Type" Margin="0,0,0,4" />
 
-            <ComboBox x:Name="TimeCombo" Grid.Row="1" Grid.Column="0" IsEditable="True" />
-            <ComboBox x:Name="PunchTypeCombo" Grid.Row="1" Grid.Column="2" SelectedIndex="0">
+            <controls:TimeInput x:Name="TimeBox" Grid.Row="1" Grid.Column="0" Density="Compact" />
+            <ComboBox x:Name="PunchTypeCombo" Grid.Row="1" Grid.Column="2" SelectedIndex="0"
+                      SelectionChanged="PunchTypeCombo_SelectionChanged">
                 <ComboBoxItem Content="Clock In" />
                 <ComboBoxItem Content="Clock Out" />
             </ComboBox>
@@ -158,9 +164,9 @@
                        IsHitTestVisible="False" />
         </Grid>
 
-        <TextBlock Text="Reason (required)" Grid.Row="8" Margin="0,0,0,4" />
+        <TextBlock Text="Reason" Grid.Row="8" Margin="0,0,0,4" />
         <TextBox x:Name="ReasonBox" Grid.Row="9" Margin="0,0,0,12"
-                 ToolTip="Why this punch couldn't come from the device, e.g. &quot;Forgot to badge in&quot;."
+                 ToolTip="Why this punch couldn't come from the device, e.g. &quot;Forgot to badge in&quot;. Optional -- shown grayed-out is the default (matches Type above); type over it for something more specific."
                  TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
 
         <TextBlock Text="Entered by" Grid.Row="10" Margin="0,0,0,4" />

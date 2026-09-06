@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         Title="Settings" Width="560" Height="660"
         MinWidth="480" MinHeight="520"
         WindowStartupLocation="CenterOwner"
@@ -223,14 +224,18 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Late in / early out grace period (minutes)" />
                             </DockPanel>
 
+                            <!-- TimeInput rather than FieldValueBoxStyle's plain TextBox (it isn't a
+                                 TextBox, so that style's TargetType wouldn't match it anyway) - its
+                                 own DockPanel.Dock="Right" stands in for the style's, and its Compact
+                                 density's fixed footprint stands in for the style's fixed Width. -->
                             <DockPanel Style="{StaticResource FieldRowStyle}">
-                                <TextBox x:Name="NightDiffStartBox" Style="{StaticResource FieldValueBoxStyle}"
+                                <controls:TimeInput x:Name="NightDiffStartBox" Density="Compact" DockPanel.Dock="Right"
                                          ToolTip="Start of the night-differential window, based on actual clocked-in/out time (not the scheduled shift). Default 10:00 PM. Official Business never earns night diff, regardless of this setting." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Night differential start" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}" Margin="0,0,0,12">
-                                <TextBox x:Name="NightDiffEndBox" Style="{StaticResource FieldValueBoxStyle}"
+                                <controls:TimeInput x:Name="NightDiffEndBox" Density="Compact" DockPanel.Dock="Right"
                                          ToolTip="End of the night-differential window. Default 6:00 AM -- earlier than the start, which is how this (and every other time field here) marks a window that crosses midnight." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Night differential end" />
                             </DockPanel>

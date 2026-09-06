@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Payroll;
+using ScheduleApp.Desktop.Controls;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.Utilities;
 using ScheduleApp.Payroll.Pdf;
@@ -175,8 +176,8 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
         FlexMinBreakGapBox.Text = policy.FlexibleMinimumBreakGap.ToString(CultureInfo.CurrentCulture);
         GracePeriodBox.Text = policy.ClockOutGracePeriod.ToString(CultureInfo.CurrentCulture);
         LateEarlyGraceMinutesBox.Text = policy.LateInEarlyOutGraceMinutes.ToString(CultureInfo.CurrentCulture);
-        NightDiffStartBox.Text = TimeDisplayFormat.Format(policy.NightDiffStart);
-        NightDiffEndBox.Text = TimeDisplayFormat.Format(policy.NightDiffEnd);
+        NightDiffStartBox.SelectedTime = policy.NightDiffStart;
+        NightDiffEndBox.SelectedTime = policy.NightDiffEnd;
         CapEarlyClockInCheckBox.IsChecked = policy.CapEarlyClockIn;
         StrictOvertimeCheckBox.IsChecked = policy.StrictOvertimeFromShiftEnd;
         UseExcelFormulaCheckBox.IsChecked = policy.UseExcelFormula;
@@ -237,7 +238,15 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     {
         RevealField(field);
         MessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Warning);
-        field.Focus();
+
+        // TimeInput is a UserControl -- focusing it directly would just put keyboard
+        // focus on the container itself rather than anywhere a person could type, so
+        // it gets its own entry point (FocusHour) into the hour field instead.
+        if (field is TimeInput timeInput)
+            timeInput.FocusHour();
+        else
+            field.Focus();
+
         (field as TextBox)?.SelectAll();
     }
 
@@ -371,19 +380,15 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
         if (!TryParseMinutes(LateEarlyGraceMinutesBox, "Late in / early out grace period", out var lateEarlyGrace))
             return;
 
-        if (!TimeDisplayFormat.TryParse(NightDiffStartBox.Text, out var nightDiffStart))
+        if (NightDiffStartBox.SelectedTime is not { } nightDiffStart)
         {
-            ShowFieldError(NightDiffStartBox,
-                "Night differential start must be a valid time, e.g. 10:00 PM.",
-                "Invalid value");
+            ShowFieldError(NightDiffStartBox, "Night differential start must be a valid time.", "Invalid value");
             return;
         }
 
-        if (!TimeDisplayFormat.TryParse(NightDiffEndBox.Text, out var nightDiffEnd))
+        if (NightDiffEndBox.SelectedTime is not { } nightDiffEnd)
         {
-            ShowFieldError(NightDiffEndBox,
-                "Night differential end must be a valid time, e.g. 6:00 AM.",
-                "Invalid value");
+            ShowFieldError(NightDiffEndBox, "Night differential end must be a valid time.", "Invalid value");
             return;
         }
 

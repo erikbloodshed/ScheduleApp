@@ -15,7 +15,7 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
     /// OkButton_Click can read them back and AddSegmentButton_Click/RemoveSegmentRow
     /// can manage them as a unit.</summary>
     private sealed record SegmentRow(
-        Grid Container, TimePicker TimeInPicker, TimePicker TimeOutPicker,
+        Grid Container, TimeInput TimeInPicker, TimeInput TimeOutPicker,
         TextBox ClockInBufferBox, TextBox ClockOutBufferBox);
 
     private readonly List<SegmentRow> _segmentRows = new();
@@ -215,10 +215,11 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
     /// (other callers, e.g. the Excel importer, still allow an unrestricted
     /// Flexible day; this dialog just no longer offers a way to produce one,
     /// which also sidesteps the old "how do I clear it back to blank" gap the
-    /// TimePicker's dropdown-only UI had). Both pickers default to 5:00 AM/
-    /// 9:00 PM for a brand-new entry, same starting values SplitShift seeds
-    /// its first segment with (see UpdateFieldAvailability) -- see the
-    /// constructor. Always null for Normal/Leave/OfficialBusiness/SplitShift.</summary>
+    /// three-dropdown TimePicker this dialog used to use had). Both pickers
+    /// default to 5:00 AM/9:00 PM for a brand-new entry, same starting values
+    /// SplitShift seeds its first segment with (see UpdateFieldAvailability)
+    /// -- see the constructor. Always null for
+    /// Normal/Leave/OfficialBusiness/SplitShift.</summary>
     public TimeOnly? RestrictedTimeIn { get; private set; }
 
     /// <summary>Same idea as <see cref="RestrictedTimeIn"/>, but for the end of
@@ -744,7 +745,12 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
         container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var timeInPicker = new TimePicker { SelectedTime = timeIn, Margin = new Thickness(0, 0, 4, 0) };
+        var timeInPicker = new TimeInput
+        {
+            SelectedTime = timeIn,
+            Density = TimeInputDensity.Compact,
+            Margin = new Thickness(0, 0, 4, 0)
+        };
         Grid.SetColumn(timeInPicker, 0);
         Grid.SetRow(timeInPicker, 0);
 
@@ -757,7 +763,12 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
         Grid.SetColumn(dash, 1);
         Grid.SetRow(dash, 0);
 
-        var timeOutPicker = new TimePicker { SelectedTime = timeOut, Margin = new Thickness(0, 0, 4, 0) };
+        var timeOutPicker = new TimeInput
+        {
+            SelectedTime = timeOut,
+            Density = TimeInputDensity.Compact,
+            Margin = new Thickness(0, 0, 4, 0)
+        };
         Grid.SetColumn(timeOutPicker, 2);
         Grid.SetRow(timeOutPicker, 0);
 

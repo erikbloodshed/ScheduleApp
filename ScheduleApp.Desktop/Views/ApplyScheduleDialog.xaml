@@ -1,22 +1,22 @@
 <ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.ApplyScheduleDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-        xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
-        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-        xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
-        Title="Set Schedule for Selected Days"
-        Width="560"
-        Height="600"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
-        ShowInTaskbar="False"
-        utilities:WindowSizing.ConstrainToWorkArea="True"
-        ExtendsContentIntoTitleBar="True">
-    <Window.Resources>
-        <converters:ScheduleTypeToDisplayTextConverter x:Key="ScheduleTypeToDisplayText" />
-    </Window.Resources>
-    <!-- DockPanel instead of a bare Grid so OK/Cancel (docked Bottom) stay
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+                 xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
+                 xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
+                 Title="Set Schedule for Selected Days"
+                 Width="560"
+                 Height="600"
+                 WindowStartupLocation="CenterOwner"
+                 ResizeMode="NoResize"
+                 ShowInTaskbar="False"
+                 utilities:WindowSizing.ConstrainToWorkArea="True"
+                 ExtendsContentIntoTitleBar="True">
+  <Window.Resources>
+    <converters:ScheduleTypeToDisplayTextConverter x:Key="ScheduleTypeToDisplayText" />
+  </Window.Resources>
+  <!-- DockPanel instead of a bare Grid so OK/Cancel (docked Bottom) stay
          visible and reachable no matter how tall the form above them gets.
          A fixed Height on the Window (above) keeps the window itself at a
          size that fits comfortably even on a 768px-tall laptop screen, and
@@ -26,123 +26,109 @@
          fallback and no window size cap, so that combination could in
          principle push the OK button below the visible screen area with
          nothing to scroll it back into view. -->
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
 
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
+    <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
              one of these - WPF-UI removes the native title bar entirely otherwise. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMaximize="False"
-                CanMaximize="False" />
+    <ui:TitleBar Grid.Row="0"
+                 Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
+                 ShowMaximize="False"
+                 CanMaximize="False" />
 
-    <DockPanel Grid.Row="1" Margin="16">
-        <StackPanel DockPanel.Dock="Bottom"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,16,0,0">
-            <Button Content="OK"
-                    Width="80"
-                    Margin="0,0,8,0"
-                    IsDefault="True"
-                    Click="OkButton_Click" />
-            <Button Content="Cancel"
-                    Width="80"
-                    IsCancel="True" />
-        </StackPanel>
+    <DockPanel Grid.Row="1"
+               Margin="16">
+      <StackPanel DockPanel.Dock="Bottom"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  Margin="0,16,0,0">
+        <Button Content="OK"
+                Width="80"
+                Margin="0,0,8,0"
+                IsDefault="True"
+                Click="OkButton_Click" />
+        <Button Content="Cancel"
+                Width="80"
+                IsCancel="True" />
+      </StackPanel>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="0,0,4,0">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="0,0,4,0"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnDefinitions="*,*">
 
-        <TextBlock x:Name="EmployeeHeader"
-                   Grid.Row="0"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   FontWeight="Bold"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,8" />
+          <TextBlock x:Name="EmployeeHeader"
+                     Grid.Row="0"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     FontWeight="Bold"
+                     TextWrapping="Wrap"
+                     Margin="0,0,0,8" />
 
-        <TextBlock Text="Selected days"
-                   Grid.Row="1"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4" />
-        <Border Grid.Row="2"
-                Grid.Column="0"
-                Grid.ColumnSpan="2"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="8"
-                Margin="0,0,0,12"
-                MaxHeight="100">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="SummaryText"
-                           TextWrapping="Wrap" />
-            </ScrollViewer>
-        </Border>
-
-        <TextBlock x:Name="MixedScheduleNote"
-                   Grid.Row="3"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,12"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource SystemFillColorCautionBrush}"
-                   FontStyle="Italic"
-                   Visibility="Collapsed"
-                   Text="Selected days don't all have the same schedule, so the fields below start blank rather than guessing. Anything you set here will be applied to every selected day." />
-
-        <TextBlock Text="Type"
-                   Grid.Row="4"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4" />
-        <ComboBox x:Name="TypeCombo"
-                  Grid.Row="5"
+          <TextBlock Text="Selected days"
+                     Grid.Row="1"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,0,0,4" />
+          <Border Grid.Row="2"
                   Grid.Column="0"
                   Grid.ColumnSpan="2"
+                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1"
+                  Padding="8"
                   Margin="0,0,0,12"
-                  SelectionChanged="TypeCombo_SelectionChanged">
-            <ComboBox.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding Converter={StaticResource ScheduleTypeToDisplayText}}" />
-                </DataTemplate>
-            </ComboBox.ItemTemplate>
-        </ComboBox>
+                  MaxHeight="100">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <TextBlock x:Name="SummaryText"
+                         TextWrapping="Wrap" />
+            </ScrollViewer>
+          </Border>
 
-        <!-- RestDay-only. Governs the two fields below directly, replacing the old
+          <TextBlock x:Name="MixedScheduleNote"
+                     Grid.Row="3"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,0,0,12"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                     FontStyle="Italic"
+                     Visibility="Collapsed"
+                     Text="Selected days don't all have the same schedule, so the fields below start blank rather than guessing. Anything you set here will be applied to every selected day." />
+
+          <TextBlock Text="Type"
+                     Grid.Row="4"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,0,0,4" />
+          <ComboBox x:Name="TypeCombo"
+                    Grid.Row="5"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="2"
+                    Margin="0,0,0,12"
+                    SelectionChanged="TypeCombo_SelectionChanged">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Converter={StaticResource ScheduleTypeToDisplayText}}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+
+          <!-- RestDay-only. Governs the two fields below directly, replacing the old
              "leave Work time and Time in both blank via the text/picker controls
              themselves" convention (see isRestDay's doc comment on
              UpdateFieldAvailability for the two calculation modes this chooses
              between). That convention worked for WorkTimeBox - a plain TextBox
-             can just be cleared - but TimeInPicker (see its own class doc
-             comment) offers no blank option among its three dropdowns once a
-             value's been picked, so there was no way to get back to the
-             unscheduled mode through the UI at all short of re-opening the
-             dialog. Checked/unchecked now drives Work time/Time in's own
+             can just be cleared - but the three-dropdown TimePicker this dialog
+             used at the time offered no blank option once a value had been
+             picked, so there was no way to get back to the unscheduled mode
+             through the UI at all short of re-opening the dialog. TimeInput,
+             which replaced it, can be blanked again, but this checkbox stays:
+             saying "this rest day has no schedule" out loud beats inferring it
+             from two fields someone happened to leave empty.
+             Checked/unchecked drives Work time/Time in's own
              visibility below instead of the person having to blank them by hand,
              and OkButton_Click reads this instead of the two fields' blankness
              (see isUnscheduledRestDay there). Unchecked is the default for a
@@ -151,60 +137,61 @@
              punched (see RestDayShiftCalculationStrategy.CalculateUnscheduledDay).
              Only checking this box and giving the day a fixed window can earn
              the premium. -->
-        <CheckBox x:Name="RestDayDutyCheckBox"
-                  Content="Scheduled duty (set a fixed work time / time in for this rest day)"
-                  Grid.Row="6"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Margin="0,0,0,10"
-                  Visibility="Collapsed"
-                  Checked="RestDayDutyCheckBox_CheckedChanged"
-                  Unchecked="RestDayDutyCheckBox_CheckedChanged"
-                  ToolTip="Unchecked (default): a plain rest day -- punches that day are never honored, so no Rest Day Duty pay is possible. Checked: gives this rest day a fixed Work time/Time in, matched against punches exactly like a Normal shift; only a matched punch pair within that window earns Rest Day Duty pay." />
+          <CheckBox x:Name="RestDayDutyCheckBox"
+                    Content="Scheduled duty (set a fixed work time / time in for this rest day)"
+                    Grid.Row="6"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="2"
+                    Margin="0,0,0,10"
+                    Visibility="Collapsed"
+                    Checked="RestDayDutyCheckBox_CheckedChanged"
+                    Unchecked="RestDayDutyCheckBox_CheckedChanged"
+                    ToolTip="Unchecked (default): a plain rest day -- punches that day are never honored, so no Rest Day Duty pay is possible. Checked: gives this rest day a fixed Work time/Time in, matched against punches exactly like a Normal shift; only a matched punch pair within that window earns Rest Day Duty pay." />
 
-        <TextBlock x:Name="WorkTimeLabel"
-                   Text="Work time (hours)"
-                   Grid.Row="7"
+          <TextBlock x:Name="WorkTimeLabel"
+                     Text="Work time (hours)"
+                     Grid.Row="7"
+                     Grid.Column="0"
+                     Margin="0,0,8,4" />
+          <TextBlock x:Name="TimeInLabel"
+                     Text="Time in"
+                     Grid.Row="7"
+                     Grid.Column="1"
+                     Margin="8,0,0,4" />
+          <TextBox x:Name="WorkTimeBox"
+                   Grid.Row="8"
                    Grid.Column="0"
-                   Margin="0,0,8,4" />
-        <TextBlock x:Name="TimeInLabel"
-                   Text="Time in"
-                   Grid.Row="7"
-                   Grid.Column="1"
-                   Margin="8,0,0,4" />
-        <TextBox x:Name="WorkTimeBox"
-                 Grid.Row="8"
-                 Grid.Column="0"
-                 Width="90"
-                 HorizontalAlignment="Left"
-                 Margin="0,0,8,12"
-                 ToolTip="Shift length for Normal. For Flexible/Split Shift, this is the day's required total hours instead -- there's no single shift to measure a length from. For a Rest Day duty, this is the scheduled length punches are matched against." />
-        <controls:TimePicker x:Name="TimeInPicker"
-                             Grid.Row="8"
-                             Grid.Column="1"
-                             HorizontalAlignment="Left"
-                             Margin="8,0,0,12" />
+                   Width="90"
+                   HorizontalAlignment="Left"
+                   Margin="0,0,8,12"
+                   ToolTip="Shift length for Normal. For Flexible/Split Shift, this is the day's required total hours instead -- there's no single shift to measure a length from. For a Rest Day duty, this is the scheduled length punches are matched against." />
+          <controls:TimeInput x:Name="TimeInPicker"
+                              Grid.Row="8"
+                              Grid.Column="1"
+                              Density="Compact"
+                              HorizontalAlignment="Left"
+                              Margin="8,0,0,12" />
 
-        <!-- Leave-only - shares rows 7-8, column 0, with Work time above (mutually
+          <!-- Leave-only - shares rows 7-8, column 0, with Work time above (mutually
              exclusive by type, same swap pattern as the Restricted-window/
              Split-Shift-segments vs. Normal-buffer rows below), since Leave needs
              neither Work time nor Time in but does need this instead. Payroll's
              Basic Pay for the day reads this straight off ScheduleEntry.IsPaidLeave
              - see that property's own doc comment for what Paid/Unpaid means
              there. -->
-        <TextBlock x:Name="LeavePayLabel"
-                   Text="Leave pay"
-                   Grid.Row="7"
-                   Grid.Column="0"
-                   Margin="0,0,8,4"
-                   Visibility="Collapsed" />
-        <StackPanel x:Name="LeavePayPanel"
-                    Grid.Row="8"
-                    Grid.Column="0"
-                    Orientation="Horizontal"
-                    Margin="0,0,8,12"
-                    VerticalAlignment="Center"
-                    Visibility="Collapsed">
+          <TextBlock x:Name="LeavePayLabel"
+                     Text="Leave pay"
+                     Grid.Row="7"
+                     Grid.Column="0"
+                     Margin="0,0,8,4"
+                     Visibility="Collapsed" />
+          <StackPanel x:Name="LeavePayPanel"
+                      Grid.Row="8"
+                      Grid.Column="0"
+                      Orientation="Horizontal"
+                      Margin="0,0,8,12"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed">
             <RadioButton x:Name="PaidLeaveRadio"
                          GroupName="LeavePay"
                          Content="Paid"
@@ -213,9 +200,9 @@
             <RadioButton x:Name="UnpaidLeaveRadio"
                          GroupName="LeavePay"
                          Content="Unpaid" />
-        </StackPanel>
+          </StackPanel>
 
-        <!-- Flexible-only: the day's single required punching window
+          <!-- Flexible-only: the day's single required punching window
              (RestrictedTimeIn/RestrictedTimeOut) - shares rows 9-10 with the
              Split Shift segments UI below and the Normal/Official Business
              buffer overrides further down, since exactly one of Normal/
@@ -227,98 +214,100 @@
              blank" fallback was dropped from this dialog (the underlying
              ScheduleEntry fields stay nullable for other callers, e.g. the
              Excel importer). -->
-        <TextBlock x:Name="RestrictedTimeLabel"
-                   Text="Punching window (required -- punches outside this range won't count)"
-                   Grid.Row="9"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,12,0,4"
-                   TextWrapping="Wrap"
-                   Visibility="Collapsed" />
+          <TextBlock x:Name="RestrictedTimeLabel"
+                     Text="Punching window (required -- punches outside this range won't count)"
+                     Grid.Row="9"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,12,0,4"
+                     TextWrapping="Wrap"
+                     Visibility="Collapsed" />
 
-        <Border x:Name="RestrictedTimeBorder"
-                Grid.Row="10"
-                Grid.Column="0"
-                Grid.ColumnSpan="2"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="8"
-                Margin="0,0,0,6"
-                Visibility="Collapsed">
+          <Border x:Name="RestrictedTimeBorder"
+                  Grid.Row="10"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1"
+                  Padding="8"
+                  Margin="0,0,0,6"
+                  Visibility="Collapsed">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0"
-                           Grid.Column="0"
-                           Text="Time in"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,0,4,2" />
-                <TextBlock Grid.Row="0"
-                           Grid.Column="1"
-                           Text="Time out"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="4,0,0,2" />
-                <controls:TimePicker x:Name="RestrictedTimeInPicker"
-                                     Grid.Row="1"
-                                     Grid.Column="0"
-                                     HorizontalAlignment="Left"
-                                     Margin="0,0,4,0"
-                                     ToolTip="Caps how early a punch counts toward WorkedHours -- early punches still stay in the search/pairing and still show in ClockIn, just clamped for the hours math (see FlexibleShiftCalculationStrategy)." />
-                <controls:TimePicker x:Name="RestrictedTimeOutPicker"
-                                     Grid.Row="1"
-                                     Grid.Column="1"
-                                     HorizontalAlignment="Left"
-                                     Margin="4,0,0,0"
-                                     ToolTip="Excludes punches after this time from the day's search entirely -- a plain boundary filter, not a cap (see FlexibleShiftCalculationStrategy)." />
+              <TextBlock Grid.Row="0"
+                         Grid.Column="0"
+                         Text="Time in"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="0,0,4,2" />
+              <TextBlock Grid.Row="0"
+                         Grid.Column="1"
+                         Text="Time out"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="4,0,0,2" />
+              <controls:TimeInput x:Name="RestrictedTimeInPicker"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Density="Compact"
+                                  HorizontalAlignment="Left"
+                                  Margin="0,0,4,0"
+                                  ToolTip="Caps how early a punch counts toward WorkedHours -- early punches still stay in the search/pairing and still show in ClockIn, just clamped for the hours math (see FlexibleShiftCalculationStrategy)." />
+              <controls:TimeInput x:Name="RestrictedTimeOutPicker"
+                                  Grid.Row="1"
+                                  Grid.Column="1"
+                                  Density="Compact"
+                                  HorizontalAlignment="Left"
+                                  Margin="4,0,0,0"
+                                  ToolTip="Excludes punches after this time from the day's search entirely -- a plain boundary filter, not a cap (see FlexibleShiftCalculationStrategy)." />
             </Grid>
-        </Border>
+          </Border>
 
-        <TextBlock x:Name="SegmentsLabel"
-                   Text="Split shift punching windows -- add each window this day allows punches (leave empty for none)"
-                   Grid.Row="9"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,12,0,4"
-                   TextWrapping="Wrap"
-                   Visibility="Collapsed" />
+          <TextBlock x:Name="SegmentsLabel"
+                     Text="Split shift punching windows -- add each window this day allows punches (leave empty for none)"
+                     Grid.Row="9"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,12,0,4"
+                     TextWrapping="Wrap"
+                     Visibility="Collapsed" />
 
-        <Border x:Name="SegmentsBorder"
-                Grid.Row="10"
-                Grid.Column="0"
-                Grid.ColumnSpan="2"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="6"
-                Margin="0,0,0,6"
-                MaxHeight="240"
-                Visibility="Collapsed">
+          <Border x:Name="SegmentsBorder"
+                  Grid.Row="10"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1"
+                  Padding="6"
+                  Margin="0,0,0,6"
+                  MaxHeight="240"
+                  Visibility="Collapsed">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel x:Name="SegmentsPanel"
-                            HorizontalAlignment="Left" />
+              <StackPanel x:Name="SegmentsPanel"
+                          HorizontalAlignment="Left" />
             </ScrollViewer>
-        </Border>
+          </Border>
 
-        <Button x:Name="AddSegmentButton"
-                Grid.Row="11"
-                Grid.Column="0"
-                Grid.ColumnSpan="2"
-                Content="+ Add window"
-                HorizontalAlignment="Left"
-                Padding="8,3"
-                Margin="0,0,0,4"
-                Visibility="Collapsed"
-                Click="AddSegmentButton_Click" />
+          <Button x:Name="AddSegmentButton"
+                  Grid.Row="11"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  Content="+ Add window"
+                  HorizontalAlignment="Left"
+                  Padding="8,3"
+                  Margin="0,0,0,4"
+                  Visibility="Collapsed"
+                  Click="AddSegmentButton_Click" />
 
-        <!-- Buffer overrides for the two types that actually match punches
+          <!-- Buffer overrides for the two types that actually match punches
              against a single scheduled window via SingleWindowShiftCalculationStrategy
              - Normal, and RestDay when its Work time/Time in are both filled in
              (the windowed sub-case; see RestDayShiftCalculationStrategy and
@@ -330,93 +319,93 @@
              visible at a time, so this never actually competes with either for
              space. Grayed-out policy-default placeholder behavior is handled the
              same way, via InitializeBufferBox (see code-behind). -->
-        <TextBlock x:Name="NormalBufferLabel"
-                   Text="Clock-in / clock-out buffer overrides (optional -- overrides the employee's own default, or the policy default, just for this day)"
-                   Grid.Row="9"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,12,0,4"
-                   TextWrapping="Wrap"
-                   Visibility="Collapsed" />
+          <TextBlock x:Name="NormalBufferLabel"
+                     Text="Clock-in / clock-out buffer overrides (optional -- overrides the employee's own default, or the policy default, just for this day)"
+                     Grid.Row="9"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,12,0,4"
+                     TextWrapping="Wrap"
+                     Visibility="Collapsed" />
 
-        <Border x:Name="NormalBufferBorder"
-                Grid.Row="10"
-                Grid.Column="0"
-                Grid.ColumnSpan="2"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="8"
-                Margin="0,0,0,6"
-                Visibility="Collapsed">
+          <Border x:Name="NormalBufferBorder"
+                  Grid.Row="10"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1"
+                  Padding="8"
+                  Margin="0,0,0,6"
+                  Visibility="Collapsed">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0"
-                           Grid.Column="0"
-                           Text="Clock-in buffer, before (h)"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,0,4,2" />
-                <TextBlock Grid.Row="0"
-                           Grid.Column="1"
-                           Text="Clock-in buffer, after (h)"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="4,0,0,2" />
-                <TextBox x:Name="ClockInBufferBeforeBox"
-                         Grid.Row="1"
+              <TextBlock Grid.Row="0"
                          Grid.Column="0"
-                         Width="70"
-                         HorizontalAlignment="Left"
-                         Margin="0,0,4,10"
-                         ToolTip="How many hours before the scheduled time in a punch is still considered a clock-in. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
-                <TextBox x:Name="ClockInBufferAfterBox"
-                         Grid.Row="1"
+                         Text="Clock-in buffer, before (h)"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="0,0,4,2" />
+              <TextBlock Grid.Row="0"
                          Grid.Column="1"
-                         Width="70"
-                         HorizontalAlignment="Left"
-                         Margin="4,0,0,10"
-                         ToolTip="How many hours after the scheduled time in a punch is still considered a clock-in. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+                         Text="Clock-in buffer, after (h)"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="4,0,0,2" />
+              <TextBox x:Name="ClockInBufferBeforeBox"
+                       Grid.Row="1"
+                       Grid.Column="0"
+                       Width="70"
+                       HorizontalAlignment="Left"
+                       Margin="0,0,4,10"
+                       ToolTip="How many hours before the scheduled time in a punch is still considered a clock-in. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+              <TextBox x:Name="ClockInBufferAfterBox"
+                       Grid.Row="1"
+                       Grid.Column="1"
+                       Width="70"
+                       HorizontalAlignment="Left"
+                       Margin="4,0,0,10"
+                       ToolTip="How many hours after the scheduled time in a punch is still considered a clock-in. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
 
-                <TextBlock Grid.Row="2"
-                           Grid.Column="0"
-                           Text="Clock-out buffer, before (h)"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,0,4,2" />
-                <TextBlock Grid.Row="2"
-                           Grid.Column="1"
-                           Text="Clock-out buffer, after (h)"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="4,0,0,2" />
-                <TextBox x:Name="ClockOutBufferBeforeBox"
-                         Grid.Row="3"
+              <TextBlock Grid.Row="2"
                          Grid.Column="0"
-                         Width="70"
-                         HorizontalAlignment="Left"
-                         Margin="0,0,4,0"
-                         ToolTip="How many hours before the scheduled time out a punch is still considered a clock-out. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
-                <TextBox x:Name="ClockOutBufferAfterBox"
-                         Grid.Row="3"
+                         Text="Clock-out buffer, before (h)"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="0,0,4,2" />
+              <TextBlock Grid.Row="2"
                          Grid.Column="1"
-                         Width="70"
-                         HorizontalAlignment="Left"
-                         Margin="4,0,0,0"
-                         ToolTip="How many hours after the scheduled time out a punch is still considered a clock-out. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+                         Text="Clock-out buffer, after (h)"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="4,0,0,2" />
+              <TextBox x:Name="ClockOutBufferBeforeBox"
+                       Grid.Row="3"
+                       Grid.Column="0"
+                       Width="70"
+                       HorizontalAlignment="Left"
+                       Margin="0,0,4,0"
+                       ToolTip="How many hours before the scheduled time out a punch is still considered a clock-out. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+              <TextBox x:Name="ClockOutBufferAfterBox"
+                       Grid.Row="3"
+                       Grid.Column="1"
+                       Width="70"
+                       HorizontalAlignment="Left"
+                       Margin="4,0,0,0"
+                       ToolTip="How many hours after the scheduled time out a punch is still considered a clock-out. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
             </Grid>
-        </Border>
+          </Border>
 
-        <!-- Overtime/Night Diff per-day overrides, added by the Attendance & Payroll
+          <!-- Overtime/Night Diff per-day overrides, added by the Attendance & Payroll
              Calculation Refactor Plan - visible for Normal, Flexible, SplitShift
              (all three compute OvertimeHours/NightDiffHours; see
              SingleWindowShiftCalculationStrategy/FlexibleShiftCalculationStrategy/
@@ -432,105 +421,105 @@
              unlike Normal-buffers-vs-Split-Shift-segments-vs-Restricted-window -
              this section is shown for four of the five types at once, not exactly
              one. -->
-        <TextBlock x:Name="OvertimeNightDiffLabel"
-                   Grid.Row="12"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,12,0,4"
-                   TextWrapping="Wrap"
-                   Text="Overtime / Night differential overrides (optional -- applies to every selected day)" />
+          <TextBlock x:Name="OvertimeNightDiffLabel"
+                     Grid.Row="12"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Margin="0,12,0,4"
+                     TextWrapping="Wrap"
+                     Text="Overtime / Night differential overrides (optional -- applies to every selected day)" />
 
-        <Border x:Name="OvertimeNightDiffBorder"
-                Grid.Row="13"
-                Grid.Column="0"
-                Grid.ColumnSpan="2"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Padding="8"
-                Margin="0,0,0,6">
+          <Border x:Name="OvertimeNightDiffBorder"
+                  Grid.Row="13"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1"
+                  Padding="8"
+                  Margin="0,0,0,6">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0"
-                           Grid.Column="0"
-                           Text="Overtime eligible"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,0,4,2" />
-                <TextBlock Grid.Row="0"
-                           Grid.Column="1"
-                           Text="Night diff eligible"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="4,0,0,2" />
-                <ComboBox x:Name="OvertimeEligibleCombo"
-                          Grid.Row="1"
-                          Grid.Column="0"
-                          Margin="0,0,4,10"
-                          HorizontalAlignment="Stretch"
-                          ToolTip="Per-day override of this employee's overtime eligibility (Employee.QualifiesForOvertime). 'Use employee default' inherits whatever's set on the employee (Add/Edit Employee dialog); 'Eligible'/'Not eligible' overrides just this day (or these days), without changing the employee's own default." />
-                <ComboBox x:Name="NightDiffEligibleCombo"
-                          Grid.Row="1"
-                          Grid.Column="1"
-                          Margin="4,0,0,10"
-                          HorizontalAlignment="Stretch"
-                          ToolTip="Per-day override of this employee's night differential eligibility (Employee.QualifiesForNightDiff). 'Use employee default' inherits whatever's set on the employee; 'Eligible'/'Not eligible' overrides just this day (or these days)." />
-
-                <TextBlock Grid.Row="2"
-                           Grid.Column="0"
-                           Text="Overtime premium applies"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,0,4,2" />
-                <ComboBox x:Name="ApplyOvertimeRatePercentageCombo"
-                          Grid.Row="3"
-                          Grid.Column="0"
-                          Margin="0,0,4,10"
-                          HorizontalAlignment="Stretch"
-                          ToolTip="Per-day override of whether overtime hours actually get the rate-percentage premium, once eligible (Employee.ApplyOvertimeRatePercentageByDefault) -- separate from eligibility above. 'Use employee default' inherits the employee's own setting; 'Apply premium' pays hourly rate x (1 + overtime rate %); 'Straight time only' pays overtime at plain hourly rate with no premium, e.g. during a temporary policy transition. No Night Diff equivalent -- once eligible, its rate percentage always applies." />
-
-                <TextBlock Grid.Row="4"
-                           Grid.Column="0"
-                           Text="Overtime rate % override"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="0,0,4,2" />
-                <TextBlock Grid.Row="4"
-                           Grid.Column="1"
-                           Text="Night diff rate % override"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Margin="4,0,0,2" />
-                <TextBox x:Name="OvertimeRatePercentageBox"
-                         Grid.Row="5"
+              <TextBlock Grid.Row="0"
                          Grid.Column="0"
-                         Width="70"
-                         HorizontalAlignment="Left"
-                         Margin="0,0,4,0"
-                         ToolTip="Overrides the global overtime rate percentage (e.g. 0.25 for 25%) just for this day. Shown grayed-out at the current policy default -- type over it to override, or leave it as-is to keep tracking the policy default even if it changes later. Only takes effect when overtime is eligible and the premium applies (see the two dropdowns above)." />
-                <TextBox x:Name="NightDiffRatePercentageBox"
-                         Grid.Row="5"
+                         Text="Overtime eligible"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="0,0,4,2" />
+              <TextBlock Grid.Row="0"
                          Grid.Column="1"
-                         Width="70"
-                         HorizontalAlignment="Left"
-                         Margin="4,0,0,0"
-                         ToolTip="Overrides the global night differential rate percentage (e.g. 0.10 for 10%) just for this day. Shown grayed-out at the current policy default -- type over it to override, or leave it as-is to keep tracking the policy default even if it changes later. Only takes effect when night diff is eligible (see the dropdown above)." />
+                         Text="Night diff eligible"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="4,0,0,2" />
+              <ComboBox x:Name="OvertimeEligibleCombo"
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Margin="0,0,4,10"
+                        HorizontalAlignment="Stretch"
+                        ToolTip="Per-day override of this employee's overtime eligibility (Employee.QualifiesForOvertime). 'Use employee default' inherits whatever's set on the employee (Add/Edit Employee dialog); 'Eligible'/'Not eligible' overrides just this day (or these days), without changing the employee's own default." />
+              <ComboBox x:Name="NightDiffEligibleCombo"
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Margin="4,0,0,10"
+                        HorizontalAlignment="Stretch"
+                        ToolTip="Per-day override of this employee's night differential eligibility (Employee.QualifiesForNightDiff). 'Use employee default' inherits whatever's set on the employee; 'Eligible'/'Not eligible' overrides just this day (or these days)." />
+
+              <TextBlock Grid.Row="2"
+                         Grid.Column="0"
+                         Text="Overtime premium applies"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="0,0,4,2" />
+              <ComboBox x:Name="ApplyOvertimeRatePercentageCombo"
+                        Grid.Row="3"
+                        Grid.Column="0"
+                        Margin="0,0,4,10"
+                        HorizontalAlignment="Stretch"
+                        ToolTip="Per-day override of whether overtime hours actually get the rate-percentage premium, once eligible (Employee.ApplyOvertimeRatePercentageByDefault) -- separate from eligibility above. 'Use employee default' inherits the employee's own setting; 'Apply premium' pays hourly rate x (1 + overtime rate %); 'Straight time only' pays overtime at plain hourly rate with no premium, e.g. during a temporary policy transition. No Night Diff equivalent -- once eligible, its rate percentage always applies." />
+
+              <TextBlock Grid.Row="4"
+                         Grid.Column="0"
+                         Text="Overtime rate % override"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="0,0,4,2" />
+              <TextBlock Grid.Row="4"
+                         Grid.Column="1"
+                         Text="Night diff rate % override"
+                         FontSize="11"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Margin="4,0,0,2" />
+              <TextBox x:Name="OvertimeRatePercentageBox"
+                       Grid.Row="5"
+                       Grid.Column="0"
+                       Width="70"
+                       HorizontalAlignment="Left"
+                       Margin="0,0,4,0"
+                       ToolTip="Overrides the global overtime rate percentage (e.g. 0.25 for 25%) just for this day. Shown grayed-out at the current policy default -- type over it to override, or leave it as-is to keep tracking the policy default even if it changes later. Only takes effect when overtime is eligible and the premium applies (see the two dropdowns above)." />
+              <TextBox x:Name="NightDiffRatePercentageBox"
+                       Grid.Row="5"
+                       Grid.Column="1"
+                       Width="70"
+                       HorizontalAlignment="Left"
+                       Margin="4,0,0,0"
+                       ToolTip="Overrides the global night differential rate percentage (e.g. 0.10 for 10%) just for this day. Shown grayed-out at the current policy default -- type over it to override, or leave it as-is to keep tracking the policy default even if it changes later. Only takes effect when night diff is eligible (see the dropdown above)." />
             </Grid>
-        </Border>
+          </Border>
 
         </Grid>
-        </ScrollViewer>
+      </ScrollViewer>
     </DockPanel>
-</Grid>
+  </Grid>
 </ui:FluentWindow>

@@ -1,0 +1,243 @@
+<UserControl x:Class="ScheduleApp.Desktop.Controls.TimeInput"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
+             HorizontalAlignment="Left"
+             VerticalAlignment="Center">
+  <UserControl.Resources>
+
+    <!-- One of the two number fields. Width/Height/FontSize are left to ApplyDensity in
+         the code-behind (they're the only things Comfortable and Compact disagree about);
+         everything here is the part that stays the same either way.
+
+         The 1px -> 2px BorderThickness change on focus/error is safe precisely because
+         those sizes land on this Border rather than on the TextBox inside it: the extra
+         pixel eats into the field's own padding, so nothing around the control reflows. -->
+    <Style x:Key="TimeFieldBorderStyle" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+      <Style.Triggers>
+        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+          <Setter Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+          <Setter Property="BorderThickness" Value="2" />
+        </Trigger>
+        <!-- After the focus trigger so an out-of-range value still reads as an error
+             while the field that holds it is the one being typed into. -->
+        <Trigger Property="controls:TimeInput.HasError" Value="True">
+          <Setter Property="BorderBrush" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+          <Setter Property="BorderThickness" Value="2" />
+        </Trigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Background" Value="{DynamicResource ControlFillColorDisabledBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          <Setter Property="BorderThickness" Value="1" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- The bare number inside that Border. The explicit Template is not optional: these
+         are plain TextBoxes, so WPF-UI's implicit TextBox style (merged app-wide by
+         App.xaml) would otherwise wrap each one in its own card background, border and
+         focus underline inside a field that already draws all three. -->
+    <Style x:Key="TimeFieldTextBoxStyle" TargetType="TextBox">
+      <Setter Property="MaxLength" Value="2" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <ScrollViewer x:Name="PART_ContentHost"
+                          Focusable="False"
+                          VerticalAlignment="Center"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Hidden" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsKeyboardFocused" Value="True">
+          <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+        </Trigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- The ":" between the two fields. -->
+    <Style x:Key="TimeSeparatorStyle" TargetType="TextBlock">
+      <Setter Property="Text" Value=":" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- "Hour"/"Minute" under the fields - Comfortable density only. -->
+    <Style x:Key="TimeFieldLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <!-- Outer shell of the AM/PM segmented button. -->
+    <Style x:Key="PeriodContainerStyle" TargetType="Border">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- One AM/PM segment. Tag carries the segment's CornerRadius rather than a fixed
+         value, because which two corners are rounded depends on whether ApplyDensity
+         stacked the segments (Comfortable) or sat them side by side (Compact), and
+         RadioButton has no CornerRadius property of its own to template-bind to. -->
+    <Style x:Key="PeriodSegmentStyle" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Segment"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding Tag}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+              </Trigger>
+              <MultiTrigger>
+                <MultiTrigger.Conditions>
+                  <Condition Property="IsChecked" Value="True" />
+                  <Condition Property="IsMouseOver" Value="True" />
+                </MultiTrigger.Conditions>
+                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource AccentFillColorSecondaryBrush}" />
+              </MultiTrigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Segment" Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                <Setter TargetName="Segment" Property="BorderThickness" Value="2" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                <Setter TargetName="Segment" Property="Background" Value="Transparent" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+  </UserControl.Resources>
+
+  <!-- Row 0 is the field line, row 1 the "Hour"/"Minute" captions - so the ":" and the
+       AM/PM toggle line up with the fields themselves rather than being centered against
+       the fields-plus-captions block. Row 1 collapses to nothing in Compact density. -->
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <Border x:Name="HourField"
+            Grid.Row="0"
+            Grid.Column="0"
+            Style="{StaticResource TimeFieldBorderStyle}">
+      <TextBox x:Name="HourBox"
+               Style="{StaticResource TimeFieldTextBoxStyle}"
+               TextChanged="OnFieldTextChanged"
+               PreviewTextInput="OnFieldPreviewTextInput"
+               PreviewKeyDown="OnFieldPreviewKeyDown"
+               PreviewMouseWheel="OnFieldPreviewMouseWheel"
+               PreviewMouseLeftButtonDown="OnFieldPreviewMouseLeftButtonDown"
+               GotKeyboardFocus="OnFieldGotKeyboardFocus"
+               LostFocus="OnFieldLostFocus"
+               AutomationProperties.Name="Hour" />
+    </Border>
+
+    <TextBlock x:Name="TimeSeparator"
+               Grid.Row="0"
+               Grid.Column="1"
+               Style="{StaticResource TimeSeparatorStyle}" />
+
+    <Border x:Name="MinuteField"
+            Grid.Row="0"
+            Grid.Column="2"
+            Style="{StaticResource TimeFieldBorderStyle}">
+      <TextBox x:Name="MinuteBox"
+               Style="{StaticResource TimeFieldTextBoxStyle}"
+               TextChanged="OnFieldTextChanged"
+               PreviewTextInput="OnFieldPreviewTextInput"
+               PreviewKeyDown="OnFieldPreviewKeyDown"
+               PreviewMouseWheel="OnFieldPreviewMouseWheel"
+               PreviewMouseLeftButtonDown="OnFieldPreviewMouseLeftButtonDown"
+               GotKeyboardFocus="OnFieldGotKeyboardFocus"
+               LostFocus="OnFieldLostFocus"
+               AutomationProperties.Name="Minute" />
+    </Border>
+
+    <!-- No GroupName on the two segments, deliberately: WPF groups nameless radio buttons
+         by their immediate parent, which is exactly one TimeInput's own PeriodLayout, so
+         two of these controls on the same dialog (the punching-window pair, every split
+         shift row) can't end up sharing a group. -->
+    <Border x:Name="PeriodField"
+            Grid.Row="0"
+            Grid.Column="3"
+            Style="{StaticResource PeriodContainerStyle}">
+      <Grid x:Name="PeriodLayout">
+        <RadioButton x:Name="AmButton"
+                     Content="AM"
+                     Style="{StaticResource PeriodSegmentStyle}"
+                     Checked="OnPeriodChanged"
+                     Unchecked="OnPeriodChanged" />
+        <Border x:Name="PeriodDivider" Background="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <RadioButton x:Name="PmButton"
+                     Content="PM"
+                     Style="{StaticResource PeriodSegmentStyle}"
+                     Checked="OnPeriodChanged"
+                     Unchecked="OnPeriodChanged" />
+      </Grid>
+    </Border>
+
+    <TextBlock x:Name="HourLabel"
+               Grid.Row="1"
+               Grid.Column="0"
+               Text="Hour"
+               Style="{StaticResource TimeFieldLabelStyle}" />
+    <TextBlock x:Name="MinuteLabel"
+               Grid.Row="1"
+               Grid.Column="2"
+               Text="Minute"
+               Style="{StaticResource TimeFieldLabelStyle}" />
+  </Grid>
+</UserControl>

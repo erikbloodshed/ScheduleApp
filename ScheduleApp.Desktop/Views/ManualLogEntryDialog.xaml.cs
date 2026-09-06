@@ -91,6 +91,15 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDispo
     /// <summary>0 = Clock In, 1 = Clock Out -- matches PunchTypeCombo's item
     /// order and AttendanceLog/ManualAttendanceLog.PunchType's convention.</summary>
     public int PunchType { get; private set; }
+
+    /// <summary>Optional -- ReasonBox shows PunchType's own "Clock In"/"Clock Out"
+    /// label (see PunchTypeLabel.ToText) as a live gray default for as long as it's
+    /// left untouched, tracking PunchTypeCombo's selection via
+    /// PunchTypeCombo_SelectionChanged (see DefaultTextBox, wired up in the
+    /// constructor) -- and SaveButton_Click falls back to that same label if the box
+    /// somehow still reads blank regardless. So this is never actually empty by the
+    /// time the dialog closes, even though nothing forces the person to type
+    /// anything more specific.</summary>
     public string Reason { get; private set; } = string.Empty;
     public string EnteredBy { get; private set; } = string.Empty;
 
@@ -111,9 +120,16 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDispo
         _employees = employees.ToList();
         _attendanceLogRepository = attendanceLogRepository;
 
-        PopulateTimeItems(TimeCombo);
         DateBox.SelectedDate = DateTime.Today; // fires SelectedDateChanged -> RefreshMachinePunchesAsync, a no-op here since no employee is resolved yet
         EnteredByBox.Text = Environment.UserName;
+
+        // Called once here, not in the Edit-mode/calendar-tile constructors below --
+        // they all chain through this one, and calling it again on top would double
+        // up ReasonBox's GotFocus/TextChanged/LostFocus wiring. PunchTypeCombo's own
+        // SelectedIndex="0" (set by InitializeComponent above) is what this shows
+        // first; PunchTypeCombo_SelectionChanged keeps it in sync after that for as
+        // long as the box goes untouched.
+        DefaultTextBox.Initialize(ReasonBox, () => PunchTypeLabel.ToText(PunchTypeCombo.SelectedIndex));
 
         Loaded += (_, _) => EmployeeBox.Focus();
     }
@@ -137,9 +153,29 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDispo
         _suppressEmployeeTextChanged = false;
 
         DateBox.SelectedDate = existingLog.Timestamp.Date;
-        TimeCombo.Text = TimeDisplayFormat.Format(TimeOnly.FromDateTime(existingLog.Timestamp));
-        PunchTypeCombo.SelectedIndex = existingLog.PunchType;
-        ReasonBox.Text = existingLog.Reason;
+        TimeBox.SelectedTime = TimeOnly.FromDateTime(existingLog.Timestamp);
+        PunchTypeCombo.SelectedIndex = existingLog.PunchType; // fires SelectionChanged -> refreshes ReasonBox's default, if it's still showing one
+
+        // A real saved Reason overrides the default DefaultTextBox.Initialize already
+        // put in ReasonBox; a blank one (older data from before Reason had a default
+        // at all) leaves that default showing instead of a blank box, same as a
+        // brand-new entry -- PunchTypeCombo's own SelectionChanged handler above has
+        // already brought it in line with this entry's PunchType by this point, but
+        // Refresh is called again explicitly rather than relying on that -- it's a
+        // no-op unless PunchTypeCombo's index actually changed just now, and either
+        // way this makes the end state obvious without having to trace through event
+        // ordering to see why it's already correct.
+        if (string.IsNullOrWhiteSpace(existingLog.Reason))
+        {
+            DefaultTextBox.Refresh(ReasonBox, () => PunchTypeLabel.ToText(PunchTypeCombo.SelectedIndex));
+        }
+        else
+        {
+            ReasonBox.Text = existingLog.Reason;
+            ReasonBox.ClearValue(System.Windows.Controls.TextBox.ForegroundProperty);
+            ReasonBox.Tag = null;
+        }
+
         EnteredByBox.Text = existingLog.EnteredBy;
     }
 
@@ -176,12 +212,6 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDispo
 
         EmployeeBox.IsEnabled = false;
         DateBox.IsEnabled = false;
-    }
-
-    private static void PopulateTimeItems(System.Windows.Controls.ComboBox combo)
-    {
-        for (var hours = 0; hours < 24; hours++)
-            combo.Items.Add(TimeDisplayFormat.Format(TimeOnly.FromTimeSpan(TimeSpan.FromHours(hours))));
     }
 
     /// <summary>Re-filters the suggestion list on every keystroke -- matches
@@ -275,6 +305,26 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDispo
 
     private void DateBox_SelectedDateChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e) =>
         _machinePunchesFetchTask = RefreshMachinePunchesAsync();
+
+    /// <summary>Keeps ReasonBox's default in step with whichever punch type is
+    /// currently selected -- see DefaultTextBox.Refresh, which no-ops once the
+    /// person has actually typed a reason of their own (Tag no longer true), so
+    /// flipping Clock In/Clock Out afterward never overwrites that.
+    ///
+    /// The null check guards against a fire that happens before there's anything to
+    /// refresh: WPF raises this the moment PunchTypeCombo's own XAML-declared
+    /// SelectedIndex="0" takes effect, which happens while InitializeComponent is
+    /// still building the rest of this window's tree -- ReasonBox, declared further
+    /// down the same document, isn't wired up yet at that point. The constructor's
+    /// own DefaultTextBox.Initialize call (after InitializeComponent returns)
+    /// supplies ReasonBox's real starting default, so that first fire has nothing to
+    /// do here anyway.</summary>
+    private void PunchTypeCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (ReasonBox is null) return;
+
+        DefaultTextBox.Refresh(ReasonBox, () => PunchTypeLabel.ToText(PunchTypeCombo.SelectedIndex));
+    }
 
     /// <summary>Waits for whichever RefreshMachinePunchesAsync call was most
     /// recently kicked off (see _machinePunchesFetchTask) to actually finish --
@@ -467,22 +517,27 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDispo
             return;
         }
 
-        if (!TimeDisplayFormat.TryParse(TimeCombo.Text, out var time))
+        if (TimeBox.SelectedTime is not { } time)
         {
-            Warn("Enter a valid time, e.g. 5:01 PM.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(ReasonBox.Text))
-        {
-            Warn("Enter a reason -- e.g. \"Forgot to badge in\".");
+            Warn("Select a time.");
             return;
         }
 
         EmployeeId = employeeId.Value;
         Timestamp = date.Date + time.ToTimeSpan();
         PunchType = PunchTypeCombo.SelectedIndex;
-        Reason = ReasonBox.Text.Trim();
+
+        // Optional -- left blank, it defaults to the punch type itself ("Clock In" /
+        // "Clock Out", same title-case text PunchTypeCombo's own items and
+        // RefreshMachinePunchesAsync's Machine Punches list already use via this same
+        // helper), which reads fine as a reason on its own for the common case of just
+        // logging a missed punch with nothing more specific to say about it. Someone
+        // who does have something more specific ("Forgot to badge in") still types
+        // over it exactly as before.
+        Reason = string.IsNullOrWhiteSpace(ReasonBox.Text)
+            ? PunchTypeLabel.ToText(PunchTypeCombo.SelectedIndex)
+            : ReasonBox.Text.Trim();
+
         EnteredBy = string.IsNullOrWhiteSpace(EnteredByBox.Text) ? Environment.UserName : EnteredByBox.Text.Trim();
 
         DialogResult = true;
