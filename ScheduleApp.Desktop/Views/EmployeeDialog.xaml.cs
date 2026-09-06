@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
+using ScheduleApp.Desktop.Controls;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -157,15 +158,15 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
             if (existing.EmployeeType == EmployeeType.Monthly) PayTypeMonthlyRadio.IsChecked = true;
             else PayTypeDailyRadio.IsChecked = true;
 
-            DailyRateBox.Text = existing.DailyRate.ToString("0.00", CultureInfo.InvariantCulture);
-            MonthlyRateBox.Text = existing.MonthlyRate.ToString("0.00", CultureInfo.InvariantCulture);
-            RestDayWorkPremiumPercentageBox.Text = existing.RestDayWorkPremiumPercentage.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultSssBox.Text = existing.DefaultSss.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultPhilHealthBox.Text = existing.DefaultPhilHealth.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultPagIbigBox.Text = existing.DefaultPagIbig.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultPremiumPayBox.Text = existing.DefaultPremiumPay.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultAllowanceBox.Text = existing.DefaultAllowance.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultCashAdvanceBox.Text = existing.DefaultCashAdvance.ToString("0.00", CultureInfo.InvariantCulture);
+            DailyRateBox.Value = existing.DailyRate;
+            MonthlyRateBox.Value = existing.MonthlyRate;
+            RestDayWorkPremiumPercentageBox.Value = existing.RestDayWorkPremiumPercentage;
+            DefaultSssBox.Value = existing.DefaultSss;
+            DefaultPhilHealthBox.Value = existing.DefaultPhilHealth;
+            DefaultPagIbigBox.Value = existing.DefaultPagIbig;
+            DefaultPremiumPayBox.Value = existing.DefaultPremiumPay;
+            DefaultAllowanceBox.Value = existing.DefaultAllowance;
+            DefaultCashAdvanceBox.Value = existing.DefaultCashAdvance;
 
             DefaultLeaveIsPaidCheck.IsChecked = existing.DefaultLeaveIsPaid;
 
@@ -193,15 +194,15 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
             DepartmentCombo.SelectedItem = preselectedDepartmentId is int id
                 ? departmentList.FirstOrDefault(d => d.Id == id)
                 : departmentList.FirstOrDefault();
-            DailyRateBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            MonthlyRateBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            RestDayWorkPremiumPercentageBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultSssBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultPhilHealthBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultPagIbigBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultPremiumPayBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultAllowanceBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
-            DefaultCashAdvanceBox.Text = 0m.ToString("0.00", CultureInfo.InvariantCulture);
+            DailyRateBox.Value = 0m;
+            MonthlyRateBox.Value = 0m;
+            RestDayWorkPremiumPercentageBox.Value = 0m;
+            DefaultSssBox.Value = 0m;
+            DefaultPhilHealthBox.Value = 0m;
+            DefaultPagIbigBox.Value = 0m;
+            DefaultPremiumPayBox.Value = 0m;
+            DefaultAllowanceBox.Value = 0m;
+            DefaultCashAdvanceBox.Value = 0m;
         }
 
         // Explicit calls rather than relying solely on the Checked/Unchecked events
@@ -299,14 +300,15 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
         EmployeeId = employeeId;
 
         // Blank is treated as 0 -- same "never blocks saving" convention as
-        // Employee.DailyRate's own default -- but anything actually typed still has
-        // to be a real, non-negative number, same NumberStyles.Number/InvariantCulture
-        // parse ApplyScheduleDialog's WorkTimeBox check uses. Shared across all nine
-        // money/rate fields (DailyRate, MonthlyRate, RestDayWorkPremiumPercentage, the
-        // three statutory contribution defaults, and the three pay-adjustment defaults)
-        // via TryParseMoneyField below, since all nine have identical validation rules.
+        // Employee.DailyRate's own default. All nine money/rate fields (DailyRate,
+        // MonthlyRate, RestDayWorkPremiumPercentage, the three statutory contribution
+        // defaults, and the three pay-adjustment defaults) are NumericTextBoxes, so there's
+        // nothing left to validate here: that control refuses a non-number or a negative at
+        // the keystroke, so the old TryParseMoneyField check -- parse, then warn on what
+        // came back bad -- has no case left to catch, and MoneyValue below is just "what's
+        // in the box, or 0 if it's empty".
         //
-        // Only the active Pay Type's rate box is validated here -- DailyRateBox when
+        // Only the active Pay Type's rate box is read here -- DailyRateBox when
         // Daily is selected, MonthlyRateBox when Monthly is (see PayTypeRadio_CheckedChanged
         // for which one is visible). The *other* one is never read, even if it has stale
         // or invalid text left over from before a Pay Type switch: its stored value is
@@ -317,40 +319,26 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
         // before hitting OK never silently discards a rate the user already typed in.
         if (EmployeeType == EmployeeType.Monthly)
         {
-            if (!TryParseMoneyField(MonthlyRateBox, "Monthly rate", out var monthlyRate)) return;
-            MonthlyRate = monthlyRate;
+            MonthlyRate = MoneyValue(MonthlyRateBox);
             DailyRate = _existing?.DailyRate ?? 0m;
         }
         else
         {
-            if (!TryParseMoneyField(DailyRateBox, "Daily rate", out var dailyRate)) return;
-            DailyRate = dailyRate;
+            DailyRate = MoneyValue(DailyRateBox);
             MonthlyRate = _existing?.MonthlyRate ?? 0m;
         }
 
-        // Not gated behind Pay Type -- always validated/read regardless of which
-        // radio is checked, since a Daily-rated employee can be called in on a Rest
-        // Day too (see Employee.RestDayWorkPremiumPercentage).
-        if (!TryParseMoneyField(RestDayWorkPremiumPercentageBox, "Rest Day Work Premium %", out var restDayWorkPremiumPercentage)) return;
-        RestDayWorkPremiumPercentage = restDayWorkPremiumPercentage;
+        // Not gated behind Pay Type -- always read regardless of which radio is checked,
+        // since a Daily-rated employee can be called in on a Rest Day too (see
+        // Employee.RestDayWorkPremiumPercentage).
+        RestDayWorkPremiumPercentage = MoneyValue(RestDayWorkPremiumPercentageBox);
 
-        if (!TryParseMoneyField(DefaultSssBox, "SSS", out var defaultSss)) return;
-        DefaultSss = defaultSss;
-
-        if (!TryParseMoneyField(DefaultPhilHealthBox, "PhilHealth", out var defaultPhilHealth)) return;
-        DefaultPhilHealth = defaultPhilHealth;
-
-        if (!TryParseMoneyField(DefaultPagIbigBox, "Pag-IBIG", out var defaultPagIbig)) return;
-        DefaultPagIbig = defaultPagIbig;
-
-        if (!TryParseMoneyField(DefaultPremiumPayBox, "Premium Pay", out var defaultPremiumPay)) return;
-        DefaultPremiumPay = defaultPremiumPay;
-
-        if (!TryParseMoneyField(DefaultAllowanceBox, "Allowance", out var defaultAllowance)) return;
-        DefaultAllowance = defaultAllowance;
-
-        if (!TryParseMoneyField(DefaultCashAdvanceBox, "Cash Advance", out var defaultCashAdvance)) return;
-        DefaultCashAdvance = defaultCashAdvance;
+        DefaultSss = MoneyValue(DefaultSssBox);
+        DefaultPhilHealth = MoneyValue(DefaultPhilHealthBox);
+        DefaultPagIbig = MoneyValue(DefaultPagIbigBox);
+        DefaultPremiumPay = MoneyValue(DefaultPremiumPayBox);
+        DefaultAllowance = MoneyValue(DefaultAllowanceBox);
+        DefaultCashAdvance = MoneyValue(DefaultCashAdvanceBox);
 
         if (!TryParseOptionalBufferField(ClockInBufferBeforeHoursBox, "Clock-in buffer, before", out var clockInBufferBeforeHours)) return;
         ClockInBufferBeforeHours = clockInBufferBeforeHours;
@@ -367,35 +355,13 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
         DialogResult = true;
     }
 
-    /// <summary>Shared blank-is-0/non-negative-number validation for DailyRateBox/
-    /// MonthlyRateBox (whichever is active), RestDayWorkPremiumPercentageBox, the
-    /// three statutory contribution boxes (DefaultSssBox/DefaultPhilHealthBox/
-    /// DefaultPagIbigBox), and the three pay-adjustment boxes (DefaultPremiumPayBox/
-    /// DefaultAllowanceBox/DefaultCashAdvanceBox) -- factored out since all nine money/rate
-    /// fields in this dialog follow the exact same "never blocks saving" rule (see the
-    /// comment above this method's call sites). Returns false (and shows the same warning
-    /// OkButton_Click's other checks use)
-    /// on an invalid, non-blank value, leaving <paramref name="value"/> at its default so the
-    /// caller's own early "return" is the only thing that matters -- mirrors the pattern the
-    /// three required-field checks earlier in OkButton_Click already use.</summary>
-    private static bool TryParseMoneyField(TextBox box, string fieldLabel, out decimal value)
-    {
-        if (string.IsNullOrWhiteSpace(box.Text))
-        {
-            value = 0m;
-            return true;
-        }
-
-        if (!decimal.TryParse(box.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out value) || value < 0)
-        {
-            MessageBox.Show($"{fieldLabel} must be a valid number, 0 or greater (or left blank).", "Required",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            value = 0m;
-            return false;
-        }
-
-        return true;
-    }
+    /// <summary>What one of this dialog's nine money/rate boxes currently holds, with an
+    /// empty box reading as 0 -- the "never blocks saving" rule those nine share (see the
+    /// comment at this method's call sites). Replaces the old TryParseMoneyField, whose parse
+    /// and its warning both became unreachable once these boxes became NumericTextBoxes: a
+    /// letter, a second decimal point and a minus sign are all refused as they're typed now,
+    /// so there is no bad value left for a check here to find.</summary>
+    private static decimal MoneyValue(NumericTextBox box) => box.Value ?? 0m;
 
     /// <summary>Shared blank-stays-null/non-negative-number validation for the four
     /// buffer-default boxes (ClockInBufferBeforeHoursBox/.../ClockOutBufferAfterHoursBox)

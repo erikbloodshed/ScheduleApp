@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using ScheduleApp.Core.Payroll;
+using ScheduleApp.Desktop.Controls;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Payroll;
 
@@ -15,9 +16,13 @@ namespace ScheduleApp.Desktop.Views;
 /// the handlers below are the exceptions, needed only because a
 /// single-value category's (Allowance/Premium Pay/SSS/PhilHealth/Pag-IBIG/Cash Advance)
 /// inline amount box, and an inline-itemized category's (Incentive/OtherCharge) own row
-/// Description/Amount boxes, all commit on LostFocus/Enter rather than through an ICommand
+/// Description/Amount boxes, all commit as they're typed in rather than through an ICommand
 /// the way every button-driven action on this page does -- TextBox has no Command/
-/// CommandParameter of its own to bind that to -- because a single-value category's own
+/// CommandParameter of its own to bind that to. The two amount boxes are NumericTextBoxes
+/// and commit through its single ValueCommitted event (see that control's doc comment for
+/// what else it buys: digits-only input, 0.00 formatting, no negatives); the Description
+/// box is a plain TextBox and still needs the older LostFocus + KeyDown pair. Also because
+/// a single-value category's own
 /// "Edit" button doesn't touch the view model at all, just the sibling amount box's own
 /// focus/selection (see EditSingleValueButton_Click) -- and because DeductionLineTemplate's
 /// own Exclude/Include toggle button reaches past its own DataContext (the PayrollLineItem
@@ -41,9 +46,12 @@ public partial class PayrollSummaryView : UserControl
     /// TextBox), so the sibling TextBox is found by walking the Grid's own Children rather
     /// than needing a name or a binding -- Focus() then SelectAll() puts the caret in the box
     /// with its existing figure highlighted, ready to be typed straight over. The actual
-    /// commit still happens the normal way once focus leaves the box (LostFocus/Enter --
-    /// see SingleValueAmountBox_LostFocus/KeyDown below), so clicking Edit and clicking away
-    /// without typing anything is a no-op, same as clicking directly into the box always was.</summary>
+    /// commit still happens the normal way once focus leaves the box, or on Enter (see
+    /// SingleValueAmountBox_ValueCommitted below), so clicking Edit and clicking away without
+    /// typing anything is a no-op, same as clicking directly into the box always was. The box
+    /// is a NumericTextBox now rather than a plain TextBox -- still a TextBox as far as the
+    /// OfType walk below is concerned, and one that selects its own contents on focus anyway,
+    /// which makes the SelectAll here belt-and-braces rather than load-bearing.</summary>
     private void EditSingleValueButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Parent: Grid grid }) return;
@@ -53,35 +61,25 @@ public partial class PayrollSummaryView : UserControl
         box.SelectAll();
     }
 
-    private void SingleValueAmountBox_LostFocus(object sender, RoutedEventArgs e) => CommitSingleValue(sender);
-
-    /// <summary>Enter commits immediately (same "don't make someone tab away just to save"
-    /// expectation as a search box) rather than waiting for LostFocus, then clears focus so
-    /// the box doesn't visibly sit there mid-edit -- the LostFocus handler above still fires
-    /// after that, but PayrollViewModel.SetSingleValueAsync no-ops on an amount that hasn't
-    /// changed since the last commit (see its own doc comment), so the second call is
-    /// harmless rather than a duplicate write.</summary>
-    private void SingleValueAmountBox_KeyDown(object sender, KeyEventArgs e)
+    /// <summary>A single-value category's amount box, committed. NumericTextBox raises this
+    /// on Enter and on lost focus alike, once per actual change (see its own doc comment), so
+    /// unlike the LostFocus + KeyDown pair this replaced there's no second, duplicate call
+    /// after Enter for PayrollViewModel.SetSingleValueAsync's unchanged-amount check to
+    /// absorb -- that check still stands, it just isn't what's keeping Enter from writing
+    /// twice any more. InvariantText rather than Text: SetSingleValueAsync parses with
+    /// CultureInfo.InvariantCulture while the box formats itself for the current culture.</summary>
+    private void SingleValueAmountBox_ValueCommitted(object? sender, EventArgs e)
     {
-        if (e.Key != Key.Enter) return;
-
-        CommitSingleValue(sender);
-        e.Handled = true;
-        Keyboard.ClearFocus();
-    }
-
-    private void CommitSingleValue(object sender)
-    {
-        if (sender is not TextBox { DataContext: PayrollAdjustmentGroupRow group } box) return;
+        if (sender is not NumericTextBox { DataContext: PayrollAdjustmentGroupRow group } box) return;
         if (DataContext is not PayrollViewModel viewModel) return;
 
-        _ = viewModel.SetSingleValueAsync(group.Type, box.Text);
+        _ = viewModel.SetSingleValueAsync(group.Type, box.InvariantText);
     }
 
-    /// <summary>Same LostFocus/KeyDown/commit split as SingleValueAmountBox_.../
-    /// CommitSingleValue above, just for an inline-itemized row's own Description box instead
-    /// -- see InlineAdjustmentRowTemplate and PayrollViewModel.UpdateInlineDescriptionAsync.
-    /// </summary>
+    /// <summary>The older LostFocus/KeyDown/commit split, kept for an inline-itemized row's
+    /// own Description box -- free text, so there's no NumericTextBox.ValueCommitted to hang
+    /// it on the way the two amount boxes now do -- see InlineAdjustmentRowTemplate and
+    /// PayrollViewModel.UpdateInlineDescriptionAsync.</summary>
     private void InlineDescriptionBox_LostFocus(object sender, RoutedEventArgs e) => CommitInlineDescription(sender);
 
     private void InlineDescriptionBox_KeyDown(object sender, KeyEventArgs e)
@@ -101,26 +99,16 @@ public partial class PayrollSummaryView : UserControl
         _ = viewModel.UpdateInlineDescriptionAsync(adjustment, box.Text);
     }
 
-    /// <summary>Same LostFocus/KeyDown/commit split again, for an inline-itemized row's own
-    /// Amount box -- see InlineAdjustmentRowTemplate and
+    /// <summary>Same single NumericTextBox.ValueCommitted handler as
+    /// SingleValueAmountBox_ValueCommitted above, for an inline-itemized row's own Amount box
+    /// instead -- see InlineAdjustmentRowTemplate and
     /// PayrollViewModel.UpdateInlineAmountAsync.</summary>
-    private void InlineAmountBox_LostFocus(object sender, RoutedEventArgs e) => CommitInlineAmount(sender);
-
-    private void InlineAmountBox_KeyDown(object sender, KeyEventArgs e)
+    private void InlineAmountBox_ValueCommitted(object? sender, EventArgs e)
     {
-        if (e.Key != Key.Enter) return;
-
-        CommitInlineAmount(sender);
-        e.Handled = true;
-        Keyboard.ClearFocus();
-    }
-
-    private void CommitInlineAmount(object sender)
-    {
-        if (sender is not TextBox { DataContext: PayrollAdjustment adjustment } box) return;
+        if (sender is not NumericTextBox { DataContext: PayrollAdjustment adjustment } box) return;
         if (DataContext is not PayrollViewModel viewModel) return;
 
-        _ = viewModel.UpdateInlineAmountAsync(adjustment, box.Text);
+        _ = viewModel.UpdateInlineAmountAsync(adjustment, box.InvariantText);
     }
 
     /// <summary>DeductionLineTemplate's own Exclude/Include toggle button -- unlike every

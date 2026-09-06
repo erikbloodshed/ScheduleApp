@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
         Title="New Employee"
         Width="480"
@@ -252,21 +253,23 @@
                    Grid.Column="0"
                    Grid.ColumnSpan="2"
                    Margin="0,0,0,4" />
-        <TextBox x:Name="DailyRateBox"
-                 Grid.Row="16"
-                 Grid.Column="0"
-                 Margin="0,0,0,12"
-                 Width="120"
-                 HorizontalAlignment="Left"
-                 ToolTip="Used for payroll's Basic Pay/Overtime/Night Diff/Undertime, and to pay a paid Leave day outright -- leave at 0.00 until you're ready to set it, it never blocks saving." />
-        <TextBox x:Name="MonthlyRateBox"
-                 Grid.Row="16"
-                 Grid.Column="0"
-                 Margin="0,0,0,12"
-                 Width="120"
-                 HorizontalAlignment="Left"
-                 Visibility="Collapsed"
-                 ToolTip="Used for payroll's semi-monthly Basic Pay share -- the nominal-15-day divisor (minus any Rest Days in the period) divides this into a per-day rate, then uncredited days are deducted from the period's Basic Pay. Leave at 0.00 until you're ready to set it, it never blocks saving." />
+        <controls:NumericTextBox x:Name="DailyRateBox"
+                                 Style="{StaticResource {x:Type TextBox}}"
+                                 Grid.Row="16"
+                                 Grid.Column="0"
+                                 Margin="0,0,0,12"
+                                 Width="120"
+                                 HorizontalAlignment="Left"
+                                 ToolTip="Used for payroll's Basic Pay/Overtime/Night Diff/Undertime, and to pay a paid Leave day outright -- leave at 0.00 until you're ready to set it, it never blocks saving." />
+        <controls:NumericTextBox x:Name="MonthlyRateBox"
+                                 Style="{StaticResource {x:Type TextBox}}"
+                                 Grid.Row="16"
+                                 Grid.Column="0"
+                                 Margin="0,0,0,12"
+                                 Width="120"
+                                 HorizontalAlignment="Left"
+                                 Visibility="Collapsed"
+                                 ToolTip="Used for payroll's semi-monthly Basic Pay share -- the nominal-15-day divisor (minus any Rest Days in the period) divides this into a per-day rate, then uncredited days are deducted from the period's Basic Pay. Leave at 0.00 until you're ready to set it, it never blocks saving." />
 
         <TextBlock x:Name="RestDayWorkPremiumPercentageLabel"
                    Text="Rest Day Work Premium %"
@@ -274,13 +277,14 @@
                    Grid.Column="0"
                    Grid.ColumnSpan="2"
                    Margin="0,0,0,4" />
-        <TextBox x:Name="RestDayWorkPremiumPercentageBox"
-                 Grid.Row="18"
-                 Grid.Column="0"
-                 Margin="0,0,0,12"
-                 Width="120"
-                 HorizontalAlignment="Left"
-                 ToolTip="The premium paid on top of straight pay when this employee actually works their Rest Day, as a decimal (e.g. 0.30 for 30%). Applies to both Pay Types -- a Daily-rated employee can be called in on a Rest Day too. Leave blank or 0.00 for straight pay with no premium, it never blocks saving." />
+        <controls:NumericTextBox x:Name="RestDayWorkPremiumPercentageBox"
+                                 Style="{StaticResource {x:Type TextBox}}"
+                                 Grid.Row="18"
+                                 Grid.Column="0"
+                                 Margin="0,0,0,12"
+                                 Width="120"
+                                 HorizontalAlignment="Left"
+                                 ToolTip="The premium paid on top of straight pay when this employee actually works their Rest Day, as a decimal (e.g. 0.30 for 30%). Applies to both Pay Types -- a Daily-rated employee can be called in on a Rest Day too. Leave blank or 0.00 for straight pay with no premium, it never blocks saving." />
 
         <TextBlock Text="Statutory contributions (per payroll period)"
                    Grid.Row="19"
@@ -295,15 +299,18 @@
                     Margin="0,0,0,12">
             <StackPanel Margin="0,0,12,0">
                 <TextBlock Text="SSS" Margin="0,0,0,4" />
-                <TextBox x:Name="DefaultSssBox" Width="100" HorizontalAlignment="Left" />
+                <controls:NumericTextBox x:Name="DefaultSssBox" Width="100" HorizontalAlignment="Left"
+                                         Style="{StaticResource {x:Type TextBox}}" />
             </StackPanel>
             <StackPanel Margin="0,0,12,0">
                 <TextBlock Text="PhilHealth" Margin="0,0,0,4" />
-                <TextBox x:Name="DefaultPhilHealthBox" Width="100" HorizontalAlignment="Left" />
+                <controls:NumericTextBox x:Name="DefaultPhilHealthBox" Width="100" HorizontalAlignment="Left"
+                                         Style="{StaticResource {x:Type TextBox}}" />
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Pag-IBIG" Margin="0,0,0,4" />
-                <TextBox x:Name="DefaultPagIbigBox" Width="100" HorizontalAlignment="Left" />
+                <controls:NumericTextBox x:Name="DefaultPagIbigBox" Width="100" HorizontalAlignment="Left"
+                                         Style="{StaticResource {x:Type TextBox}}" />
             </StackPanel>
         </StackPanel>
 
@@ -320,15 +327,18 @@
                     Margin="0,0,0,12">
             <StackPanel x:Name="PremiumPayFieldPanel" Margin="0,0,12,0">
                 <TextBlock Text="Premium Pay" Margin="0,0,0,4" />
-                <TextBox x:Name="DefaultPremiumPayBox" Width="100" HorizontalAlignment="Left" />
+                <controls:NumericTextBox x:Name="DefaultPremiumPayBox" Width="100" HorizontalAlignment="Left"
+                                         Style="{StaticResource {x:Type TextBox}}" />
             </StackPanel>
             <StackPanel Margin="0,0,12,0">
                 <TextBlock Text="Allowance" Margin="0,0,0,4" />
-                <TextBox x:Name="DefaultAllowanceBox" Width="100" HorizontalAlignment="Left" />
+                <controls:NumericTextBox x:Name="DefaultAllowanceBox" Width="100" HorizontalAlignment="Left"
+                                         Style="{StaticResource {x:Type TextBox}}" />
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Cash Advance" Margin="0,0,0,4" />
-                <TextBox x:Name="DefaultCashAdvanceBox" Width="100" HorizontalAlignment="Left" />
+                <controls:NumericTextBox x:Name="DefaultCashAdvanceBox" Width="100" HorizontalAlignment="Left"
+                                         Style="{StaticResource {x:Type TextBox}}" />
             </StackPanel>
         </StackPanel>
 
