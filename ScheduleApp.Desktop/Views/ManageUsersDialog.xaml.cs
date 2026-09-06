@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using ScheduleApp.Core.Exceptions;
@@ -8,7 +8,8 @@ using ScheduleApp.Desktop.Services;
 namespace ScheduleApp.Desktop.Views;
 
 /// <summary>
-/// Opened from MainWindow's toolbar (see MainWindow.ManageUsersButton_Click) -- the
+/// Opened from the navigation drawer's footer (see
+/// MainWindow.ManageUsersButton_Click) -- the
 /// only place accounts are added after SetupAdminPanel creates the first one. Lists
 /// every UserAccount and lets the signed-in person add another, reset a password, or
 /// deactivate/reactivate/delete an existing one.

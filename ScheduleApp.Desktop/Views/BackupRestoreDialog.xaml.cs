@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.Data.SqlClient;
 using Microsoft.Win32;
 using ScheduleApp.Desktop.Services;
@@ -6,7 +6,7 @@ using ScheduleApp.Desktop.Services;
 namespace ScheduleApp.Desktop.Views;
 
 /// <summary>
-/// Opened from MainWindow's toolbar (next to the Settings gear) -- wraps
+/// Opened from the navigation drawer's footer (just above Settings) -- wraps
 /// DatabaseBackupService's BACKUP DATABASE / RESTORE DATABASE calls with the file
 /// pickers and confirmation this needs to be safe without SSMS or sqlcmd. See
 /// DatabaseBackupService's own remarks for what each operation actually does

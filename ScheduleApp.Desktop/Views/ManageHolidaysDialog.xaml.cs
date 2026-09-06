@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,7 +12,8 @@ using ScheduleApp.Desktop.ViewModels.Attendance;
 namespace ScheduleApp.Desktop.Views;
 
 /// <summary>
-/// Opened from MainWindow's toolbar (see MainWindow.ManageHolidaysButton_Click) --
+/// Opened from the navigation drawer's footer (see
+/// MainWindow.ManageHolidaysButton_Click) --
 /// the only place holidays are added/edited/removed. Lists every Holiday and lets
 /// the signed-in person add another, edit an existing one in place, or delete one.
 ///

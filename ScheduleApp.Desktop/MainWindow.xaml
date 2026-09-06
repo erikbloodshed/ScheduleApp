@@ -1,4 +1,4 @@
-<ui:FluentWindow x:Class="ScheduleApp.Desktop.MainWindow"
+﻿<ui:FluentWindow x:Class="ScheduleApp.Desktop.MainWindow"
         x:Name="RootWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -94,14 +94,32 @@
             </ui:NavigationView.MenuItems>
 
             <!-- Pinned to the bottom of the pane, below a separator, same as WinUI's
-                 "Settings" nav-item convention. No TargetPageType - WPF-UI's own
-                 NavigationViewItem.OnClick only calls into the navigation machinery
-                 (select/navigate/replace content) when TargetPageType is set; left null,
-                 a click just raises the plain ButtonBase Click event below and nothing
-                 else, so it can't ever get "selected" in the pane or blank out whatever
-                 page is currently showing - safe to reuse SettingsButton_Click as-is,
-                 same (object, RoutedEventArgs) signature it already had as a ui:Button. -->
+                 "Settings" nav-item convention. None of these four has a TargetPageType -
+                 WPF-UI's own NavigationViewItem.OnClick only calls into the navigation
+                 machinery (select/navigate/replace content) when TargetPageType is set;
+                 left null, a click just raises the plain ButtonBase Click event and
+                 nothing else, so none of them can ever get "selected" in the pane or
+                 blank out whatever page is currently showing. That is what lets each one
+                 reuse its existing handler as-is: all four open a dialog rather than
+                 navigating, and (object, RoutedEventArgs) is the same signature they
+                 already had back when they were ui:Buttons overlaid on the top-right of
+                 the content area. Order is deliberate - the three dialogs sit on top of
+                 Settings, which stays last, the bottom-most item in the pane. -->
             <ui:NavigationView.FooterMenuItems>
+                <!-- Opens ManageHolidaysDialog for maintaining the company holiday list
+                     that Premium Pay (see the Payroll page) computes against. -->
+                <ui:NavigationViewItem Content="Manage Holidays" Icon="{ui:SymbolIcon CalendarStar24}"
+                        ToolTip="Manage Holidays"
+                        Click="ManageHolidaysButton_Click" />
+                <!-- Opens ManageUsersDialog for adding/removing sign-in accounts (see
+                     SignInPanel/SetupAdminPanel below - this is the only place accounts
+                     are added after the very first one). -->
+                <ui:NavigationViewItem Content="Manage Users" Icon="{ui:SymbolIcon PersonAccounts24}"
+                        ToolTip="Manage Users"
+                        Click="ManageUsersButton_Click" />
+                <ui:NavigationViewItem Content="Backup / Restore" Icon="{ui:SymbolIcon Archive24}"
+                        ToolTip="Backup / Restore Database"
+                        Click="BackupRestoreButton_Click" />
                 <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}"
                         ToolTip="Settings - shared connection string and attendance device defaults"
                         Click="SettingsButton_Click" />
@@ -152,47 +170,6 @@
              IStatusBarService.SetStatusBarPresenter. Its own row (below the
              NavigationView) rather than overlaid, so it never covers content. -->
         <controls:StatusBarPresenter x:Name="RootStatusBarPresenter" Grid.Row="1" />
-
-        <!-- Overlaid top-right of the NavigationView's content area (defaults to
-             Grid.Row="0", same row as RootNavigationView) - each opens a dialog rather
-             than navigating to a page, so none of these are NavigationView MenuItems.
-             Settings used to be the rightmost one of these four (a gear ui:Button, same
-             top-right overlay spot) - it now lives in the pane's FooterMenuItems instead
-             (see RootNavigationView above), so these three shifted right by one slot
-             (Margin 12/54/96, was 54/96/138) to close the gap it left behind. -->
-        <ui:Button x:Name="BackupRestoreButton"
-                Icon="{ui:SymbolIcon Archive24}"
-                Width="36" Height="32"
-                Padding="0"
-                HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,8,12,0"
-                ToolTip="Backup / Restore Database"
-                Click="BackupRestoreButton_Click" />
-
-        <!-- Same overlay trick, placed just left of Backup/Restore - opens
-             ManageUsersDialog for adding/removing sign-in accounts (see
-             SignInPanel/SetupAdminPanel below - this is the only place accounts are
-             added after the very first one). -->
-        <ui:Button x:Name="ManageUsersButton"
-                Icon="{ui:SymbolIcon PersonAccounts24}"
-                Width="36" Height="32"
-                Padding="0"
-                HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,8,54,0"
-                ToolTip="Manage Users"
-                Click="ManageUsersButton_Click" />
-
-        <!-- Same overlay trick again, placed just left of Manage Users - opens
-             ManageHolidaysDialog for maintaining the company holiday list that
-             Premium Pay (see the Payroll page) computes against. -->
-        <ui:Button x:Name="ManageHolidaysButton"
-                Icon="{ui:SymbolIcon CalendarStar24}"
-                Width="36" Height="32"
-                Padding="0"
-                HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,8,96,0"
-                ToolTip="Manage Holidays"
-                Click="ManageHolidaysButton_Click" />
 
         <!-- Sign-in gate, drawn last so it's on top of everything above - see
              MainWindow.xaml.cs's own doc comment and SignInPanel/SetupAdminPanel for why
