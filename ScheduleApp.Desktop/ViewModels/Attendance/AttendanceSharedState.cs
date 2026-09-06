@@ -501,9 +501,11 @@ public sealed class AttendanceDataVersion
     /// are: the Attendance Summary tab has already-computed results on screen that
     /// a pairing edit makes stale. Coarse "did ANYONE's pairing move" like
     /// DeviceLogsVersion, not per-employee like _lastScheduleChangeVersionByPin --
-    /// the one reader recomputes the whole period either way. Not read on the
-    /// payroll side: a pairing change reaches payroll through the attendance run it
-    /// already re-does, not as a separate input.</summary>
+    /// no reader narrows it to specific employees either way. Read on the payroll
+    /// side too, but only through AttendanceInputs below (never as a bare counter) --
+    /// a pairing change is not a separate *input* to a payroll computation, but it
+    /// does change what the attendance run inside that computation produces, so it
+    /// still has to be able to *trigger* one.</summary>
     public int PairingVersion { get; private set; }
 
     /// <summary>Bumped whenever the company-wide Holidays table changes -- by
@@ -561,6 +563,32 @@ public sealed class AttendanceDataVersion
     /// plain BumpSchedule() above instead.</summary>
     private readonly Dictionary<int, int> _lastScheduleChangeVersionByPin = [];
 
+    /// <summary>DeviceLogsVersion/ManualLogsVersion/PairingVersion read together as one
+    /// comparable value -- the three counters that between them cover every punch-side input
+    /// an IAttendanceRunner.RunAsync consumes, which is what a payroll figure is actually
+    /// computed from once the schedule side is accounted for separately (see ScheduleVersion/
+    /// AnyScheduleChangeSince above for that half).
+    ///
+    /// Exists because the payroll side needs all three treated as a single "is what I computed
+    /// from still current" question, not three independent ones: PayrollSummaryViewModel and
+    /// PayrollGroupViewModel each snapshot this once when a load succeeds and compare the whole
+    /// snapshot on the next Payroll page revisit (see either one's own RecheckOnPageRevisitAsync),
+    /// and a change in any of the three means exactly the same thing to them -- recompute. Three
+    /// separate _loadedXVersion fields per ViewModel would say nothing extra and would be three
+    /// more places for a future fourth punch-side counter to be forgotten. ReportViewModel
+    /// deliberately keeps reading the three counters individually instead of this: its own
+    /// ShouldAutoReload folds them in per-tab (PunchRecordsViewModel cares only about
+    /// DeviceLogsVersion, ManualEntriesViewModel only about ManualLogsVersion -- see this class's
+    /// own "deliberately four separate counters, not one" remarks above), which is precisely the
+    /// distinction this property throws away.
+    ///
+    /// A record struct rather than a tuple or a combined counter: equality is the entire point
+    /// (every reader does `!=` against its own stored snapshot and nothing else), and a struct
+    /// gives that with named members and no allocation, while a single summed counter would be
+    /// unreadable at a debugger breakpoint and would quietly stop distinguishing which input
+    /// moved.</summary>
+    public AttendanceInputsVersion AttendanceInputs => new(DeviceLogsVersion, ManualLogsVersion, PairingVersion);
+
     public void BumpDeviceLogs() => DeviceLogsVersion++;
     public void BumpManualLogs() => ManualLogsVersion++;
     public void BumpPairings() => PairingVersion++;
@@ -575,20 +603,31 @@ public sealed class AttendanceDataVersion
     /// AnyScheduleChangeSince below answer for just these employees rather than the whole
     /// roster.
     ///
-    /// Called only from ScheduleAssignmentViewModel's five Set Schedule/Set Leave/Clear
-    /// Schedule commands (single-employee and bulk-checked-employees alike) -- those are the
-    /// ordinary "change a schedule for an employee" paths PayrollGroupViewModel's own
-    /// RecheckOnPageRevisit exists for, and each already has the exact Employee (and
-    /// therefore Pin) it just wrote on hand. EmployeeTreeViewModel.DeleteEmployeeAsync and
-    /// ScheduleImportExportViewModel.ImportScheduleAsync deliberately still call the plain
-    /// BumpSchedule() above, unchanged -- a delete touches every date that employee ever had
-    /// a schedule entry for, not a specific handful, and an import's affected employees/dates
-    /// come from a workbook this class has no reason to parse just to attribute a version
-    /// bump. ScheduleVersion still moves for both, so ReportViewModel still notices; this
-    /// dictionary simply gains no entry, so AnyScheduleChangeSince won't flag either one on
-    /// its own -- PayrollGroupViewModel's existing manual Reload button is the fallback there,
-    /// same role it already plays for a change made while the Payroll page wasn't open at
-    /// all.</summary>
+    /// Called from every write that changes some identifiable set of employees' schedule:
+    /// ScheduleAssignmentViewModel's five Set Schedule/Set Leave/Clear Schedule commands
+    /// (single-employee and bulk-checked-employees alike), EmployeeTreeViewModel.
+    /// DeleteEmployeeAsync, and ScheduleImportExportViewModel.ImportScheduleAsync. Each one
+    /// already has the exact Pins it just wrote on hand, so none of them has any extra work to
+    /// do to call this instead of the plain BumpSchedule() above -- the delete knows the one
+    /// employee it just removed, and the import's own already-parsed workbook (a
+    /// List&lt;Department&gt; of Employees, handed straight to IScheduleRepository.ImportAsync)
+    /// is where its Pins come from.
+    ///
+    /// Note what's deliberately NOT narrowed: the *dates* touched. A delete wipes every date
+    /// that employee ever had an entry for and an import can write any range the workbook
+    /// names, but neither one needs to say so -- readers only ever ask "did MY employees move",
+    /// never "did they move inside MY period" (see PayrollGroupViewModel.
+    /// RecheckOnPageRevisitAsync's own doc comment for why a date dimension would buy nothing:
+    /// a recompute is always scoped to the reader's own current period regardless, so an edit
+    /// outside it recomputes to the identical numbers). Over-reporting is the safe direction
+    /// here and under-reporting is the bug, which is also why the import passes every Pin in
+    /// the workbook rather than trying to work out which rows ImportAsync actually changed.
+    ///
+    /// The plain BumpSchedule() above now has no callers left in the app. It stays as the
+    /// honest primitive this one is built on, and for any future writer that genuinely can't
+    /// name the employees it touched -- but if you're about to call it, check first that you
+    /// really can't, because AnyScheduleChangeSince cannot see a bump that left no entry
+    /// here.</summary>
     public void BumpScheduleForEmployees(IReadOnlyCollection<int> employeePins)
     {
         ScheduleVersion++;
@@ -606,3 +645,19 @@ public sealed class AttendanceDataVersion
     public bool AnyScheduleChangeSince(IReadOnlyCollection<int> pins, int sinceVersion) =>
         pins.Any(pin => _lastScheduleChangeVersionByPin.TryGetValue(pin, out var v) && v > sinceVersion);
 }
+
+/// <summary>What AttendanceDataVersion.AttendanceInputs hands back -- the three punch-side
+/// counters as one value a reader can store and compare in a single field. See that property's
+/// own doc comment for why the payroll side wants them fused and why ReportViewModel
+/// deliberately doesn't.
+///
+/// Compared only for equality, never ordered: a reader asks "is this the same as what I loaded
+/// under", not "is this newer", so there's nothing here that needs to know the counters only
+/// ever increase. That also means a reader holding a stale snapshot across a hypothetical
+/// counter reset would still correctly see a difference.
+///
+/// Nullable at every use site (`AttendanceInputsVersion?`), with null meaning "never loaded" --
+/// the equivalent of the -1 sentinel the sibling int stamps (_loadedScheduleVersion,
+/// _loadedHolidayVersion) use, but without inventing a magic value for a type that has no
+/// natural "impossible" one.</summary>
+public readonly record struct AttendanceInputsVersion(int DeviceLogs, int ManualLogs, int Pairings);

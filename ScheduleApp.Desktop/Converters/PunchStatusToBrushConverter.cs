@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using ScheduleApp.Core.Attendance;
@@ -25,7 +26,14 @@ public class PunchStatusToBrushConverter : IValueConverter
     // them (see PunchStatus.RestDay's own doc comment: it still reflects
     // whether the day was actually worked, unlike Leave/Official Business).
     private static readonly SolidColorBrush RestDayBrush = new(Color.FromRgb(0x0D, 0x94, 0x88));
-    private static readonly SolidColorBrush DefaultBrush = Brushes.Black;
+
+    // Fallback for a PunchStatus value outside the six handled above (shouldn't happen in
+    // practice). Resolved fresh on every Convert() call rather than cached, same reasoning
+    // as CalendarDayToBrushConverter's own EmptyBrush -- a hardcoded Brushes.Black would be
+    // unreadable as text on a Dark-theme background.
+    private static SolidColorBrush DefaultBrush =>
+        Application.Current?.TryFindResource("TextFillColorPrimaryBrush") as SolidColorBrush
+        ?? Brushes.Black;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         value switch

@@ -6,18 +6,11 @@ using ScheduleApp.Core.Models;
 
 namespace ScheduleApp.Data.Repositories;
 
-public class ScheduleRepository : IScheduleRepository
+public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
 {
-    private readonly ScheduleDbContext _db;
-
-    public ScheduleRepository(ScheduleDbContext db)
-    {
-        _db = db;
-    }
-
     public async Task<List<Department>> GetDepartmentsWithEmployeesAsync(CancellationToken cancellationToken = default)
     {
-        return await _db.Departments
+        return await db.Departments
             .Include(d => d.Employees)
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
@@ -27,7 +20,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<List<Employee>> GetUnassignedEmployeesAsync(CancellationToken cancellationToken = default)
     {
-        return await _db.Employees
+        return await db.Employees
             .Where(e => e.DepartmentId == null)
             .OrderBy(e => e.LastName)
             .AsNoTracking()
@@ -36,7 +29,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<List<Department>> GetActiveDepartmentsWithEmployeesAsync(CancellationToken cancellationToken = default)
     {
-        return await _db.Departments
+        return await db.Departments
             .Include(d => d.Employees.Where(e => !e.IsBlacklisted))
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
@@ -46,7 +39,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<List<Employee>> GetActiveUnassignedEmployeesAsync(CancellationToken cancellationToken = default)
     {
-        return await _db.Employees
+        return await db.Employees
             .Where(e => e.DepartmentId == null && !e.IsBlacklisted)
             .OrderBy(e => e.LastName)
             .AsNoTracking()
@@ -65,7 +58,7 @@ public class ScheduleRepository : IScheduleRepository
         // entirely orthogonal to ScheduleEntry.Employee's own relationship (keyed off Pin
         // as an alternate key -- see ScheduleDbContext's own remarks on ScheduleEntry) that
         // the nested ThenInclude below rides on.
-        return await _db.Departments
+        return await db.Departments
             .Where(d => d.Employees.Any(e => employeeIds.Contains(e.Id)))
             .Include(d => d.Employees.Where(e => employeeIds.Contains(e.Id)))
                 .ThenInclude(e => e.ScheduleEntries.Where(s => s.Date >= rangeStart && s.Date <= rangeEnd))
@@ -79,7 +72,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<List<Employee>> GetUnassignedForExportAsync(IReadOnlyCollection<int> employeeIds,
         DateOnly rangeStart, DateOnly rangeEnd, CancellationToken cancellationToken = default)
     {
-        return await _db.Employees
+        return await db.Employees
             .Where(e => e.DepartmentId == null && employeeIds.Contains(e.Id))
             .Include(e => e.ScheduleEntries.Where(s => s.Date >= rangeStart && s.Date <= rangeEnd))
                 .ThenInclude(s => s.FlexibleSegments)
@@ -94,7 +87,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<List<ScheduleEntry>> GetScheduleEntriesForEmployeeAsync(int employeePin,
         CancellationToken cancellationToken = default)
     {
-        return await _db.ScheduleEntries
+        return await db.ScheduleEntries
             .Where(s => s.EmployeeId == employeePin)
             .Include(s => s.FlexibleSegments)
             .OrderBy(s => s.Date)
@@ -114,7 +107,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<List<ScheduleEntry>> GetScheduleEntriesForPeriodAsync(DateOnly periodStart, DateOnly periodEnd,
         IReadOnlyCollection<int>? employeePins = null, CancellationToken cancellationToken = default)
     {
-        return await _db.ScheduleEntries
+        return await db.ScheduleEntries
             .Where(s => s.Date >= periodStart && s.Date <= periodEnd)
             .Where(s => employeePins == null || employeePins.Contains(s.EmployeeId))
             .Include(s => s.Employee)
@@ -129,7 +122,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<List<Employee>> GetEmployeesByPinsAsync(IReadOnlyCollection<int> pins,
         CancellationToken cancellationToken = default)
     {
-        return await _db.Employees
+        return await db.Employees
             .Where(e => pins.Contains(e.Pin))
             .Include(e => e.Department)
             .OrderBy(e => e.LastName)
@@ -139,10 +132,10 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<Department> AddDepartmentAsync(string name, CancellationToken cancellationToken = default)
     {
-        var maxOrder = await _db.Departments.Select(d => (int?)d.SortOrder).MaxAsync(cancellationToken) ?? 0;
+        var maxOrder = await db.Departments.Select(d => (int?)d.SortOrder).MaxAsync(cancellationToken) ?? 0;
         var department = new Department { Name = name, SortOrder = maxOrder + 1 };
-        _db.Departments.Add(department);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.Departments.Add(department);
+        await db.SaveChangesAsync(cancellationToken);
         return department;
     }
 
@@ -155,26 +148,26 @@ public class ScheduleRepository : IScheduleRepository
     /// </summary>
     private async Task<Department> GetOrCreateDepartmentAsync(string name, CancellationToken cancellationToken)
     {
-        var department = await _db.Departments.FirstOrDefaultAsync(d => d.Name == name, cancellationToken);
+        var department = await db.Departments.FirstOrDefaultAsync(d => d.Name == name, cancellationToken);
         if (department is not null)
             return department;
 
-        var maxOrder = await _db.Departments.Select(d => (int?)d.SortOrder).MaxAsync(cancellationToken) ?? 0;
+        var maxOrder = await db.Departments.Select(d => (int?)d.SortOrder).MaxAsync(cancellationToken) ?? 0;
         department = new Department { Name = name, SortOrder = maxOrder + 1 };
-        _db.Departments.Add(department);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.Departments.Add(department);
+        await db.SaveChangesAsync(cancellationToken);
         return department;
     }
 
     public async Task DeleteDepartmentAsync(int departmentId, CancellationToken cancellationToken = default)
     {
-        var department = await _db.Departments.FindAsync(new object?[] { departmentId }, cancellationToken);
+        var department = await db.Departments.FindAsync(new object?[] { departmentId }, cancellationToken);
         if (department is null) return;
 
         // The FK is configured with ON DELETE SET NULL, so this unassigns rather
         // than deletes the department's employees -- no need to load them first.
-        _db.Departments.Remove(department);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.Departments.Remove(department);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Adds a new employee. <paramref name="pin"/> is required (see Employee.Pin's
@@ -193,7 +186,7 @@ public class ScheduleRepository : IScheduleRepository
         double? clockOutBufferBeforeHours = null, double? clockOutBufferAfterHours = null,
         CancellationToken cancellationToken = default)
     {
-        if (await _db.Employees.AnyAsync(e => e.Pin == pin, cancellationToken))
+        if (await db.Employees.AnyAsync(e => e.Pin == pin, cancellationToken))
             throw new DuplicateEmployeeIdException(pin);
 
         var employee = new Employee
@@ -223,11 +216,11 @@ public class ScheduleRepository : IScheduleRepository
             ClockOutBufferBeforeHours = clockOutBufferBeforeHours,
             ClockOutBufferAfterHours = clockOutBufferAfterHours
         };
-        _db.Employees.Add(employee);
+        db.Employees.Add(employee);
 
         try
         {
-            await _db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (IsUniquePinViolation(ex))
         {
@@ -241,7 +234,7 @@ public class ScheduleRepository : IScheduleRepository
             // "Added" employee would be resent (and fail again) on every later unrelated
             // save for the rest of the app session -- ScheduleDbContext lives for the whole
             // session (see App.xaml.cs), not just this one call.
-            _db.Entry(employee).State = EntityState.Detached;
+            db.Entry(employee).State = EntityState.Detached;
             throw new DuplicateEmployeeIdException(pin);
         }
 
@@ -264,10 +257,10 @@ public class ScheduleRepository : IScheduleRepository
         double? clockOutBufferBeforeHours = null, double? clockOutBufferAfterHours = null,
         CancellationToken cancellationToken = default)
     {
-        var employee = await _db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
+        var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
         if (employee is null) return;
 
-        if (await _db.Employees.AnyAsync(e => e.Pin == pin && e.Id != employeeId, cancellationToken))
+        if (await db.Employees.AnyAsync(e => e.Pin == pin && e.Id != employeeId, cancellationToken))
             throw new DuplicateEmployeeIdException(pin);
 
         employee.LastName = lastName;
@@ -297,7 +290,7 @@ public class ScheduleRepository : IScheduleRepository
 
         try
         {
-            await _db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (IsUniquePinViolation(ex))
         {
@@ -307,7 +300,7 @@ public class ScheduleRepository : IScheduleRepository
             // column values back from the DB and clears the "Modified" flags this failed
             // save left behind -- without it, the same bad update would be resent (and
             // fail again) on every later unrelated save for the rest of the app session.
-            await _db.Entry(employee).ReloadAsync(cancellationToken);
+            await db.Entry(employee).ReloadAsync(cancellationToken);
             throw new DuplicateEmployeeIdException(pin);
         }
     }
@@ -330,20 +323,20 @@ public class ScheduleRepository : IScheduleRepository
     /// referencing it is gone.</summary>
     public async Task DeleteEmployeeAsync(int employeeId, CancellationToken cancellationToken = default)
     {
-        var employee = await _db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
+        var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
         if (employee is null) return;
 
-        _db.Employees.Remove(employee);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.Employees.Remove(employee);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task SetEmployeeBlacklistAsync(int employeeId, bool isBlacklisted, CancellationToken cancellationToken = default)
     {
-        var employee = await _db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
+        var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
         if (employee is null) return;
 
         employee.IsBlacklisted = isBlacklisted;
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Sets (creates or overwrites) one employee's schedule for each given date --
@@ -374,7 +367,7 @@ public class ScheduleRepository : IScheduleRepository
         var dateList = dates.Distinct().ToList();
         if (dateList.Count == 0) return;
 
-        if (!await _db.Employees.AnyAsync(e => e.Pin == employeePin, cancellationToken))
+        if (!await db.Employees.AnyAsync(e => e.Pin == employeePin, cancellationToken))
         {
             throw new InvalidOperationException(
                 $"No employee has Employee ID {employeePin}.");
@@ -390,7 +383,7 @@ public class ScheduleRepository : IScheduleRepository
         // the collection below is recognized by EF as deleting the old rows, rather
         // than just detaching them in memory -- see the class-level note on
         // FlexibleSegment's required FK / cascade-delete mapping.
-        var existingByDate = await _db.ScheduleEntries
+        var existingByDate = await db.ScheduleEntries
             .Where(s => s.EmployeeId == employeePin && dateList.Contains(s.Date))
             .Include(s => s.FlexibleSegments)
             .ToDictionaryAsync(s => s.Date, cancellationToken);
@@ -406,7 +399,7 @@ public class ScheduleRepository : IScheduleRepository
                 restrictedTimeIn, restrictedTimeOut);
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -534,7 +527,7 @@ public class ScheduleRepository : IScheduleRepository
             });
 
         newEntry.ValidateScheduleTypeShape();
-        _db.ScheduleEntries.Add(newEntry);
+        db.ScheduleEntries.Add(newEntry);
         return newEntry;
     }
 
@@ -549,14 +542,14 @@ public class ScheduleRepository : IScheduleRepository
         var dateList = dates.Distinct().ToList();
         if (dateList.Count == 0) return;
 
-        var existing = await _db.ScheduleEntries
+        var existing = await db.ScheduleEntries
             .Where(s => s.EmployeeId == employeePin && dateList.Contains(s.Date))
             .ToListAsync(cancellationToken);
 
         if (existing.Count == 0) return;
 
-        _db.ScheduleEntries.RemoveRange(existing);
-        await _db.SaveChangesAsync(cancellationToken);
+        db.ScheduleEntries.RemoveRange(existing);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Inserts or updates employees/entries imported from a full schedule workbook
@@ -575,10 +568,10 @@ public class ScheduleRepository : IScheduleRepository
 
             foreach (var incomingEmployee in incomingDept.Employees)
             {
-                var employee = await _db.Employees.FirstOrDefaultAsync(
+                var employee = await db.Employees.FirstOrDefaultAsync(
                     e => e.DepartmentId == department.Id && e.Pin == incomingEmployee.Pin, cancellationToken);
 
-                employee ??= await _db.Employees.FirstOrDefaultAsync(e =>
+                employee ??= await db.Employees.FirstOrDefaultAsync(e =>
                     e.DepartmentId == department.Id &&
                     e.LastName == incomingEmployee.LastName &&
                     e.FirstName == incomingEmployee.FirstName, cancellationToken);
@@ -592,8 +585,8 @@ public class ScheduleRepository : IScheduleRepository
                         Pin = incomingEmployee.Pin,
                         DepartmentId = department.Id
                     };
-                    _db.Employees.Add(employee);
-                    await _db.SaveChangesAsync(cancellationToken);
+                    db.Employees.Add(employee);
+                    await db.SaveChangesAsync(cancellationToken);
                 }
 
                 var employeePin = employee.Pin;
@@ -605,7 +598,7 @@ public class ScheduleRepository : IScheduleRepository
                 // clearing an existing entry's segments below is recognized by EF as a
                 // delete of the old rows, not just an in-memory detach -- see
                 // SetScheduleForDatesAsync above for the same pattern.
-                var existingByDate = await _db.ScheduleEntries
+                var existingByDate = await db.ScheduleEntries
                     .Where(s => s.EmployeeId == employeePin)
                     .Include(s => s.FlexibleSegments)
                     .ToDictionaryAsync(s => s.Date, cancellationToken);
@@ -637,7 +630,7 @@ public class ScheduleRepository : IScheduleRepository
             }
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task ImportEmployeeRosterAsync(IEnumerable<EmployeeImportRow> rows, CancellationToken cancellationToken = default)
@@ -649,7 +642,7 @@ public class ScheduleRepository : IScheduleRepository
             if (!string.IsNullOrWhiteSpace(row.DepartmentName))
                 department = await GetOrCreateDepartmentAsync(row.DepartmentName, cancellationToken);
 
-            var employee = await _db.Employees.FirstOrDefaultAsync(e => e.Pin == row.Pin, cancellationToken);
+            var employee = await db.Employees.FirstOrDefaultAsync(e => e.Pin == row.Pin, cancellationToken);
             if (employee is null)
             {
                 employee = new Employee
@@ -660,7 +653,7 @@ public class ScheduleRepository : IScheduleRepository
                     DepartmentId = department?.Id
                 };
                 ApplyOptionalImportFields(employee, row);
-                _db.Employees.Add(employee);
+                db.Employees.Add(employee);
             }
             else
             {
@@ -672,7 +665,7 @@ public class ScheduleRepository : IScheduleRepository
             }
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

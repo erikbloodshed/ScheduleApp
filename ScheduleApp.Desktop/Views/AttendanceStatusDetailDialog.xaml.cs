@@ -25,7 +25,7 @@ namespace ScheduleApp.Desktop.Views;
 /// WriteRows), so summaries doesn't need to already be in the same order as
 /// rows for the exported workbook to come out right.
 /// </summary>
-public partial class AttendanceStatusDetailDialog : Window
+public partial class AttendanceStatusDetailDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly PunchStatus _status;
     private readonly IReadOnlyList<AttendanceSummary> _summaries;

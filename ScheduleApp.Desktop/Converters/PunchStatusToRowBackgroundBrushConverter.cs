@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using ScheduleApp.Core.Attendance;
@@ -32,7 +33,14 @@ public class PunchStatusToRowBackgroundBrushConverter : IValueConverter
     // 10% teal blended with 90% white, the same blend-toward-white ratio the
     // four tints above approximate by eye.
     private static readonly SolidColorBrush RestDayBrush = new(Color.FromRgb(0xE7, 0xF4, 0xF3));
-    private static readonly SolidColorBrush DefaultBrush = Brushes.White;
+
+    // Complete's "plain default background" (see doc comment above) needs to actually be
+    // the theme's default background, not a hardcoded light-only white -- resolved fresh
+    // on every Convert() call rather than cached in a static field, same reasoning as
+    // CalendarDayToBrushConverter's own EmptyBrush.
+    private static SolidColorBrush DefaultBrush =>
+        Application.Current?.TryFindResource("ApplicationBackgroundBrush") as SolidColorBrush
+        ?? Brushes.White;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         value switch

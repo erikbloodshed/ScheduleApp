@@ -6,7 +6,7 @@ using ScheduleApp.Core.Models;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class EmployeeDialog : Window
+public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly IReadOnlySet<int> _takenEmployeeIds;
 

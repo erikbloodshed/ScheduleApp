@@ -10,7 +10,14 @@ using ScheduleApp.Desktop.ViewModels.Attendance;
 namespace ScheduleApp.Desktop.Services;
 
 /// <inheritdoc cref="IPayrollComputationService" />
-public class PayrollComputationService : IPayrollComputationService
+public class PayrollComputationService(
+    IAttendanceRunner attendanceRunner,
+    IPayrollAdjustmentRepository adjustmentRepository,
+    IPayrollUndertimeWaiverRepository undertimeWaiverRepository,
+    IHolidayRepository holidayRepository,
+    AttendanceDataVersion dataVersion,
+    AttendanceSettings attendanceSettings,
+    PayrollSettings payrollSettings) : IPayrollComputationService
 {
     /// <summary>EnteredBy stamp used for SSS/PhilHealth/Pag-IBIG rows written by
     /// SeedOrReseedContributionsAsync below, and the exact marker that method's own
@@ -40,40 +47,31 @@ public class PayrollComputationService : IPayrollComputationService
     /// isn't the same shape this single-employee slot is for, and there's no adjustment-only
     /// batch caller that would ever need it.</summary>
     private (int Pin, DateOnly Start, DateOnly End, IReadOnlyList<AttendanceSummary> Summaries,
-        IReadOnlyCollection<DateOnly>? HolidayDates, int HolidayVersion)? _lastAttendanceRun;
+        IReadOnlyCollection<DateOnly>? HolidayDates, int HolidayVersion,
+        AttendanceInputsVersion AttendanceInputs)? _lastAttendanceRun;
 
-    private readonly IAttendanceRunner _attendanceRunner;
-    private readonly IPayrollAdjustmentRepository _adjustmentRepository;
-    private readonly IPayrollUndertimeWaiverRepository _undertimeWaiverRepository;
-    private readonly IHolidayRepository _holidayRepository;
+    // dataVersion is read only to stamp _lastAttendanceRun with the versions its cached
+    // contents were fetched at, so ComputeOneAdjustmentsOnlyAsync can tell a still-good cache
+    // entry from an invalidated one. This service never bumps any version itself.
+    //
+    // Two stamps, for the two halves of what's cached. HolidayVersion covers the cached
+    // HolidayDates, which a Mark/Remove Holiday (calendar or ManageHolidaysDialog) invalidates.
+    // AttendanceInputs covers the cached Summaries: those come out of an
+    // IAttendanceRunner.RunAsync, so a device-log import, manual-entry edit, or punch-pairing
+    // edit changes what that run would now produce -- see AttendanceDataVersion.AttendanceInputs'
+    // own doc comment.
+    //
+    // The AttendanceInputs half is belt-and-braces rather than a reachable bug today: no caller
+    // can currently make one of those three edits without leaving the Payroll page, and coming
+    // back runs PayrollSummaryViewModel.RecheckOnPageRevisitAsync, which forces a full
+    // ComputeOneAsync that overwrites this slot before any adjustments-only call could read it.
+    // Stamped anyway, because that safety is a property of the app's current navigation graph
+    // rather than of this cache -- and a cache whose correctness depends on which screens
+    // happen to exist is one that breaks quietly the day a punch edit becomes reachable from
+    // the Payroll page.
 
-    /// <summary>Only used to stamp _lastAttendanceRun with the HolidayVersion its cached
-    /// HolidayDates were fetched at, so ComputeOneAdjustmentsOnlyAsync can tell a still-good
-    /// cache entry from one whose holiday dates a Mark/Remove Holiday (calendar or
-    /// ManageHolidaysDialog) has since invalidated -- see AttendanceDataVersion.HolidayVersion's
-    /// own doc comment. This service never bumps any version itself.</summary>
-    private readonly AttendanceDataVersion _dataVersion;
-
-    private readonly AttendancePolicy _attendancePolicy;
-    private readonly PayrollPolicy _payrollPolicy;
-
-    public PayrollComputationService(
-        IAttendanceRunner attendanceRunner,
-        IPayrollAdjustmentRepository adjustmentRepository,
-        IPayrollUndertimeWaiverRepository undertimeWaiverRepository,
-        IHolidayRepository holidayRepository,
-        AttendanceDataVersion dataVersion,
-        AttendanceSettings attendanceSettings,
-        PayrollSettings payrollSettings)
-    {
-        _attendanceRunner = attendanceRunner;
-        _adjustmentRepository = adjustmentRepository;
-        _undertimeWaiverRepository = undertimeWaiverRepository;
-        _holidayRepository = holidayRepository;
-        _dataVersion = dataVersion;
-        _attendancePolicy = attendanceSettings.Policy;
-        _payrollPolicy = payrollSettings.Policy;
-    }
+    private readonly AttendancePolicy _attendancePolicy = attendanceSettings.Policy;
+    private readonly PayrollPolicy _payrollPolicy = payrollSettings.Policy;
 
     /// <summary>One employee's IAttendanceRunner + IPayrollAdjustmentRepository +
     /// PayrollCalculator round trip -- extracted out of PayrollViewModel so every
@@ -108,17 +106,17 @@ public class PayrollComputationService : IPayrollComputationService
         // progress messages) -- a single-employee run is fast enough that a step-by-step
         // "Matching punches…" pulse would just flicker past, and the plain IsBusy progress
         // bar already tells the person something's happening.
-        var runResult = await _attendanceRunner.RunAsync(request, new Progress<string>(), cancellationToken);
+        var runResult = await attendanceRunner.RunAsync(request, new Progress<string>(), cancellationToken);
         IReadOnlyList<PayrollAdjustment> adjustments =
-            await _adjustmentRepository.GetForEmployeePeriodAsync(pin, start, end, cancellationToken);
-        bool undertimeWaived = await _undertimeWaiverRepository.IsWaivedAsync(pin, start, end, cancellationToken);
+            await adjustmentRepository.GetForEmployeePeriodAsync(pin, start, end, cancellationToken);
+        bool undertimeWaived = await undertimeWaiverRepository.IsWaivedAsync(pin, start, end, cancellationToken);
 
         // Holidays are company-wide (see Holiday's own doc comment), not employee-specific,
         // so there's nothing to scope this fetch to beyond the period itself -- same "hand the
         // whole thing through" shape the other three round trips above already have. One extra
         // round trip per single-employee call, same reasoning PrepareBatchAsync below applies
         // once per batch instead of once per employee in it.
-        var holidayDates = await _holidayRepository.ListDatesForPeriodAsync(start, end, cancellationToken);
+        var holidayDates = await holidayRepository.ListDatesForPeriodAsync(start, end, cancellationToken);
 
         // Records this employee/period's just-fetched attendance for
         // ComputeOneAdjustmentsOnlyAsync to reuse -- see _lastAttendanceRun's own doc comment
@@ -127,7 +125,9 @@ public class PayrollComputationService : IPayrollComputationService
         // runs, so it's already in place for a caller that turns around and calls
         // ComputeOneAdjustmentsOnlyAsync immediately after this same ComputeOneAsync call
         // returns.
-        _lastAttendanceRun = (pin, start, end, runResult.Summaries, holidayDates, _dataVersion.HolidayVersion);
+        _lastAttendanceRun = (
+            pin, start, end, runResult.Summaries, holidayDates,
+            dataVersion.HolidayVersion, dataVersion.AttendanceInputs);
 
         // runResult.Summaries is already scoped to just this one pin (TargetPins above is a
         // single-element set), so it's already the exact same shape ComputeCoreAsync's own
@@ -152,19 +152,21 @@ public class PayrollComputationService : IPayrollComputationService
         int pin = employee.Pin;
 
         // Cache miss (no prior ComputeOneAsync call at all, one for a different
-        // employee/period than this call's own, or one whose cached holiday dates a
-        // Mark/Remove Holiday has since invalidated -- HolidayVersion moved) -- fall back to
-        // the real, full path rather than guess at attendance data that isn't actually on
-        // hand. Also what (re-)populates _lastAttendanceRun for next time, so this is
-        // self-healing: at most one call per employee/period/holiday-version ever takes the
+        // employee/period than this call's own, one whose cached holiday dates a Mark/Remove
+        // Holiday has since invalidated -- HolidayVersion moved -- or one whose cached
+        // attendance summaries a punch-side edit has since invalidated -- AttendanceInputs
+        // moved) -- fall back to the real, full path rather than guess at attendance data that
+        // isn't actually on hand. Also what (re-)populates _lastAttendanceRun for next time, so
+        // this is self-healing: at most one call per employee/period/version-set ever takes the
         // slow path.
         if (_lastAttendanceRun is not { } cached || cached.Pin != pin || cached.Start != start || cached.End != end
-            || cached.HolidayVersion != _dataVersion.HolidayVersion)
+            || cached.HolidayVersion != dataVersion.HolidayVersion
+            || cached.AttendanceInputs != dataVersion.AttendanceInputs)
             return await ComputeOneAsync(employee, start, end, cancellationToken);
 
         IReadOnlyList<PayrollAdjustment> adjustments =
-            await _adjustmentRepository.GetForEmployeePeriodAsync(pin, start, end, cancellationToken);
-        bool undertimeWaived = await _undertimeWaiverRepository.IsWaivedAsync(pin, start, end, cancellationToken);
+            await adjustmentRepository.GetForEmployeePeriodAsync(pin, start, end, cancellationToken);
+        bool undertimeWaived = await undertimeWaiverRepository.IsWaivedAsync(pin, start, end, cancellationToken);
 
         return await ComputeCoreAsync(
             employee, start, end, cached.Summaries, adjustments, undertimeWaived, cached.HolidayDates,
@@ -198,9 +200,9 @@ public class PayrollComputationService : IPayrollComputationService
             TargetPins = [.. pins],
         };
 
-        var runResult = await _attendanceRunner.RunAsync(request, new Progress<string>(), cancellationToken);
-        var adjustments = await _adjustmentRepository.GetForEmployeesPeriodAsync(pins, start, end, cancellationToken);
-        var waivedPins = await _undertimeWaiverRepository.GetWaivedPinsAsync(pins, start, end, cancellationToken);
+        var runResult = await attendanceRunner.RunAsync(request, new Progress<string>(), cancellationToken);
+        var adjustments = await adjustmentRepository.GetForEmployeesPeriodAsync(pins, start, end, cancellationToken);
+        var waivedPins = await undertimeWaiverRepository.GetWaivedPinsAsync(pins, start, end, cancellationToken);
 
         // Holidays are company-wide (see Holiday's own doc comment), not employee-specific --
         // unlike AllSummaries/AdjustmentsByPin/WaivedPins above, there's no per-pin dimension
@@ -208,7 +210,7 @@ public class PayrollComputationService : IPayrollComputationService
         // in the batch. Still one fetch per batch rather than one per employee in it, same
         // "don't repeat a company-wide fetch N times" reasoning this method's own doc comment
         // gives for the other three round trips.
-        var holidayDates = await _holidayRepository.ListDatesForPeriodAsync(start, end, cancellationToken);
+        var holidayDates = await holidayRepository.ListDatesForPeriodAsync(start, end, cancellationToken);
 
         // Each group is cast to IReadOnlyList<PayrollAdjustment> right here in the selector --
         // unlike IReadOnlyList<T>/IReadOnlyCollection<T>, IReadOnlyDictionary<TKey, TValue> is
@@ -528,7 +530,7 @@ public class PayrollComputationService : IPayrollComputationService
             {
                 try
                 {
-                    added.Add(await _adjustmentRepository.AddAsync(toAdd, cancellationToken));
+                    added.Add(await adjustmentRepository.AddAsync(toAdd, cancellationToken));
                 }
                 catch (InvalidOperationException)
                 {
@@ -549,7 +551,7 @@ public class PayrollComputationService : IPayrollComputationService
 
             try
             {
-                await _adjustmentRepository.UpdateAsync(toUpdate!, cancellationToken);
+                await adjustmentRepository.UpdateAsync(toUpdate!, cancellationToken);
                 updated.Add(toUpdate!);
             }
             catch (InvalidOperationException)
@@ -681,11 +683,11 @@ public class PayrollComputationService : IPayrollComputationService
         if (toAdd.Count == 0 && toUpdate.Count == 0) return batch;
 
         IReadOnlyList<PayrollAdjustment> added = toAdd.Count > 0
-            ? await _adjustmentRepository.AddRangeAsync(toAdd, cancellationToken)
+            ? await adjustmentRepository.AddRangeAsync(toAdd, cancellationToken)
             : [];
 
         if (toUpdate.Count > 0)
-            await _adjustmentRepository.UpdateRangeAsync(toUpdate, cancellationToken);
+            await adjustmentRepository.UpdateRangeAsync(toUpdate, cancellationToken);
 
         // Swap each corrected row in by Id, append each pin's brand-new rows -- same merge
         // shape SeedDefaultContributionsAsync's own single-employee merge already uses, just

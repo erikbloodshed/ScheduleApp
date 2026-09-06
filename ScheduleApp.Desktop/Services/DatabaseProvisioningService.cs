@@ -239,9 +239,9 @@ public class DatabaseProvisioningService
     private static async Task ReconcileRoleMembershipAsync(
         SqlConnection connection, string loginName, DatabaseAccessLevel accessLevel, CancellationToken cancellationToken)
     {
-        var desiredRoles = accessLevel == DatabaseAccessLevel.FullAccess
-            ? new[] { "db_owner" }
-            : new[] { "db_datareader", "db_datawriter" };
+        string[] desiredRoles = accessLevel == DatabaseAccessLevel.FullAccess
+            ? ["db_owner"]
+            : ["db_datareader", "db_datawriter"];
 
         foreach (var role in ManagedRoles)
         {

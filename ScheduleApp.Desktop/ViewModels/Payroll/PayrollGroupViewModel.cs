@@ -103,6 +103,23 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// per-employee holiday tracking to filter against.</summary>
     private int _loadedHolidayVersion = -1;
 
+    /// <summary>Third sibling of the two stamps above, for _dataVersion.AttendanceInputs --
+    /// the device-punch/manual-punch/pairing counters as one comparable value (see that
+    /// property's own doc comment). Snapshotted at the same start-of-load moment, committed on
+    /// the same success check, and compared with a raw `!=` like _loadedHolidayVersion rather
+    /// than per-pin: none of the three counters behind it records which employees it touched.
+    /// Null (not -1) until the first successful load -- see AttendanceInputsVersion's own doc
+    /// comment.
+    ///
+    /// Group-side counterpart of PayrollSummaryViewModel._loadedAttendanceInputs, closing the
+    /// same gap for the NetPay column that one closes for SelectedEmployee's detailed
+    /// breakdown -- see that field's own doc comment for what actually goes stale without it.
+    /// Unlike the schedule half, this can't be narrowed to just this group's members, so a
+    /// punch edit for someone outside the group still recomputes it; that costs one batch run
+    /// that lands on the same numbers, which is the same "over-report rather than under-report"
+    /// trade the rest of this mechanism already makes.</summary>
+    private AttendanceInputsVersion? _loadedAttendanceInputs;
+
     /// <summary>Guards RequestPayrollGroupRefresh() the same "arrived while busy, so defer
     /// instead of racing the shared ScheduleDbContext" way PayrollSummaryViewModel's own
     /// _refreshPending field guards RequestRefresh() -- see that field's own doc comment. Kept
@@ -641,6 +658,7 @@ public partial class PayrollGroupViewModel : ObservableObject
         // Only committed to the field below once this whole run has actually succeeded.
         var scheduleVersionAtLoadStart = _dataVersion.ScheduleVersion;
         var holidayVersionAtLoadStart = _dataVersion.HolidayVersion;
+        var attendanceInputsAtLoadStart = _dataVersion.AttendanceInputs;
 
         await _busy.RunAsync(visibly: false, async cancellationToken =>
         {
@@ -716,6 +734,7 @@ public partial class PayrollGroupViewModel : ObservableObject
         {
             _loadedScheduleVersion = scheduleVersionAtLoadStart;
             _loadedHolidayVersion = holidayVersionAtLoadStart;
+            _loadedAttendanceInputs = attendanceInputsAtLoadStart;
         }
     }
 
@@ -753,17 +772,20 @@ public partial class PayrollGroupViewModel : ObservableObject
     ///
     /// Recomputes the WHOLE group (not just the touched employee's own row) once
     /// _dataVersion.AnyScheduleChangeSince says at least one currently-loaded employee's
-    /// schedule moved -- see that method's own doc comment for why it only ever says yes
-    /// for an edit made through Set/Clear Schedule or Set Leave (the ordinary "change a
-    /// schedule for an employee" path), not an Import or a Delete Employee, which still
-    /// only bump the raw ScheduleVersion counter this compares a snapshot of, not the
-    /// per-employee record this checks pins against; nudging a period picker (which
-    /// RequestPayrollGroupRefresh reacts to unconditionally) or re-running "New Payroll
-    /// Run…"/"Load Payroll Group…" are what's left to force a recompute for those two, now
-    /// that there's no dedicated one-click fallback for them the way the removed manual
-    /// "Reload" button used to be. A no-op, database-round-trip-wise, whenever nothing
-    /// relevant changed -- the overwhelming majority of revisits -- since
-    /// AnyScheduleChangeSince is a pure in-memory comparison.
+    /// schedule moved -- which now covers every schedule write in the app: Set/Clear Schedule
+    /// and Set Leave (single and bulk), Import Schedule, and Delete Employee all call
+    /// BumpScheduleForEmployees with the Pins they touched, so none of them needs a manual
+    /// fallback to be noticed here. (Import and Delete used to bump only the raw ScheduleVersion
+    /// counter, which this deliberately doesn't compare against, leaving them invisible to this
+    /// check; see BumpScheduleForEmployees' own doc comment for why per-pin is the right shape
+    /// and what "no caller left" means for the plain BumpSchedule().)
+    ///
+    /// Checked alongside two coarse `!=` comparisons this method runs first -- _loadedHolidayVersion
+    /// and _loadedAttendanceInputs -- which between them cover the company-wide inputs that have
+    /// no per-employee dimension to narrow by. See each field's own doc comment.
+    ///
+    /// A no-op, database-round-trip-wise, whenever nothing relevant changed -- the overwhelming
+    /// majority of revisits -- since all three checks are pure in-memory comparisons.
     ///
     /// Deliberately does NOT check the payroll group's own date range against the edited
     /// dates -- RefreshPayrollGroupRowsAsync always recomputes against _scope's own
@@ -783,6 +805,17 @@ public partial class PayrollGroupViewModel : ObservableObject
         // Holiday Pay is company-wide and there's no per-pin holiday tracking to narrow it
         // the way AnyScheduleChangeSince narrows a schedule edit below.
         if (_dataVersion.HolidayVersion != _loadedHolidayVersion)
+        {
+            await RefreshPayrollGroupRowsAsync();
+            return;
+        }
+
+        // A device-log import, manual-entry edit, or punch-pairing edit since this group was
+        // loaded moves the hours behind every affected employee's NetPay -- recompute the whole
+        // group unconditionally, same as the holiday check above and for the same reason: none
+        // of the three counters behind AttendanceInputs is per-employee, so there's nothing to
+        // narrow it to this group's pins with. See _loadedAttendanceInputs' own doc comment.
+        if (_dataVersion.AttendanceInputs != _loadedAttendanceInputs)
         {
             await RefreshPayrollGroupRowsAsync();
             return;

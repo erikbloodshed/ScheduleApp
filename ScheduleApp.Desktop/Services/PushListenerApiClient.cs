@@ -107,7 +107,7 @@ public class PushListenerApiClient : IDisposable
     /// </summary>
     public async Task<List<PushListenerLogEntry>> GetLogsAsync(string? level = null, string? sn = null, int take = 200)
     {
-        var query = new List<string> { $"take={take}" };
+        List<string> query = [$"take={take}"];
         if (!string.IsNullOrWhiteSpace(level))
         {
             query.Add($"level={Uri.EscapeDataString(level)}");
@@ -130,7 +130,7 @@ public class PushListenerApiClient : IDisposable
     public async Task<List<PushListenerAttendanceLogInfo>> GetAttendanceAsync(
         string? sn = null, string? pin = null, int take = 200, string? startTime = null, string? endTime = null)
     {
-        var query = new List<string> { $"take={take}" };
+        List<string> query = [$"take={take}"];
         if (!string.IsNullOrWhiteSpace(sn))
         {
             query.Add($"sn={Uri.EscapeDataString(sn)}");

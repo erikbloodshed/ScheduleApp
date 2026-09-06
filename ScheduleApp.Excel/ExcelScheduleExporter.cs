@@ -223,7 +223,7 @@ public static class ExcelScheduleExporter
     /// <summary>Order-independent equality between two entries' segment sets --
     /// both are sorted by TimeIn first so a day whose segments were saved/loaded
     /// in a different order still collapses into the same run as an identical day.</summary>
-    private static bool SameSegments(IReadOnlyCollection<FlexibleSegment> a, IReadOnlyCollection<FlexibleSegment> b)
+    private static bool SameSegments(List<FlexibleSegment> a, List<FlexibleSegment> b)
     {
         if (a.Count != b.Count) return false;
 

@@ -64,9 +64,9 @@ public static class FlexiblePairingBuilder
         for (int i = 0; i + 1 < orderedPunches.Count; i += 2)
             rawPairs.Add((orderedPunches[i], orderedPunches[i + 1]));
 
-        var unpaired = orderedPunches.Count % 2 != 0
-            ? new List<AttendanceLog> { orderedPunches[^1] }
-            : new List<AttendanceLog>();
+        List<AttendanceLog> unpaired = orderedPunches.Count % 2 != 0
+            ? [orderedPunches[^1]]
+            : [];
 
         var merged = new List<(AttendanceLog In, AttendanceLog Out)>();
         foreach (var pair in rawPairs)

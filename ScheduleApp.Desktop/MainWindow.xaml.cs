@@ -27,7 +27,7 @@ namespace ScheduleApp.Desktop;
 ///     LoginWindow/SetupAdminWindow's ShowDialog() returned true; it's called from
 ///     OnAuthSucceeded here instead, for the same reason as Title/Navigate above.
 /// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
     private readonly IConfiguration _configuration;
     private readonly AttendanceSettings _attendanceSettings;

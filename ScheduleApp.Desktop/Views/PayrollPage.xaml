@@ -14,9 +14,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="#F8FAFC" />
+                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -34,7 +34,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="#777777" />
+                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -495,7 +495,7 @@
                               Height="6"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Center"
-                              Background="#E2E8F0"
+                              Background="{DynamicResource DividerStrokeColorDefaultBrush}"
                               ResizeDirection="Rows" />
 
                 <views:EmployeeAttendancePanel x:Name="AttendancePanelControl"
@@ -530,7 +530,7 @@
         <Border x:Name="EmptyStateOverlay"
                 Grid.Row="0"
                 Grid.RowSpan="2"
-                Background="White"
+                Background="{DynamicResource ApplicationBackgroundBrush}"
                 Visibility="{Binding HasBatchScope,
                     Converter={StaticResource InverseBoolToVisibility}}">
             <!-- Same Width="380" fixed-width-card-on-a-solid-background shape as
@@ -547,7 +547,7 @@
                            Margin="0,0,0,8" />
                 <TextBlock Text="Start a new payroll run or reopen one you saved earlier to get going."
                            FontSize="14"
-                           Foreground="#64748B"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            Margin="0,0,0,24" />

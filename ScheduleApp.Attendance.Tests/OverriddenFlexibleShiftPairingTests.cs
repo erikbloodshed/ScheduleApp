@@ -88,7 +88,7 @@ public class OverriddenFlexibleShiftPairingTests
         var first = DevicePunch(employee.Pin, 1, new TimeOnly(8, 0));
         var stray = DevicePunch(employee.Pin, 2, new TimeOnly(12, 0));
         var last = DevicePunch(employee.Pin, 3, new TimeOnly(13, 0));
-        var punches = new List<AttendanceLog> { first, stray, last };
+        List<AttendanceLog> punches = [first, stray, last];
 
         // Sanity: without an override this day really is Partial.
         var withoutOverride = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy);
@@ -129,7 +129,7 @@ public class OverriddenFlexibleShiftPairingTests
         var morningOut = DevicePunch(employee.Pin, 2, new TimeOnly(12, 0));
         var afternoonIn = DevicePunch(employee.Pin, 3, new TimeOnly(13, 0));
         var afternoonOut = ManualPunch(employee.Pin, 1, new TimeOnly(17, 0)); // id 1 in the *manual* id space
-        var punches = new List<AttendanceLog> { morningIn, morningOut, afternoonIn, afternoonOut };
+        List<AttendanceLog> punches = [morningIn, morningOut, afternoonIn, afternoonOut];
 
         var pairing = Pairing(employee.Pin,
             (morningIn, 0, PairingRole.In),
@@ -249,7 +249,7 @@ public class OverriddenFlexibleShiftPairingTests
 
         var inPunch = DevicePunch(employee.Pin, 1, new TimeOnly(8, 0));
         var outPunch = DevicePunch(employee.Pin, 2, new TimeOnly(17, 0));
-        var punches = new List<AttendanceLog> { inPunch, outPunch };
+        List<AttendanceLog> punches = [inPunch, outPunch];
 
         // A deliberately nonsensical pairing for this day -- both punches as Ins.
         var pairing = Pairing(employee.Pin,
@@ -281,7 +281,7 @@ public class OverriddenFlexibleShiftPairingTests
         var firstTap = DevicePunch(employee.Pin, 1, new TimeOnly(8, 0));
         var duplicateTap = DevicePunch(employee.Pin, 2, new TimeOnly(8, 8)); // 8 min later
         var badgeOut = DevicePunch(employee.Pin, 3, new TimeOnly(17, 43));
-        var punches = new List<AttendanceLog> { firstTap, duplicateTap, badgeOut };
+        List<AttendanceLog> punches = [firstTap, duplicateTap, badgeOut];
 
         // Default path: three punches, smallest adjacent gap is 8 min, so 8:08 is
         // normalized away and the day comes out Complete on 8:00 -> 17:43.

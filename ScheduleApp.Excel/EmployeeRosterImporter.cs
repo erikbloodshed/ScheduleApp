@@ -166,7 +166,7 @@ public static class EmployeeRosterImporter
         return map;
     }
 
-    private static int? Col(IReadOnlyDictionary<string, int> headerMap, string header)
+    private static int? Col(Dictionary<string, int> headerMap, string header)
         => headerMap.TryGetValue(header, out var col) ? col : null;
 
     private static bool IsRowBlank(ExcelWorksheet ws, int row, int lastCol)

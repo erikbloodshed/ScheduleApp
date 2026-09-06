@@ -60,9 +60,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="#F8FAFC" />
+                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -80,7 +80,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="#777777" />
+                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -168,7 +168,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="#E2E8F0"
+                                        Value="{DynamicResource CardStrokeColorDefaultBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -248,8 +248,8 @@
                 <StackPanel DockPanel.Dock="Bottom"
                             Margin="2,8,0,0">
                     <TextBlock Text="{Binding SelectionScopeText}"
+                               Style="{StaticResource CaptionTextStyle}"
                                FontSize="11"
-                               Foreground="#475569"
                                TextWrapping="Wrap"
                                Margin="0,0,0,8" />
                     <StackPanel Orientation="Horizontal">
@@ -272,7 +272,7 @@
 
                 <TreeView ItemsSource="{Binding Departments}"
                           BorderThickness="1"
-                          BorderBrush="#D9D9D9"
+                          BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                           ItemContainerStyle="{StaticResource ReportScopeDepartmentItemStyle}">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
@@ -300,7 +300,7 @@
                                                         <DataTrigger Binding="{Binding HasPin}"
                                                                      Value="False">
                                                             <Setter Property="Foreground"
-                                                                    Value="#9CA3AF" />
+                                                                    Value="{DynamicResource TextFillColorTertiaryBrush}" />
                                                             <Setter Property="ToolTip"
                                                                     Value="No Employee ID set for this person -- they won't match any punch log. Set it in the Add/Edit Employee dialog on the Schedule tab." />
                                                         </DataTrigger>
@@ -435,7 +435,7 @@
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
                             <TextBlock Text="Total punches"
-                                       Foreground="#475569" />
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             <TextBlock Text="{Binding TotalLogs}"
                                        FontWeight="Bold"
                                        Margin="4,0,20,0" />
@@ -752,7 +752,7 @@
                     </DataGrid>
 
                     <TextBlock Text="Generate a report to see attendance summary results here."
-                               Foreground="#94A3B8"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Visibility="{Binding HasSummaryRows, Converter={StaticResource InverseBoolToVisibility}}" />

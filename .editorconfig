@@ -1,0 +1,38 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+
+[*.cs]
+indent_size = 4
+
+# File-scoped namespaces, not block-scoped - already the convention everywhere in this repo.
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# Primary constructors for simple field-assignment constructors - already the convention
+# for most services/repositories in this repo (see ScheduleApp.Data/Repositories,
+# ScheduleApp.Desktop/Services).
+csharp_style_prefer_primary_constructors = true:suggestion
+
+# Collection expressions ([]/[a, b]) over new[]/new List<T> { ... } - already the
+# convention in most of this repo.
+csharp_style_prefer_collection_expression = when_types_loosely_match:suggestion
+
+# `using var x = ...;` over `using (var x = ...) { }` where the block runs to the end
+# of its enclosing scope.
+csharp_prefer_simple_using_statement = true:suggestion
+
+# Pattern matching / null-check idioms already used throughout this repo
+# (`is not null`, `is { } x`, property patterns) over old-style `== null`/`as` + check.
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_prefer_not_pattern = true:suggestion
+
+[*.{xaml,xml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

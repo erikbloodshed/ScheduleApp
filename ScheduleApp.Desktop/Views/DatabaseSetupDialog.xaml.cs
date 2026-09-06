@@ -57,7 +57,7 @@ namespace ScheduleApp.Desktop.Views;
 /// Create both end the app there the same way SetupAdminPanel's own Exit does --
 /// nothing this screen is required for exists yet at that point in startup.
 /// </summary>
-public partial class DatabaseSetupDialog : Window
+public partial class DatabaseSetupDialog : Wpf.Ui.Controls.FluentWindow
 {
     private const int MinimumPasswordLength = 8;
 

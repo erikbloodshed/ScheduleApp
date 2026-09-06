@@ -16,9 +16,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="#F8FAFC" />
+                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -43,7 +43,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="#777777" />
+                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -84,7 +84,7 @@
             <Setter Property="Background"
                     Value="Transparent" />
             <Setter Property="Foreground"
-                    Value="#2563EB" />
+                    Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
             <Setter Property="BorderThickness"
                     Value="0" />
             <Setter Property="Cursor"
@@ -108,7 +108,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="#E2E8F0"
+                                        Value="{DynamicResource ControlFillColorDefaultBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -189,11 +189,11 @@
                             Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="{Binding SelectedEmployeeCount, StringFormat='{}{0} employee(s) checked'}"
                                FontSize="11"
-                               Foreground="#777777"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                Margin="0,0,0,4" />
                     <TextBlock Text="Select days on the calendar, then use &quot;Set Schedule for Selected Days&quot; on the right."
                                FontSize="11"
-                               Foreground="#777777"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap"
                                Margin="0,0,0,4" />
                     <Button Content="Clear Employee Checkboxes"
@@ -296,7 +296,7 @@
                            LastChildFill="False">
                     <TextBlock DockPanel.Dock="Left"
                                VerticalAlignment="Center"
-                               Foreground="#777777"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                FontSize="11"
                                Text="Click a day, Shift+click or drag for a range, Ctrl+click to pick several days" />
                     <Button DockPanel.Dock="Right"

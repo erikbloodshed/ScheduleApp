@@ -116,7 +116,7 @@ public class FlexibleShiftManualPunchTests
         var deviceInDuplicate = DevicePunch(employee.Pin, new TimeOnly(8, 2)); // 2 min later -- same event
         var deviceOut = DevicePunch(employee.Pin, new TimeOnly(17, 0));
 
-        var punches = new List<AttendanceLog> { manualIn, deviceInDuplicate, deviceOut };
+        List<AttendanceLog> punches = [manualIn, deviceInDuplicate, deviceOut];
 
         var result = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy);
         var summary = Assert.Single(result.Summaries);

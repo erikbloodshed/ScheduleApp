@@ -21,8 +21,8 @@
         <DataTemplate x:Key="PunchCellTemplate" DataType="{x:Type vm:DayPunchPairingCellViewModel}">
             <Border x:Name="Card"
                     CornerRadius="6"
-                    Background="White"
-                    BorderBrush="#D9DCE1"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     Padding="8,4"
                     ToolTip="{Binding ReasonText}"
@@ -41,19 +41,19 @@
                          hand-typed time is never mistaken for a recorded one. -->
                     <Border x:Name="SourceBadge"
                             CornerRadius="3"
-                            Background="#EEF2F7"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
                             Padding="5,1"
                             VerticalAlignment="Center"
                             Margin="8,0,0,0">
                         <TextBlock Text="{Binding SourceText}"
                                    FontSize="10"
-                                   Foreground="#5B6774" />
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </Border>
                     <TextBlock x:Name="UnpairedBadge"
                                Text="unpaired"
                                FontSize="10"
                                FontWeight="SemiBold"
-                               Foreground="#D97706"
+                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"
                                Visibility="Collapsed" />
@@ -61,16 +61,16 @@
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsManual}" Value="True">
-                    <Setter TargetName="SourceBadge" Property="Background" Value="#F3EEFF" />
+                    <Setter TargetName="SourceBadge" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsUnpaired}" Value="True">
-                    <Setter TargetName="Card" Property="BorderBrush" Value="#D97706" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource SystemFillColorCautionBrush}" />
                     <Setter TargetName="Card" Property="BorderThickness" Value="1.5" />
                     <Setter TargetName="UnpairedBadge" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsBeingDragged}" Value="True">
                     <Setter TargetName="Card" Property="Opacity" Value="0.35" />
-                    <Setter TargetName="Card" Property="BorderBrush" Value="#2D6CDF" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource SystemAccentColorPrimaryBrush}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -88,7 +88,7 @@
                         MinHeight="40"
                         CornerRadius="8"
                         Background="Transparent"
-                        BorderBrush="#E2E5EA"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1.5"
                         Padding="4"
                         AllowDrop="True"
@@ -101,7 +101,7 @@
                         Drop="Slot_Drop">
                     <Grid>
                         <TextBlock Text="missing punch"
-                                   Foreground="#9AA3AF"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                    FontStyle="Italic"
                                    FontSize="11"
                                    HorizontalAlignment="Center"
@@ -127,7 +127,7 @@
                         MinHeight="40"
                         CornerRadius="8"
                         Background="Transparent"
-                        BorderBrush="#E2E5EA"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1.5"
                         Padding="4"
                         AllowDrop="True"
@@ -140,7 +140,7 @@
                         Drop="Slot_Drop">
                     <Grid>
                         <TextBlock Text="missing punch"
-                                   Foreground="#9AA3AF"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                    FontStyle="Italic"
                                    FontSize="11"
                                    HorizontalAlignment="Center"
@@ -165,7 +165,7 @@
         <!-- Who / when -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <TextBlock Text="{Binding EmployeeName}" FontWeight="Bold" FontSize="16" />
-            <TextBlock Text="{Binding DateText}" Foreground="#64748B" FontSize="12" Margin="0,2,0,0" />
+            <TextBlock Text="{Binding DateText}" Style="{StaticResource CaptionTextStyle}" Margin="0,2,0,0" />
         </StackPanel>
 
         <!-- Column headers, on the same two fixed tracks the rows use. -->
@@ -180,7 +180,7 @@
             <Button Content="Add Segment" Command="{Binding AddRowCommand}" Padding="10,4" />
             <Button Content="Remove" Command="{Binding RemoveRowCommand}" Padding="10,4" Margin="8,0,0,0" />
             <TextBlock Text="Drag to re-pair · double-click to add"
-                       Foreground="#64748B" FontSize="12" VerticalAlignment="Center" Margin="14,0,0,0" />
+                       Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="14,0,0,0" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
@@ -189,21 +189,21 @@
         </ScrollViewer>
 
         <!-- Live footer: what the Summary grid will say once this is saved. -->
-        <Border Grid.Row="4" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1"
+        <Border Grid.Row="4" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                 CornerRadius="6" Padding="12,9" Margin="0,10,0,0">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
                 <StackPanel Grid.Column="0" Margin="0,0,22,0">
-                    <TextBlock Text="Worked" FontSize="10" Foreground="#64748B" />
+                    <TextBlock Text="Worked" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     <TextBlock Text="{Binding WorkedText}" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="0,0,22,0">
-                    <TextBlock Text="Required" FontSize="10" Foreground="#64748B" />
+                    <TextBlock Text="Required" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     <TextBlock Text="{Binding RequiredText}" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock Text="{Binding RemainderLabel}" FontSize="10" Foreground="#64748B" />
+                    <TextBlock Text="{Binding RemainderLabel}" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     <TextBlock Text="{Binding RemainderText}" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
@@ -217,7 +217,7 @@
                                    Foreground="{Binding PreviewStatus, Converter={StaticResource StatusBrush}}" />
                     </StackPanel>
                     <TextBlock Text="{Binding UnpairedCount, StringFormat={}{0} punch still unpaired}"
-                               FontSize="11" Foreground="#D97706" HorizontalAlignment="Right" Margin="0,2,0,0"
+                               FontSize="11" Foreground="{DynamicResource SystemFillColorCautionBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"
                                Visibility="{Binding HasUnpairedPunches, Converter={StaticResource BoolToVisible}}" />
                 </StackPanel>
             </Grid>

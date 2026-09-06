@@ -26,7 +26,7 @@ namespace ScheduleApp.Desktop.Views;
 /// ("Orphaned"/"Unscheduled") rather than the default "Punch Logs", so the
 /// workbook tab matches what was actually exported.
 /// </summary>
-public partial class PunchListDetailDialog : Window
+public partial class PunchListDetailDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly string _title;
     private readonly IReadOnlyList<AttendanceLog> _punches;

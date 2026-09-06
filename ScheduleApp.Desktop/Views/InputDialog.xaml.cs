@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class InputDialog : Window
+public partial class InputDialog : Wpf.Ui.Controls.FluentWindow
 {
     public string Value => ValueBox.Text;
 

@@ -29,7 +29,7 @@ namespace ScheduleApp.Desktop.Views;
 /// PrintButton_Click's own doc comment for why it's a shell "print" verb
 /// rather than a direct printer API call.
 /// </summary>
-public partial class PayslipPreviewDialog : Window
+public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly IReadOnlyList<PayrollResult> _payrolls;
 

@@ -61,7 +61,9 @@ public partial class EmployeeTreeViewModel : ObservableObject
     /// SaveViewState delegate. That's a gap in the table, not a deliberate omission:
     /// DeleteEmployeeAsync is squarely a tree-owned command (component list puts
     /// "Add/Edit/Delete/Blacklist/Unblacklist Employee" on this class), and it's always
-    /// called _dataVersion.BumpSchedule() -- see MainViewModel.DeleteEmployeeAsync,
+    /// called a _dataVersion schedule bump (BumpScheduleForEmployees with the deleted
+    /// employee's own Pin, since the cascade-deleted schedule entries move that employee's
+    /// payroll figures -- see the call site's own comment) -- see MainViewModel.DeleteEmployeeAsync,
     /// still unmodified at the time of this extraction, and AttendanceDataVersion's own
     /// doc comment, which already documents this exact call site by name. Dropping the
     /// bump here would silently break that auto-reload the moment this class actually
@@ -464,9 +466,24 @@ public partial class EmployeeTreeViewModel : ObservableObject
         if (confirm != MessageBoxResult.Yes) return;
 
         var employeeId = SelectedEmployee.Id;
+
+        // Captured before SelectedEmployee is nulled out below -- the per-employee schedule bump
+        // needs the Pin, and by the time the delete has finished there's nothing left to read it
+        // from. Pin rather than Id: _lastScheduleChangeVersionByPin is keyed by Pin like
+        // everything else on the payroll side (see BumpScheduleForEmployees' own doc comment).
+        var employeePin = SelectedEmployee.Pin;
+
         SelectedEmployee = null;
         await _repository.DeleteEmployeeAsync(employeeId);
-        _dataVersion.BumpSchedule(); // deletes that employee's schedule entries too -- see this field's own doc comment
+
+        // Per-employee, not the plain BumpSchedule() this used to call: deleting an employee
+        // cascades their ScheduleEntries away, which moves that employee's payroll numbers to
+        // zero -- and a bump with no per-pin entry is invisible to AnyScheduleChangeSince, so an
+        // already-loaded payroll group containing this employee would have gone on showing their
+        // pre-delete figures until something else forced a recompute. See
+        // BumpScheduleForEmployees' own doc comment for why the wiped date range doesn't need
+        // reporting alongside the Pin.
+        _dataVersion.BumpScheduleForEmployees([employeePin]);
         _dataVersion.BumpRoster(); // and removes them from the roster itself -- see this field's own doc comment
         await LoadAsync();
     }

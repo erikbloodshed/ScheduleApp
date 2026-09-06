@@ -19,7 +19,7 @@ namespace ScheduleApp.Desktop.Views;
 /// this constructor used to accept for a doubled-up Edit form is gone; only a
 /// brand-new holiday is ever collected here.
 /// </summary>
-public partial class HolidayDialog : Window
+public partial class HolidayDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly IReadOnlyCollection<DateOnly> _existingDates;
 

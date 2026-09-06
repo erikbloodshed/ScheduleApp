@@ -1,9 +1,12 @@
-<Window x:Class="ScheduleApp.Desktop.Views.ManageHolidaysDialog"
+<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.ManageHolidaysDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="Manage Holidays" Width="540" Height="480"
         WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        ExtendsContentIntoTitleBar="True"
+>
     <Window.Resources>
         <!-- One row = one HolidayRow. Each of the two cells stacks a read-only
              display element and an editor in the same grid slot and shows one at a
@@ -70,7 +73,20 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Grid Margin="16">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
+             one of these - WPF-UI removes the native title bar entirely otherwise. -->
+        <ui:TitleBar Grid.Row="0"
+                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
+                ShowMaximize="True"
+                CanMaximize="True" />
+
+    <Grid Grid.Row="1" Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -82,21 +98,21 @@
         <TextBlock Grid.Row="0"
                    Text="Dates the company treats as a holiday. Employees who work a listed date get Premium Pay for it (see the Payroll page) once there's an actual holiday to compute against."
                    TextWrapping="Wrap"
-                   Foreground="#475569"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Margin="0,0,0,12" />
 
         <!-- Static header - the ListView is a plain list now, so the column labels
              live here. Same 230/* split as HolidayRowTemplate so they line up; the
              left edges stay aligned even when the list shows a scrollbar (that only
              eats into the trailing edge of the Name column). -->
-        <Border Grid.Row="1" BorderBrush="#CBD5E1" BorderThickness="0,0,0,1" Padding="0,0,0,3" Margin="0,0,0,2">
+        <Border Grid.Row="1" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,3" Margin="0,0,0,2">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="230" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Date" FontWeight="SemiBold" Foreground="#475569" Margin="4,0" />
-                <TextBlock Grid.Column="1" Text="Name" FontWeight="SemiBold" Foreground="#475569" Margin="4,0" />
+                <TextBlock Grid.Column="0" Text="Date" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="4,0" />
+                <TextBlock Grid.Column="1" Text="Name" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="4,0" />
             </Grid>
         </Border>
 
@@ -132,7 +148,7 @@
                             <ControlTemplate TargetType="ListViewItem">
                                 <Border x:Name="Bd"
                                         Background="{TemplateBinding Background}"
-                                        BorderBrush="#E2E8F0"
+                                        BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                                         BorderThickness="0,0,0,1"
                                         Padding="{TemplateBinding Padding}"
                                         SnapsToDevicePixels="True">
@@ -143,7 +159,7 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#14000000" />
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
                                     </Trigger>
                                     <Trigger Property="IsSelected" Value="True">
                                         <Setter TargetName="Bd" Property="Background"
@@ -164,7 +180,7 @@
             </ListView.ItemContainerStyle>
         </ListView>
 
-        <TextBlock x:Name="ErrorText" Grid.Row="3" Foreground="#DC2626" TextWrapping="Wrap"
+        <TextBlock x:Name="ErrorText" Grid.Row="3" Foreground="{DynamicResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
                    Visibility="Collapsed" Margin="0,8,0,0" />
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
@@ -176,4 +192,5 @@
             <Button Content="Close" Width="Auto" IsCancel="True" IsDefault="True" />
         </StackPanel>
     </Grid>
-</Window>
+</Grid>
+</ui:FluentWindow>

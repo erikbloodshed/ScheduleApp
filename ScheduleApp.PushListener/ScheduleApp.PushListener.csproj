@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ScheduleApp.PushListener</RootNamespace>
     <!--
       This is deliberately a plain console/web host, not WinExe — it has no UI and is meant
@@ -13,8 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <!-- Serilog replaces the old builder.Logging.AddEventLog(...) plus plain-console setup,
          see Program.cs. Serilog.AspNetCore wires UseSerilog() into the generic host;
          Serilog.Sinks.File and Serilog.Formatting.Compact give the rolling, JSON-per-line log
@@ -23,11 +21,11 @@
          these as already transitively available (the same NU1510 case the old EventLog
          reference used to hit), drop the explicit reference the same way that one was
          removed - don't re-add it just to silence the warning. -->
-    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
-    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
-    <PackageReference Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Formatting.Compact" />
+    <PackageReference Include="Serilog.Sinks.EventLog" />
   </ItemGroup>
 
   <ItemGroup>

@@ -22,7 +22,7 @@ namespace ScheduleApp.Desktop.Views;
 /// only the genuinely new ones. That keeps this dialog's own job simple: show the tree,
 /// return whoever's checked.
 /// </summary>
-public partial class AddToPayrollGroupDialog : Window
+public partial class AddToPayrollGroupDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly List<DepartmentGroupViewModel> _departments;
 

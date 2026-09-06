@@ -140,8 +140,8 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// <summary>The *same* instance every other database-touching ViewModel on this page
     /// (and on the Attendance page) shares -- see App.xaml.cs's registration comment and
     /// ScheduleAssignmentViewModel's own _dataVersion field, which is what actually calls
-    /// BumpSchedule() after a Set/Clear/Leave Schedule write, an Import Schedule, or an
-    /// employee delete. This class only ever reads it, as the staleness half of
+    /// BumpScheduleForEmployees(...) after a Set/Clear/Leave Schedule write, an Import
+    /// Schedule, or an employee delete. This class only ever reads it, as the staleness half of
     /// _attendanceStatusCache below -- see that field's own doc comment for why a write
     /// here (as opposed to the ScheduleEntries/CalendarDays it's read against) needs all
     /// three counters, not just ScheduleVersion.</summary>

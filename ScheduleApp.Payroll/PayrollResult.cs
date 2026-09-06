@@ -118,7 +118,7 @@ public class PayrollAdjustmentGroup
     /// stay in Adjustments (invisible to the single-value box, but not lost),
     /// so a person who needs to see them can still do so directly against the
     /// database rather than the app silently discarding history.</summary>
-    public PayrollAdjustment? SingleValueAdjustment => IsSingleValue ? Adjustments.FirstOrDefault() : null;
+    public PayrollAdjustment? SingleValueAdjustment => IsSingleValue && Adjustments.Count > 0 ? Adjustments[0] : null;
 
     /// <summary>Same value as SingleValueAdjustment?.Amount, exposed as its own nullable
     /// property so PayrollSummaryView's inline amount box can bind to it in one hop instead

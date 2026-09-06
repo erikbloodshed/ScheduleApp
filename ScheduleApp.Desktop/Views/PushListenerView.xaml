@@ -14,8 +14,8 @@
         <!-- Same "card" look AttendanceView.xaml uses for its toolbar strip, so this tab
              reads as part of the same app rather than a bolted-on utility. -->
         <Style x:Key="CardBorder" TargetType="Border">
-            <Setter Property="Background" Value="#F8FAFC" />
-            <Setter Property="BorderBrush" Value="#E2E8F0" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Padding" Value="10,8" />
@@ -25,7 +25,7 @@
         <Style x:Key="GroupLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Foreground" Value="#777777" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
     </UserControl.Resources>
@@ -60,8 +60,8 @@
                         </Ellipse.Style>
                     </Ellipse>
                     <TextBlock Text="{Binding Health.Status}" Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding UptimeDisplay, StringFormat='uptime {0}'}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#777777" />
-                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#777777">
+                    <TextBlock Text="{Binding UptimeDisplay, StringFormat='uptime {0}'}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value="DB reachable" />

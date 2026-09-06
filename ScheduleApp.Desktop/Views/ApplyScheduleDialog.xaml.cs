@@ -8,7 +8,7 @@ using ScheduleApp.Desktop.Utilities;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class ApplyScheduleDialog : Window
+public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
 {
     /// <summary>One row's pair of time pickers, its optional per-segment
     /// buffer-override textboxes, plus its remove button -- kept together so

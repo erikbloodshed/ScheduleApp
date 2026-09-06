@@ -125,7 +125,7 @@ public class PayrollCalculatorPayEligibilityFlagsTests
         // (enum-declaration) order the Phase 6 Bug 2 fix preserves.
         Assert.DoesNotContain(result.GrossPayAdjustmentGroups, g => g.Type == PayrollAdjustmentType.PremiumHoliday);
         Assert.Equal(
-            new[] { PayrollAdjustmentType.Allowance, PayrollAdjustmentType.Incentive },
+            [PayrollAdjustmentType.Allowance, PayrollAdjustmentType.Incentive],
             result.GrossPayAdjustmentGroups.Select(g => g.Type));
 
         // The 1,000.00 row is skipped, not silently double-counted or

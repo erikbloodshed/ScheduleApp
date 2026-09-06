@@ -8,7 +8,7 @@ namespace ScheduleApp.Desktop.Views;
 /// hashing (see PasswordHasher) and IUserAccountRepository.UpdatePasswordAsync call
 /// after this returns true.
 /// </summary>
-public partial class ResetPasswordDialog : Window
+public partial class ResetPasswordDialog : Wpf.Ui.Controls.FluentWindow
 {
     private const int MinimumPasswordLength = 8;
 

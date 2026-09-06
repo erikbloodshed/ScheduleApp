@@ -18,7 +18,7 @@ namespace ScheduleApp.Desktop.Views;
 /// minute has to be typeable, which rules out the Controls.TimePicker used for
 /// scheduling (that one snaps to :00/:30 by design).
 /// </summary>
-public partial class PunchTimeEntryDialog : Window
+public partial class PunchTimeEntryDialog : Wpf.Ui.Controls.FluentWindow
 {
     public PunchTimeEntryDialog(
         string employeeName,

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using ScheduleApp.Core.Enums;
@@ -18,8 +19,25 @@ public class CalendarDayToBrushConverter : IValueConverter
     // SplitShiftBrush above -- the two need to read apart at a glance on the
     // same calendar grid, not just under a color picker.
     private static readonly SolidColorBrush RestDayBrush = new(Color.FromRgb(0xF8, 0xC6, 0xDC));
-    private static readonly SolidColorBrush OutOfMonthBrush = new(Color.FromRgb(0xF5, 0xF5, 0xF5));
-    private static readonly SolidColorBrush EmptyBrush = Brushes.White;
+
+    // Unlike the schedule-type tints above (deliberately fixed hues, same status-color
+    // reasoning as PunchStatusToBrushConverter), a day with no schedule entry -- the
+    // common case for most of an empty calendar -- has no status to tint, so its "fill"
+    // should just be the theme's own base/muted panel color rather than a hardcoded
+    // light-only white/gray that would sit wrong on a Dark calendar. Resolved fresh on
+    // every Convert() call (not cached in a static field like the tints above) since
+    // ApplicationThemeManager.Apply swaps the whole resource dictionary rather than
+    // mutating a brush in place -- a cached reference would go stale after a theme
+    // change. TryFindResource falling through to the literal fallback only matters if
+    // this ever runs before App.xaml's resources are merged (shouldn't happen in
+    // practice, but cheaper than risking a null Background).
+    private static SolidColorBrush OutOfMonthBrush =>
+        Application.Current?.TryFindResource("ControlFillColorSecondaryBrush") as SolidColorBrush
+        ?? new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF5));
+
+    private static SolidColorBrush EmptyBrush =>
+        Application.Current?.TryFindResource("ApplicationBackgroundBrush") as SolidColorBrush
+        ?? Brushes.White;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {

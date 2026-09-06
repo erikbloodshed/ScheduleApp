@@ -26,7 +26,7 @@ namespace ScheduleApp.Desktop.Views;
 /// job is turning its RequestClose event into an actual DialogResult/window close, so the
 /// ViewModel itself never needs to know it's backing a real Window.
 /// </summary>
-public partial class PayrollWizardDialog : Window
+public partial class PayrollWizardDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly PayrollWizardViewModel _wizard;
 

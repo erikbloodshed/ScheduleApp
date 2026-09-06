@@ -19,8 +19,8 @@
          be visible at once without fighting over the same spot or timer.
          PercentProgressBar itself no longer does anything Star-width-based - see
          that control's own doc comment. -->
-    <Border Background="#F3F3F3"
-            BorderBrush="#DDDDDD"
+    <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0">
         <Grid>
             <StackPanel x:Name="ProgressPanel"

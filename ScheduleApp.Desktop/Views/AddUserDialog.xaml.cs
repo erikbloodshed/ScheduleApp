@@ -13,7 +13,7 @@ namespace ScheduleApp.Desktop.Views;
 /// unlikely check-then-act race DuplicateUsernameException exists for, which this
 /// dialog's local pre-check can't catch on its own.
 /// </summary>
-public partial class AddUserDialog : Window
+public partial class AddUserDialog : Wpf.Ui.Controls.FluentWindow
 {
     private const int MinimumPasswordLength = 8;
 

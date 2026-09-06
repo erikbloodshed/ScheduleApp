@@ -73,8 +73,11 @@ public partial class ScheduleImportExportViewModel : ObservableObject
     /// EmployeeTreeViewModel.DeleteEmployeeAsync: ImportScheduleAsync replaces potentially
     /// every employee's schedule for the imported range in one call, which is squarely a
     /// schedule-mutating write the Summary tab needs to know about, same as every other
-    /// _dataVersion.BumpSchedule() call site already documented on AttendanceDataVersion
-    /// itself. ImportEmployeesAsync does NOT bump this -- it only touches the employee
+    /// _dataVersion.BumpScheduleForEmployees(...) call site already documented on
+    /// AttendanceDataVersion itself -- and, since that bump carries the workbook's own Pins,
+    /// something the payroll side's own per-employee staleness check can see too (see
+    /// ImportScheduleAsync's own comment at the call site).
+    /// ImportEmployeesAsync does NOT bump this -- it only touches the employee
     /// roster, not any schedule entries, so there's nothing here for the Summary tab to care
     /// about. Dropping the bump from ImportScheduleAsync would silently break that
     /// auto-reload the moment this class actually starts being used, so this constructor
@@ -151,7 +154,7 @@ public partial class ScheduleImportExportViewModel : ObservableObject
             // person's schedule" case) when there is one, same "start narrow, still fully
             // editable" reasoning as PayrollViewModel's HasBatchScope preset -- otherwise
             // falls back to the dialog's own "whole company" default.
-            presetSelection: _tree.SelectedEmployee is not null ? new[] { _tree.SelectedEmployee } : null,
+            presetSelection: _tree.SelectedEmployee is not null ? [_tree.SelectedEmployee] : null,
             requirePin: false)
         {
             Owner = Application.Current.MainWindow,
@@ -196,7 +199,17 @@ public partial class ScheduleImportExportViewModel : ObservableObject
         {
             var departments = ExcelScheduleImporter.Import(dialog.FileName);
             await _repository.ImportAsync(departments);
-            _dataVersion.BumpSchedule(); // see this class's own _dataVersion doc comment for the gap this closes
+
+            // Per-employee, not the plain BumpSchedule() this used to call. The workbook is
+            // already fully parsed into Departments-of-Employees at this point (that's what
+            // ImportAsync was just handed), so the affected Pins cost nothing extra to collect
+            // -- and a bump with no per-pin entry is invisible to AnyScheduleChangeSince, so an
+            // already-loaded payroll group covering an imported employee would have gone on
+            // showing pre-import figures. Every Pin in the workbook, not just the rows
+            // ImportAsync actually changed: over-reporting costs at most one recompute that
+            // lands on the same numbers, while under-reporting is the stale-figures bug this
+            // fixes -- see BumpScheduleForEmployees' own doc comment.
+            _dataVersion.BumpScheduleForEmployees([.. departments.SelectMany(d => d.Employees).Select(e => e.Pin)]);
         }
         catch (Exception ex)
         {

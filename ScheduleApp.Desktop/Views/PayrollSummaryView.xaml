@@ -16,9 +16,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="#F8FAFC" />
+                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -60,9 +60,9 @@
         <Style x:Key="LineCardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="White" />
+                    Value="{DynamicResource ApplicationBackgroundBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -124,9 +124,9 @@
                 <DataTrigger Binding="{Binding Waived}"
                              Value="True">
                     <Setter Property="Background"
-                            Value="#F1F5F9" />
+                            Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
                     <Setter Property="Foreground"
-                            Value="#94A3B8" />
+                            Value="{DynamicResource TextFillColorSecondaryBrush}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -146,7 +146,7 @@
             <Setter Property="IsReadOnlyCaretVisible"
                     Value="True" />
             <Setter Property="Background"
-                    Value="White" />
+                    Value="{DynamicResource ApplicationBackgroundBrush}" />
         </Style>
 
         <!-- Same boxed, directly-editable look as EditableAmountTextBox, but left-aligned and
@@ -172,7 +172,7 @@
             <Setter Property="VerticalAlignment"
                     Value="Center" />
             <Setter Property="Background"
-                    Value="White" />
+                    Value="{DynamicResource ApplicationBackgroundBrush}" />
         </Style>
 
         <!-- Small Edit/Delete/"+ Add" buttons sitting at the right of a row - same "compact,
@@ -292,7 +292,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="#E2E8F0"
+                                        Value="{DynamicResource CardStrokeColorDefaultBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -668,8 +668,8 @@
                  everything else in the "no employee selected" state rather than showing
                  next to the "Select an employee" placeholder HeaderText falls back to. -->
             <Border DockPanel.Dock="Left"
-                    Background="#F1F5F9"
-                    BorderBrush="#E2E8F0"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="4"
                     Padding="6,2"
@@ -677,9 +677,9 @@
                     VerticalAlignment="Center"
                     Visibility="{Binding SelectedEmployee, Converter={StaticResource NotNullToVisibility}}">
                 <TextBlock Text="{Binding SelectedEmployee.EmployeeType}"
+                           Style="{StaticResource CaptionTextStyle}"
                            FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="#475569" />
+                           FontWeight="SemiBold" />
             </Border>
 
             <!-- Recalculate/refresh this employee's payslip on demand - the per-employee
@@ -716,7 +716,7 @@
                     Margin="0"
                     Visibility="{Binding EmptyStateMessage, Converter={StaticResource NotNullToVisibility}}">
                 <TextBlock Text="{Binding EmptyStateMessage}"
-                           Foreground="#94A3B8"
+                           Style="{StaticResource CaptionTextStyle}"
                            TextWrapping="Wrap"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center" />

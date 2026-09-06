@@ -20,7 +20,7 @@
                      Margin="2,0,2,4">
             <TextBlock Text="Sun"
                        FontWeight="Bold"
-                       Foreground="#D32F2F"
+                       Foreground="{DynamicResource SystemFillColorCriticalBrush}"
                        HorizontalAlignment="Center" />
             <TextBlock Text="Mon"
                        FontWeight="Bold"
@@ -64,7 +64,7 @@
                          enough to read. -->
                     <Border x:Name="DayBorder"
                             CornerRadius="4"
-                            BorderBrush="#DDDDDD"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1.0"
                             Margin="1"
                             MinHeight="70"
@@ -157,7 +157,7 @@
                                      Value="False">
                             <Setter TargetName="DayNumberText"
                                     Property="Foreground"
-                                    Value="#AAAAAA" />
+                                    Value="{DynamicResource TextFillColorTertiaryBrush}" />
                         </DataTrigger>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
@@ -168,7 +168,7 @@
                             </MultiDataTrigger.Conditions>
                             <Setter TargetName="DayNumberText"
                                     Property="Foreground"
-                                    Value="#D32F2F" />
+                                    Value="{DynamicResource SystemFillColorCriticalBrush}" />
                         </MultiDataTrigger>
                         <!-- A holiday reads as a red day number, same colour and same
                              in-month-only rule as the Sunday column above. An out-of-month
@@ -185,13 +185,13 @@
                             </MultiDataTrigger.Conditions>
                             <Setter TargetName="DayNumberText"
                                     Property="Foreground"
-                                    Value="#D32F2F" />
+                                    Value="{DynamicResource SystemFillColorCriticalBrush}" />
                         </MultiDataTrigger>
                         <DataTrigger Binding="{Binding IsSelected}"
                                      Value="True">
                             <Setter TargetName="DayBorder"
                                     Property="BorderBrush"
-                                    Value="#2D6CDF" />
+                                    Value="{DynamicResource SystemAccentColorPrimaryBrush}" />
                             <Setter TargetName="DayBorder"
                                     Property="BorderThickness"
                                     Value="2.5" />

@@ -59,6 +59,14 @@ automatic path.
     cases `AnyScheduleChangeSince` can't detect), now points at nudging a period picker or
     re-running "New Payroll Run…"/"Load Payroll Group…" instead.
 
+    **Superseded.** Import Schedule and Delete Employee both call
+    `BumpScheduleForEmployees` with the Pins they touched now, so `AnyScheduleChangeSince`
+    detects them like any other schedule write and neither one needs a fallback at all.
+    `RecheckOnPageRevisitAsync` additionally compares `_dataVersion.AttendanceInputs`
+    (device-log / manual-log / punch-pairing counters), which used to have no payroll-side
+    reader — a punch edit changed what payroll would compute without anything triggering
+    the recompute. Both view models check it; see `AttendanceInputsVersion`.
+
 - **PayrollPage.xaml**
   - Removed the "Reload" button and its wrapping inner `DockPanel` from beside the
     "Included" grid's header; the label is a plain `TextBlock` again.

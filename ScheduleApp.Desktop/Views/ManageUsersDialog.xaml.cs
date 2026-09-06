@@ -20,7 +20,7 @@ namespace ScheduleApp.Desktop.Views;
 /// since there's no "forgot password" recovery path (see SignInPanel/SetupAdminPanel).
 /// An inactive account can still be deleted freely, since it already can't sign in.
 /// </summary>
-public partial class ManageUsersDialog : Window
+public partial class ManageUsersDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly IUserAccountRepository _userAccountRepository;
     private readonly CurrentUserContext _currentUser;

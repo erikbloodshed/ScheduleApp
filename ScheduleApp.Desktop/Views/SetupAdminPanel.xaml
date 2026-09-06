@@ -18,7 +18,7 @@
 
         <Image x:Name="LogoImage" Grid.Row="0" Source="/Assets/Tinapayan_Logo.png" Height="140" Stretch="Uniform"
                HorizontalAlignment="Center" Margin="0,0,0,12" />
-        <TextBlock Grid.Row="1" TextWrapping="Wrap" FontSize="14" Foreground="#64748B" Margin="0,0,0,24"
+        <TextBlock Grid.Row="1" TextWrapping="Wrap" FontSize="14" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,24"
                    HorizontalAlignment="Center" TextAlignment="Center"
                    Text="No accounts exist yet -- create the first one to continue. You can create additional accounts afterward from Manage Users (in the main window)." />
 
@@ -31,7 +31,7 @@
         <TextBlock Grid.Row="6" Text="Confirm password" Margin="0,0,0,4" />
         <PasswordBox x:Name="ConfirmPasswordBoxControl" Grid.Row="7" Margin="0,0,0,4" />
 
-        <TextBlock x:Name="ErrorText" Grid.Row="8" Foreground="#DC2626" TextWrapping="Wrap"
+        <TextBlock x:Name="ErrorText" Grid.Row="8" Foreground="{DynamicResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
                    Visibility="Collapsed" Margin="0,8,0,0" VerticalAlignment="Top" />
 
         <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">

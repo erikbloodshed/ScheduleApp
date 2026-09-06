@@ -1,0 +1,92 @@
+<ResourceDictionary
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      Shared, theme-aware resources for ScheduleApp.Desktop's own views/dialogs/controls -
+      merged into Application.Resources by App.xaml, after WPF-UI's own ThemesDictionary/
+      ControlsDictionary so everything below can build on their DynamicResource brush keys
+      (see comments there for the brush names this app itself pulls in most: Application/
+      Card/Control background+stroke, TextFillColor Primary/Secondary/Tertiary, the four
+      SystemFillColor* semantic brushes).
+
+      Recurring hardcoded-hex -> WPF-UI brush mapping used across this app's own XAML
+      (this was the single most common find across MainWindow.xaml and every page/dialog
+      that predates this file - keep new markup on these DynamicResource keys instead of
+      a literal hex value, so both Light and Dark actually work):
+
+        #FFFFFF / White (page background)         -> ApplicationBackgroundBrush
+        #F8FAFC / #F1F5F9 (muted panel/card fill)  -> CardBackgroundFillColorDefaultBrush
+        #F9FAFB (very light row/hover fill)        -> ControlFillColorDefaultBrush
+        #E2E8F0 / #CBD5E1 (subtle border/divider)  -> CardStrokeColorDefaultBrush
+                                                       (or DividerStrokeColorDefaultBrush
+                                                       for a plain separator line)
+        #64748B / #94A3B8 (muted/caption text)     -> TextFillColorSecondaryBrush
+        #0F172A / #1E293B / #334155 (body text)    -> TextFillColorPrimaryBrush
+        #94A3B8 as a disabled/tertiary tone        -> TextFillColorTertiaryBrush
+
+      Status/semantic colors (Complete/Partial/Absent/Leave/Official Business/Rest Day,
+      etc.) are deliberately NOT redefined here - see PunchStatusToBrushConverter.cs and
+      its siblings (PunchStatusToRowBackgroundBrushConverter, SummaryRowBackgroundConverter)
+      in Converters/: those six statuses already have one centralized, hardcoded-on-purpose
+      set of hues shared by the Attendance Summary grid, the Results panel counts, and the
+      Schedule calendar's completion markers alike. That's a deliberate, already-correct
+      "one place to change" design of its own (six distinct categories that don't map onto
+      WPF-UI's generic four-color Success/Caution/Critical/Neutral system anyway) - leave
+      it as-is; it isn't the kind of theme-vs-hardcoded duplication this dictionary exists
+      to fix.
+    -->
+
+    <!-- Generic card-like grouping container - the shared replacement for the plain
+         <Border Background="#F..." BorderBrush="#E../#C.."> pattern repeated across most
+         pages/dialogs before this file existed. Prefer ui:CardControl/ui:CardExpander
+         directly for a new card; use this style on a plain Border only where a control
+         template genuinely needs to stay a bare Border (e.g. one substituted inside an
+         existing DataTemplate/ControlTemplate). -->
+    <Style x:Key="CardBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+
+    <!-- Muted/caption text - the shared replacement for a one-off
+         Foreground="#64748B"/"#94A3B8" TextBlock (section labels, helper text, secondary
+         column values). Prefer ui:TextBlock with FontTypography="Caption" for new markup;
+         this style is for a plain TextBlock that needs to stay a TextBlock (e.g. inside a
+         DataGrid cell template). -->
+    <Style x:Key="CaptionTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!-- One row of a compact flyout menu (MainWindow's own AttendanceFlyout is the first
+         tenant) - plain-Button chrome stripped down to a left-aligned, full-width menu
+         row that highlights on hover, using the theme's own control-fill brush instead of
+         a hardcoded hex hover color so it still reads correctly in Dark. -->
+    <Style x:Key="FlyoutMenuItemStyle" TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="4">
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" TargetName="Bg" Value="{DynamicResource ControlFillColorDefaultBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

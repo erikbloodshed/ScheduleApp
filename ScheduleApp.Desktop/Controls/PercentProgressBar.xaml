@@ -31,15 +31,15 @@
                      IsIndeterminate="{Binding ElementName=Root, Path=IsIndeterminate}"
                      Value="{Binding ElementName=Root, Path=Value, Mode=OneWay}"
                      Height="14"
-                     Foreground="#2D6CDF"
-                     Background="#DDDDDD"
+                     Foreground="{DynamicResource SystemAccentColorPrimaryBrush}"
+                     Background="{DynamicResource ControlFillColorDefaultBrush}"
                      BorderThickness="0" />
         <TextBlock Text="{Binding ElementName=Root, Path=Value, StringFormat={}{0:F0}%}"
                    FontSize="10"
                    FontWeight="SemiBold"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   Foreground="#333333">
+                   Foreground="{DynamicResource TextFillColorPrimaryBrush}">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
                     <Style.Triggers>

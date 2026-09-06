@@ -54,18 +54,16 @@ public sealed partial class PayrollAdjustmentGroupRow : ObservableObject
     /// PropertyChanged instead of requiring a whole new PayrollAdjustmentGroupRow instance --
     /// that's the entire point of this class.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SingleValueAmount))]
     private PayrollAdjustment? singleValueAdjustment;
 
     /// <summary>Same value as SingleValueAdjustment?.Amount, same "TextBox binding breaks on a
     /// null intermediate hop" reasoning as PayrollAdjustmentGroup.SingleValueAmount's own doc
-    /// comment -- kept in sync with SingleValueAdjustment via OnSingleValueAdjustmentChanged
-    /// below rather than duplicated as its own [ObservableProperty], so there's exactly one
+    /// comment -- kept in sync with SingleValueAdjustment via the [NotifyPropertyChangedFor]
+    /// above rather than duplicated as its own [ObservableProperty], so there's exactly one
     /// place (SyncAdjustmentGroupRows) that ever needs to set this row's single-value state.
     /// </summary>
     public decimal? SingleValueAmount => SingleValueAdjustment?.Amount;
-
-    partial void OnSingleValueAdjustmentChanged(PayrollAdjustment? value) =>
-        OnPropertyChanged(nameof(SingleValueAmount));
 
     /// <summary>Patched in place by PayrollViewModel.SyncAdjustmentGroupRows on every
     /// LoadCoreAsync, same as SingleValueAdjustment above -- what AdjustmentGroupTemplate's

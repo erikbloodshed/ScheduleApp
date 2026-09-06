@@ -5,8 +5,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Fixed to Light - no in-app theme switcher (there used to be one; see
+                     git history if that's ever revisited, but a runtime Light/Dark toggle
+                     turned out to have real WPF-UI/DWM chrome-repaint quirks that weren't
+                     worth chasing further). -->
                 <ui:ThemesDictionary Theme="Light" />
                 <ui:ControlsDictionary />
+                <ResourceDictionary Source="Themes/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

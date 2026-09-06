@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using ScheduleApp.Core.Attendance;
@@ -21,7 +22,16 @@ namespace ScheduleApp.Desktop.Converters;
 /// </summary>
 public class StatusFilterHighlightConverter : IValueConverter
 {
-    private static readonly SolidColorBrush ActiveBrush = new(Color.FromRgb(0xE2, 0xE8, 0xF0));
+    // Resolved fresh on every Convert() call, not cached in a static field, since
+    // ApplicationThemeManager.Apply swaps the whole resource dictionary rather than
+    // mutating a brush in place -- see CalendarDayToBrushConverter's own doc comment for
+    // the same reasoning. Matches CardStrokeColorDefaultBrush precisely per this class's
+    // "same slate tone as CardBorder's own BorderBrush" doc comment above, now that
+    // CardBorder's own BorderBrush across the app resolves to that same DynamicResource
+    // key instead of the literal #E2E8F0 this used to hardcode.
+    private static SolidColorBrush ActiveBrush =>
+        Application.Current?.TryFindResource("CardStrokeColorDefaultBrush") as SolidColorBrush
+        ?? new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0));
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         value is PunchStatus selected && parameter is PunchStatus target && selected == target

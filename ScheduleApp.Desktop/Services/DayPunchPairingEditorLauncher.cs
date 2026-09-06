@@ -82,7 +82,7 @@ public sealed class DayPunchPairingEditorLauncher(
         // than a bare calendar day, so a RestrictedTimeOut reaching past midnight
         // brings its punches along.
         var (searchStart, searchEnd) = ScheduleApp.Attendance.FlexiblePairingBuilder.SearchWindow(schedule);
-        var pins = new[] { employee.Pin };
+        int[] pins = [employee.Pin];
         var deviceLogs = await attendanceLogRepository.GetLogsAsync(searchStart, searchEnd, pins, cancellationToken);
         var manualLogs = await manualAttendanceLogRepository.GetLogsAsync(searchStart, searchEnd, pins, cancellationToken);
         var dayPunches = deviceLogs

@@ -28,7 +28,7 @@ public static class TimeDisplayFormat
 
         return TimeOnly.TryParseExact(
                    text,
-                   new[] { "h:mm tt", "hh:mm tt", "h:mmtt", "H:mm", "HH:mm" },
+                   ["h:mm tt", "hh:mm tt", "h:mmtt", "H:mm", "HH:mm"],
                    CultureInfo.InvariantCulture,
                    DateTimeStyles.None,
                    out result) ||

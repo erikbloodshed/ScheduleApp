@@ -86,6 +86,26 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// false itself.</summary>
     private int _loadedHolidayVersion = -1;
 
+    /// <summary>Third sibling of the two stamps above, for _dataVersion.AttendanceInputs --
+    /// the device-punch/manual-punch/pairing counters fused into one comparable value (see
+    /// that property's own doc comment). Snapshotted and committed exactly like the other two,
+    /// and compared with a raw `!=` like _loadedHolidayVersion rather than a per-pin query:
+    /// none of the three underlying counters records which employees it touched, so there's no
+    /// AnyScheduleChangeSince equivalent available even in principle. Null (not -1) until the
+    /// first successful load -- see AttendanceInputsVersion's own doc comment.
+    ///
+    /// Closes the mirror image of the gap _loadedScheduleVersion closes. A payroll figure is
+    /// computed from the schedule compared against the punch tables, and until this existed
+    /// only the schedule half of that could trigger a revisit recompute -- so importing device
+    /// logs, adding a manual entry, or hand-editing a day's punch pairing all genuinely changed
+    /// what payroll *would* compute while the Payroll page went on showing the figures from
+    /// before the edit. Nothing on the Payroll page itself can make any of those three edits
+    /// (its EmployeeAttendancePanel is a read-only grid, and IDayPunchPairingEditorLauncher is
+    /// injected only into the Schedule and Attendance pages' ViewModels), so a page revisit is
+    /// genuinely the earliest moment a change could need picking up -- the same reasoning that
+    /// makes the schedule half a revisit-time check rather than a live subscription.</summary>
+    private AttendanceInputsVersion? _loadedAttendanceInputs;
+
     /// <summary>Set by RequestRefresh() when an employee-selection or period change
     /// arrives while _busy.IsRunning is already true (a refresh, or an Add/Edit/Delete
     /// round trip, in flight), and cleared by the _busy.PropertyChanged handler below once
@@ -101,6 +121,27 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// same "independently pending for different reasons" story those two fields' own doc
     /// comments already tell.</summary>
     private bool _refreshPending;
+
+    /// <summary>Cancels the summary load RefreshAsync currently has in flight, if any, so a
+    /// selection/period change that arrives mid-load stops it at its next await instead of
+    /// letting it finish computing a result nothing is going to display (measured at ~16ms
+    /// of wasted round trips per abandoned switch on a 2-week period). Owned entirely by
+    /// this class and only ever linked into LoadCoreAsync's own token -- deliberately NOT
+    /// _busy.Cancel(), which cancels whatever operation happens to hold the shared busy
+    /// state right now: that's app-wide (see AttendanceBusyState's own doc comment), so it
+    /// could just as easily abort an unrelated Schedule/Attendance *write* that this class
+    /// has no business touching. This one can only ever abandon a read-only recompute this
+    /// class itself started.
+    ///
+    /// Cancelling does NOT replace _refreshPending's own defer-and-replay: the cancelled
+    /// run still has to unwind and release _busy's gate before the next one can start, and
+    /// it's that flag (re-run from the _busy.PropertyChanged handler below) which actually
+    /// starts the newly-selected employee's load. Cancelling just makes the gap shorter.
+    ///
+    /// Only ever replaced, never cancelled, by RefreshAsync itself -- see there for why the
+    /// previous source is safe to dispose at that point (the busy gate guarantees the run it
+    /// belonged to has already finished).</summary>
+    private CancellationTokenSource? _switchCts;
 
     /// <summary>Raised at the end of LoadCoreAsync with the just-computed employee's Id and
     /// NetPay -- replaces a direct reach-in this class used to make into
@@ -405,6 +446,16 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// once IsRunning drops back to false rather than dropping it on the floor.</summary>
     private void RequestRefresh()
     {
+        // Before anything else, including the clear-and-return guard below: whatever
+        // LoadCoreAsync may still be computing was for the employee/period that was on
+        // screen a moment ago, and this call means that's no longer what's selected. See
+        // _switchCts' own doc comment for why this is a private source rather than
+        // _busy.Cancel(). Deliberately above the guard, not after it: the guard's own path
+        // (selection cleared, period backwards, no payroll group loaded) clears Result and
+        // returns, and an in-flight load left running through that would repopulate Result
+        // for the employee that just stopped being selected.
+        _switchCts?.Cancel();
+
         if (SelectedEmployee is null || _scope.PeriodEnd < _scope.PeriodStart || _scope.ActivePayrollRunId is null)
         {
             Result = null;
@@ -477,7 +528,19 @@ public partial class PayrollSummaryViewModel : ObservableObject
         // whole run has actually succeeded.
         var scheduleVersionAtLoadStart = _dataVersion.ScheduleVersion;
         var holidayVersionAtLoadStart = _dataVersion.HolidayVersion;
+        var attendanceInputsAtLoadStart = _dataVersion.AttendanceInputs;
         var succeeded = true;
+
+        // This run's own cancellation source, replacing the previous run's. Safe to dispose
+        // that one here rather than tracking its lifetime: _busy's gate serializes unrelated
+        // callers (see AttendanceBusyState.RunAsync's own doc comment), so by the time this
+        // line is reached the run it belonged to has already finished -- either normally, or
+        // by RequestRefresh cancelling it and the busy-idle handler replaying its way back
+        // here. Nothing else holds a reference to it: the linked source below is scoped to
+        // the one action.
+        _switchCts?.Dispose();
+        var switchCts = new CancellationTokenSource();
+        _switchCts = switchCts;
 
         // adjustmentsOnly: false, explicitly -- this is the employee/period-change path, so
         // it always needs LoadCoreAsync's real attendance recompute (see that parameter's own
@@ -488,20 +551,56 @@ public partial class PayrollSummaryViewModel : ObservableObject
         // default in via a method-group-to-delegate conversion -- correct, but easy to misread
         // as "same as before" at a glance. Spelled out keeps this call site's own intent
         // (always a full reload) as explicit as every other call site's now has to be.
-        await _busy.RunAsync(visibly: true, ct => LoadCoreAsync(ct, adjustmentsOnly: false),
+        await _busy.RunAsync(
+            visibly: true,
+            async ct =>
+            {
+                // Linked so either source ends this run: ct for the app-wide reasons
+                // _busy already owns (the Attendance tab's Cancel button, app shutdown),
+                // switchCts for "the person has already moved on to another employee."
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, switchCts.Token);
+                await LoadCoreAsync(linked.Token, adjustmentsOnly: false);
+            },
             onError: ex =>
             {
                 succeeded = false;
+
+                // A load this class deliberately abandoned is not a failure to report.
+                // Keyed off our own token rather than the exception type on purpose:
+                // cancelling an in-flight EF query does NOT reliably surface as
+                // OperationCanceledException (which _busy.RunAsync would have swallowed on
+                // its own before ever reaching here). Measured against this app's own
+                // SQL Server config over 12 mid-load cancellations: 6 came back as a raw
+                // SqlException (error 3980, "the batch is aborted... Operation cancelled by
+                // user" -- SqlClient aborting the batch rather than the token being observed
+                // between awaits), and only 2 as OperationCanceledException. Without this
+                // guard, most fast employee switches would pop a red "Could not load
+                // payroll" toast for something the person caused on purpose by clicking the
+                // next employee. The shared ScheduleDbContext survives that abort fine
+                // (12/12 next-loads succeeded on it), so there's nothing to recover here
+                // beyond staying quiet.
+                if (switchCts.IsCancellationRequested)
+                    return;
+
                 _statusBarService.ShowError(ex.Message, "Could not load payroll");
             });
 
-        if (succeeded)
+        // A cancelled run is not a successful one, even though nothing reported an error:
+        // _busy.RunAsync swallows OperationCanceledException silently and never calls
+        // onError for it (see its own doc comment), so `succeeded` is still true here after
+        // a load that abandoned partway through. Committing the version stamps on that
+        // would tell RecheckOnPageRevisitAsync this employee/period had been fully loaded at
+        // those versions, and it would then skip the reload that actually still owes.
+        var cancelled = switchCts.IsCancellationRequested;
+
+        if (succeeded && !cancelled)
         {
             _loadedScheduleVersion = scheduleVersionAtLoadStart;
             _loadedHolidayVersion = holidayVersionAtLoadStart;
+            _loadedAttendanceInputs = attendanceInputsAtLoadStart;
         }
 
-        return succeeded;
+        return succeeded && !cancelled;
     }
 
     /// <summary>The single-employee counterpart to PayrollGroupViewModel.
@@ -537,6 +636,18 @@ public partial class PayrollSummaryViewModel : ObservableObject
         // _loadedHolidayVersion's own doc comment). Checked before the schedule check below
         // so it isn't short-circuited past when only holidays changed.
         if (_dataVersion.HolidayVersion != _loadedHolidayVersion)
+        {
+            await RefreshAsync();
+            return;
+        }
+
+        // A device-log import, manual-entry edit, or punch-pairing edit since this payslip was
+        // loaded moves this employee's Worked/Late/Overtime/Night Diff hours, and therefore
+        // their pay -- recompute unconditionally, same as the holiday check above and for the
+        // same reason: none of the three counters behind AttendanceInputs is per-employee, so
+        // there's nothing to narrow this to just SelectedEmployee with. See
+        // _loadedAttendanceInputs' own doc comment.
+        if (_dataVersion.AttendanceInputs != _loadedAttendanceInputs)
         {
             await RefreshAsync();
             return;

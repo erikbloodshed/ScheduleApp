@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -41,7 +42,7 @@ namespace ScheduleApp.Desktop.Views;
 /// write a zero/garbage value into the shared file. Cancelling leaves the shared file
 /// untouched.
 /// </summary>
-public partial class SettingsDialog : Window
+public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly DatabaseProvisioningService _provisioningService;
     private readonly string _originalConnectionString;
@@ -148,28 +149,28 @@ public partial class SettingsDialog : Window
 
         ConnectionStringBox.Text = connectionString;
         DeviceIpBox.Text = deviceIp ?? string.Empty;
-        PortBox.Text = devicePort.ToString();
-        CommKeyBox.Text = deviceCommKey.ToString();
+        PortBox.Text = devicePort.ToString(CultureInfo.CurrentCulture);
+        CommKeyBox.Text = deviceCommKey.ToString(CultureInfo.CurrentCulture);
         UseUdpCheckBox.IsChecked = string.Equals(deviceTransport, "Udp", StringComparison.OrdinalIgnoreCase);
         FilePathText.Text = $"File: {sharedConfigFilePath}";
 
-        DefaultWorkTimeHoursBox.Text = defaultWorkTimeHours.ToString();
+        DefaultWorkTimeHoursBox.Text = defaultWorkTimeHours.ToString(CultureInfo.CurrentCulture);
 
-        ClockInBufferBeforeBox.Text = policy.ClockInBufferBefore.ToString();
-        ClockInBufferAfterBox.Text = policy.ClockInBufferAfter.ToString();
-        ClockOutBufferBeforeBox.Text = policy.ClockOutBufferBefore.ToString();
-        ClockOutBufferAfterBox.Text = policy.ClockOutBufferAfter.ToString();
-        FlexInBufferBox.Text = policy.FlexibleSegmentClockInBuffer.ToString();
-        FlexOutBufferBox.Text = policy.FlexibleSegmentClockOutBuffer.ToString();
-        FlexMinBreakGapBox.Text = policy.FlexibleMinimumBreakGap.ToString();
-        GracePeriodBox.Text = policy.ClockOutGracePeriod.ToString();
-        LateEarlyGraceMinutesBox.Text = policy.LateInEarlyOutGraceMinutes.ToString();
+        ClockInBufferBeforeBox.Text = policy.ClockInBufferBefore.ToString(CultureInfo.CurrentCulture);
+        ClockInBufferAfterBox.Text = policy.ClockInBufferAfter.ToString(CultureInfo.CurrentCulture);
+        ClockOutBufferBeforeBox.Text = policy.ClockOutBufferBefore.ToString(CultureInfo.CurrentCulture);
+        ClockOutBufferAfterBox.Text = policy.ClockOutBufferAfter.ToString(CultureInfo.CurrentCulture);
+        FlexInBufferBox.Text = policy.FlexibleSegmentClockInBuffer.ToString(CultureInfo.CurrentCulture);
+        FlexOutBufferBox.Text = policy.FlexibleSegmentClockOutBuffer.ToString(CultureInfo.CurrentCulture);
+        FlexMinBreakGapBox.Text = policy.FlexibleMinimumBreakGap.ToString(CultureInfo.CurrentCulture);
+        GracePeriodBox.Text = policy.ClockOutGracePeriod.ToString(CultureInfo.CurrentCulture);
+        LateEarlyGraceMinutesBox.Text = policy.LateInEarlyOutGraceMinutes.ToString(CultureInfo.CurrentCulture);
         NightDiffStartBox.Text = TimeDisplayFormat.Format(policy.NightDiffStart);
         NightDiffEndBox.Text = TimeDisplayFormat.Format(policy.NightDiffEnd);
         CapEarlyClockInCheckBox.IsChecked = policy.CapEarlyClockIn;
         StrictOvertimeCheckBox.IsChecked = policy.StrictOvertimeFromShiftEnd;
         UseExcelFormulaCheckBox.IsChecked = policy.UseExcelFormula;
-        NetPayRoundingMultipleBox.Text = payrollPolicy.NetPayRoundingMultiple.ToString();
+        NetPayRoundingMultipleBox.Text = payrollPolicy.NetPayRoundingMultiple.ToString(CultureInfo.CurrentCulture);
 
         CompanyNameBox.Text = _originalCompanyName;
 

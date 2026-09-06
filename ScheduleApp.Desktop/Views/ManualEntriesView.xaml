@@ -22,8 +22,8 @@
         <Border Grid.Row="0"
                 Padding="10,8"
                 Margin="0,0,0,8"
-                Background="#F8FAFC"
-                BorderBrush="#E2E8F0"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="4"
                 Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}">
@@ -127,7 +127,7 @@
 
         <TextBlock Grid.Row="2"
                    Margin="0,0,0,6"
-                   Foreground="#475569"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource BoolToVisibility}}">
             <Run Text="{Binding ManualEntriesCount, Mode=OneWay}"
                  FontWeight="Bold" />
@@ -197,7 +197,7 @@
 
         <TextBlock Grid.Row="3"
                    Text="No manual entries in range -- use Add Manual Entry… above, or on Punch Records' Punches toolbar, or widen the date range."
-                   Foreground="#94A3B8"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource InverseBoolToVisibility}}" />

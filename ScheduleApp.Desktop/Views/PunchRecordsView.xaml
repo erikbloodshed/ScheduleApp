@@ -21,9 +21,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="#F8FAFC" />
+                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -41,7 +41,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="#777777" />
+                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -167,8 +167,8 @@
                        StaysOpen="False"
                        AllowsTransparency="True"
                        IsOpen="{Binding IsLogViewSuggestionsOpen, Mode=TwoWay}">
-                    <Border Background="White"
-                            BorderBrush="#CBD5E1"
+                    <Border Background="{DynamicResource ApplicationBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Padding="2"
@@ -212,7 +212,7 @@
 
         <TextBlock Grid.Row="2"
                    Margin="0,0,0,6"
-                   Foreground="#475569"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding HasLoadedStoredLogs, Converter={StaticResource BoolToVisibility}}">
             <Run Text="{Binding StoredLogsCount, Mode=OneWay}"
                  FontWeight="Bold" />

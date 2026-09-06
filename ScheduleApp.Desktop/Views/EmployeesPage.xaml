@@ -18,9 +18,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="#F8FAFC" />
+                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
+                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -45,7 +45,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="#777777" />
+                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -159,7 +159,7 @@
                                 <TextBlock Text="{Binding Name}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="{Binding Employees.Count, StringFormat=' ({0})'}"
-                                           Foreground="#94A3B8" />
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </DataTemplate>
                     </TreeView.ItemTemplate>
@@ -177,7 +177,7 @@
                 <TextBlock DockPanel.Dock="Top"
                            Margin="0,0,0,8"
                            FontWeight="SemiBold"
-                           Foreground="#94A3B8"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                            Text="Select a department on the left to view its employees."
                            Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NullToVisibility}}" />
 
@@ -187,7 +187,7 @@
                             Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NotNullToVisibility}}">
                     <TextBlock FontWeight="SemiBold"
                                Text="{Binding SelectedItem.Name, ElementName=DepartmentTree}" />
-                    <TextBlock Foreground="#94A3B8"
+                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                Margin="6,0,0,0">
                         <Run Text="{Binding SelectedItem.Employees.Count, ElementName=DepartmentTree, Mode=OneWay}" />
                         <Run Text=" employee(s)" />
@@ -225,7 +225,7 @@
                                 <DataTrigger Binding="{Binding Employee.IsBlacklisted}"
                                              Value="True">
                                     <Setter Property="Foreground"
-                                            Value="#94A3B8" />
+                                            Value="{DynamicResource TextFillColorSecondaryBrush}" />
                                     <Setter Property="FontStyle"
                                             Value="Italic" />
                                 </DataTrigger>
