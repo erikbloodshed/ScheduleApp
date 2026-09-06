@@ -10,12 +10,12 @@ namespace ScheduleApp.Attendance;
 /// reason PunchMatching is shared between them.
 ///
 /// Always computed from the *actual* worked interval -- effectiveTimeIn/effectiveTimeOut,
-/// the same capped/graced DateTimes each strategy already derives for Worked_T -- never
+/// the same capped/graced DateTimes each strategy already derives for WorkedDuration -- never
 /// from the scheduled CheckIn/CheckOut window and never from the raw, uncapped punch
 /// timestamps. This is a deliberate policy choice (PH labor law bases night differential
 /// pay on hours actually rendered), not just a convenience: an employee who clocks in
 /// early or stays late only gets night diff credit for the portion of that time (if any)
-/// that's also within the configured window, exactly mirroring how Worked_T itself is
+/// that's also within the configured window, exactly mirroring how WorkedDuration itself is
 /// capped/graced first and only *then* measured.
 /// </summary>
 internal static class NightDifferentialCalculator

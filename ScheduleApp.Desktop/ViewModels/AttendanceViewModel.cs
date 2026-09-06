@@ -47,7 +47,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// just backed by seven smaller, independently-testable objects instead of one 1,400+
 /// line one.
 /// </summary>
-public partial class AttendanceViewModel : ObservableObject
+public partial class AttendanceViewModel : ObservableObject, IDisposable
 {
     private readonly ViewStateStore _viewStateStore;
     private readonly AttendanceTabActivationGate _tabActivationGate = new();
@@ -542,5 +542,16 @@ public partial class AttendanceViewModel : ObservableObject
         IsSummaryTabSelected = false;
         IsPunchRecordsTabSelected = false;
         IsManualEntriesTabSelected = true;
+    }
+
+    /// <summary>Disposes the one collaborator this class constructs itself rather than
+    /// taking from the container (_employeeDirectory, see the constructor) -- everything
+    /// else here is injected and therefore owned and disposed by the scope. Registered
+    /// AddScoped, and App only ever creates the one scope, so this runs when that scope
+    /// is disposed at app exit.</summary>
+    public void Dispose()
+    {
+        _employeeDirectory.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

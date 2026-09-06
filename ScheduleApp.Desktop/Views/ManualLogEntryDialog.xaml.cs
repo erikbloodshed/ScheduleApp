@@ -22,7 +22,7 @@ namespace ScheduleApp.Desktop.Views;
 /// dialog. Purely a decoration on top of the Add/Edit flow: it never affects
 /// Save, and a failed or still-in-flight fetch never blocks it either.
 /// </summary>
-public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow
+public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDisposable
 {
     private readonly IReadOnlyList<Employee> _employees;
     private readonly IAttendanceLogRepository _attendanceLogRepository;
@@ -505,4 +505,26 @@ public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow
 
     private static void Warn(string message) =>
         MessageBox.Show(message, "Check your entry", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+    /// <summary>Nothing owns this window the way the DI scope owns a ViewModel -- it is
+    /// constructed with `new` at each call site and shown as a dialog -- so closing is the
+    /// only moment its two disposables can be released. Overriding OnClosed rather than
+    /// subscribing to Closed covers all three constructors from one place.</summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        Dispose();
+    }
+
+    /// <summary>Cancels any machine-punch fetch still in flight, then releases the gate it
+    /// waits on. Safe to call twice (OnClosed above already calls it once, and both
+    /// SemaphoreSlim.Dispose and CancellationTokenSource.Dispose tolerate a repeat).</summary>
+    public void Dispose()
+    {
+        _machinePunchesCts?.Cancel();
+        _machinePunchesCts?.Dispose();
+        _machinePunchesCts = null;
+        _machinePunchesGate.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

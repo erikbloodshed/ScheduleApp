@@ -449,7 +449,7 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
             DescribeBufferDefault(employees, e => e.ClockOutBufferAfterHours, _defaultNormalClockOutBufferAfterHours),
             isExistingNormalEntry);
 
-        // Overtime_H/NightDiff_H are only ever computed for Normal, Flexible, and
+        // OvertimeHours/NightDiffHours are only ever computed for Normal, Flexible, and
         // SplitShift (see OvertimeNightDiffLabel's XAML comment) -- unlike
         // isExistingNormalEntry above, this covers all three, since these five
         // overrides apply to any of them.
@@ -606,7 +606,7 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
         // just above, this section stays visible for RestDay too (exclusion list
         // is one shorter than the buffers'), though RestDay only ever actually
         // acts on the Night Diff half: RestDayShiftCalculationStrategy's own doc
-        // comment is explicit that Overtime_H is never populated for RestDay in
+        // comment is explicit that OvertimeHours is never populated for RestDay in
         // either mode, so its Overtime-eligible/rate-override controls are
         // presently harmless-but-inert whenever RestDay is selected (a separate,
         // pre-existing gap from the one this pass fixes -- not addressed here).
@@ -934,7 +934,7 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
             }
 
             // Overtime/Night Diff overrides -- Normal, Flexible, and SplitShift
-            // all compute Overtime_H/NightDiff_H (see OvertimeNightDiffLabel's
+            // all compute OvertimeHours/NightDiffHours (see OvertimeNightDiffLabel's
             // XAML comment), so all three read these back; Official Business
             // never does, and the section is hidden for it (see
             // UpdateFieldAvailability) so there's nothing meaningful to read

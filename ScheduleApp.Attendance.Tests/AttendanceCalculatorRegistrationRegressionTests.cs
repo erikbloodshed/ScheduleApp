@@ -48,8 +48,8 @@ public class AttendanceCalculatorRegistrationRegressionTests
 
         Assert.Equal(ScheduleType.Normal, summary.ScheduleType);
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(8.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.Overtime_H);
-        Assert.Equal(0.0, summary.Remain_H);
+        Assert.Equal(8.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.OvertimeHours);
+        Assert.Equal(0.0, summary.RemainHours);
     }
 }

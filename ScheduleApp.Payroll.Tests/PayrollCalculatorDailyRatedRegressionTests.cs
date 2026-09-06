@@ -74,7 +74,7 @@ public class PayrollCalculatorDailyRatedRegressionTests
             {
                 summary.ScheduleType = ScheduleType.RestDay;
                 summary.Status = PunchStatus.RestDay;
-                summary.Worked_H = 4; // worked, at the 20% Rest Day premium above
+                summary.WorkedHours = 4; // worked, at the 20% Rest Day premium above
             }
             else if (date == absentDay)
             {
@@ -82,11 +82,11 @@ public class PayrollCalculatorDailyRatedRegressionTests
             }
             else if (date == overtimeDay)
             {
-                summary.Overtime_H = 2;
+                summary.OvertimeHours = 2;
             }
             else if (date == nightDiffDay)
             {
-                summary.NightDiff_H = 1;
+                summary.NightDiffHours = 1;
             }
 
             summaries.Add(summary);

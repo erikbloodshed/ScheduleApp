@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Data;
+using ScheduleApp.PushListener.Logging;
 using ScheduleApp.PushListener.Services;
 
 namespace ScheduleApp.PushListener.Controllers;
@@ -158,7 +159,7 @@ public class AdminController(
         }
         catch (IOException ex)
         {
-            _logger.LogWarning(ex, "Could not read log file {LogFile} for /admin/logs.", latestFile.FullName);
+            PushListenerLog.LogFileUnreadable(_logger, ex, latestFile.FullName);
             return Ok(Array.Empty<object>());
         }
 
@@ -382,7 +383,7 @@ public class AdminController(
         var id = state.NextCommandId();
         state.PendingCommands.Enqueue((id, commandText));
 
-        _logger.LogInformation("Queued command {CommandId} for SN={SerialNumber}: {CommandText}", id, sn, commandText);
+        PushListenerLog.QueuedCommand(_logger, id, sn, commandText);
 
         return Ok(new { QueuedForDevice = sn, CommandId = id, commandText });
     }
@@ -426,7 +427,7 @@ public class AdminController(
         var resyncCommand = $"DATA QUERY ATTLOG StartTime={start}\tEndTime={end}";
         state.PendingCommands.Enqueue((id, resyncCommand));
 
-        _logger.LogInformation("Queued resync for SN={SerialNumber}: {Command}", sn, resyncCommand);
+        PushListenerLog.QueuedResync(_logger, sn, resyncCommand);
 
         return Ok(new
         {
@@ -455,7 +456,7 @@ public class AdminController(
         const string checkCommand = "CHECK";
         state.PendingCommands.Enqueue((id, checkCommand));
 
-        _logger.LogInformation("Force-recheck queued for SN={SerialNumber}: stamps reset, CommandId={CommandId}", sn, id);
+        PushListenerLog.QueuedForceRecheck(_logger, sn, id);
 
         return Ok(new
         {

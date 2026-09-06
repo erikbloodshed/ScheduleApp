@@ -82,7 +82,7 @@ public class PayrollCalculatorRestDayWorkedExampleTests
         var employee = MonthlyEmployee(restDayWorkPremiumPercentage: 0.30m);
 
         // §5's "safe" rule: an unpaired trailing punch zeroes the whole day.
-        // RestDayShiftCalculationStrategy guarantees Worked_H == 0 in that
+        // RestDayShiftCalculationStrategy guarantees WorkedHours == 0 in that
         // case before PayrollCalculator ever sees the row, so this scenario
         // is indistinguishable, from PayrollCalculator's side, from an
         // unworked Rest Day -- which is exactly the point being tested.
@@ -107,7 +107,7 @@ public class PayrollCalculatorRestDayWorkedExampleTests
             (new DateOnly(2026, 8, 9), s =>
             {
                 MakeRestDay(s, workedHours: 8);
-                s.NightDiff_H = 2; // 2 of the 8 worked hours fall in the Night Diff window
+                s.NightDiffHours = 2; // 2 of the 8 worked hours fall in the Night Diff window
             }),
             (new DateOnly(2026, 8, 7), MakeAbsent));
 

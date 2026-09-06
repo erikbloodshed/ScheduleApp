@@ -65,15 +65,15 @@ public class AttendancePolicy
     /// <summary>
     /// Grace period, in minutes, before a late clock-in or early clock-out actually
     /// counts against the employee. A punch within this many minutes of the scheduled
-    /// start (LateIn_T) or scheduled end (EarlyOut_T) is treated as exactly on time --
+    /// start (LateInDuration) or scheduled end (EarlyOutDuration) is treated as exactly on time --
     /// both stay zero -- rather than reporting the literal difference down to the
     /// minute. Once the difference exceeds the grace period, the *entire* difference
     /// counts (not just the amount past the grace period) -- the same all-or-nothing
     /// shape as ClockOutGracePeriod's own overtime carve-out just above, which this is
     /// otherwise independent of: that one only clips the clock-out side for overtime
-    /// purposes, this clips both LateIn_T and EarlyOut_T for tardiness/undertime
-    /// purposes (Remain_T/Remain_H, and in turn ScheduleApp.Payroll.PayrollCalculator's
-    /// undertime deduction, since both are just LateIn_T + EarlyOut_T).
+    /// purposes, this clips both LateInDuration and EarlyOutDuration for tardiness/undertime
+    /// purposes (RemainDuration/RemainHours, and in turn ScheduleApp.Payroll.PayrollCalculator's
+    /// undertime deduction, since both are just LateInDuration + EarlyOutDuration).
     ///
     /// Deliberately expressed in minutes rather than hours, unlike every other field on
     /// this class -- a grace period this small is naturally minute-scaled ("5" reads far
@@ -81,8 +81,8 @@ public class AttendancePolicy
     ///
     /// Used by SingleWindowShiftCalculationStrategy (Normal) and
     /// SplitShiftCalculationStrategy (each segment, against its own start/end) -- the
-    /// same two strategies that populate LateIn_T/EarlyOut_T at all. Flexible has no
-    /// fixed target time to grace against (LateIn_T/EarlyOut_T always stay zero there --
+    /// same two strategies that populate LateInDuration/EarlyOutDuration at all. Flexible has no
+    /// fixed target time to grace against (LateInDuration/EarlyOutDuration always stay zero there --
     /// see FlexibleShiftCalculationStrategy), and RestDay never populates them either
     /// (see RestDayShiftCalculationStrategy), so this has no effect on either. Default 5.
     /// </summary>
@@ -98,7 +98,7 @@ public class AttendancePolicy
     /// already use for TimeIn/TimeOut). Night diff is computed from each day's actual
     /// *worked* time -- effectiveTimeIn/effectiveTimeOut, the same capped/graced
     /// DateTimes SingleWindowShiftCalculationStrategy and FlexibleShiftCalculationStrategy
-    /// already compute for Worked_T -- not the raw punches and not the scheduled
+    /// already compute for WorkedDuration -- not the raw punches and not the scheduled
     /// CheckIn/CheckOut window, so it only ever credits hours actually on the clock
     /// (see NightDifferentialCalculator). Official Business is a deliberate exception:
     /// it's credited as fully worked without ever generating night diff, even if its

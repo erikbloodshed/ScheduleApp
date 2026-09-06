@@ -92,9 +92,9 @@ public class FlexibleShiftManualPunchTests
         Assert.True(summary.ClockInIsManual);
         Assert.Equal(new TimeOnly(17, 26), summary.ClockOut);
         Assert.False(summary.ClockOutIsManual);
-        Assert.Equal(9.0 + 26.0 / 60.0, summary.Worked_H, precision: 3);
-        Assert.Equal(0.0, summary.Remain_H);
-        Assert.True(summary.Overtime_H > 0, "9h26m against a 9.00h requirement should register a small overtime credit.");
+        Assert.Equal(9.0 + 26.0 / 60.0, summary.WorkedHours, precision: 3);
+        Assert.Equal(0.0, summary.RemainHours);
+        Assert.True(summary.OvertimeHours > 0, "9h26m against a 9.00h requirement should register a small overtime credit.");
 
         // Both punches actually used -- nothing left unclaimed.
         Assert.Equal(2, result.ClaimedPunches.Count);
@@ -149,7 +149,7 @@ public class FlexibleShiftManualPunchTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(8.0, summary.Worked_H);
+        Assert.Equal(8.0, summary.WorkedHours);
         Assert.Equal(2, result.ClaimedPunches.Count);
         Assert.Empty(result.UnclaimedPunches);
     }
@@ -171,7 +171,7 @@ public class FlexibleShiftManualPunchTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(8.0, summary.Worked_H);
+        Assert.Equal(8.0, summary.WorkedHours);
         Assert.Equal(2, result.ClaimedPunches.Count);
         Assert.Empty(result.UnclaimedPunches);
     }

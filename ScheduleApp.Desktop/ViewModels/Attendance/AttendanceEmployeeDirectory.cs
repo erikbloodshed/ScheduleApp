@@ -37,7 +37,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// *other* repository's call -- e.g. IAttendanceLogRepository.GetLogsAsync, or
 /// ReportScopeViewModel's own direct IScheduleRepository calls -- that's still on
 /// IsRunning to prevent.</summary>
-public sealed class AttendanceEmployeeDirectory(IScheduleRepository scheduleRepository)
+public sealed class AttendanceEmployeeDirectory(IScheduleRepository scheduleRepository) : IDisposable
 {
     private readonly IScheduleRepository _scheduleRepository = scheduleRepository;
     private readonly SemaphoreSlim _dbGate = new(1, 1);
@@ -126,4 +126,9 @@ public sealed class AttendanceEmployeeDirectory(IScheduleRepository scheduleRepo
     /// GetAllIncludingBlacklistedAsync's shape here would let a blacklisted employee leak
     /// into autosuggest.</summary>
     public void SeedCache(IReadOnlyList<Employee> employees) => _suggestionCache = [.. employees];
+
+    /// <summary>Releases _dbGate. This type is constructed by AttendanceViewModel rather
+    /// than by the container (see that class's constructor), so AttendanceViewModel owns
+    /// the call -- it disposes this from its own Dispose.</summary>
+    public void Dispose() => _dbGate.Dispose();
 }

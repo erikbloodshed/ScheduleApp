@@ -6,7 +6,7 @@ using static ScheduleApp.Attendance.Tests.RestDayTestFixtures;
 namespace ScheduleApp.Attendance.Tests;
 
 /// <summary>
-/// Night-window overlap → NightDiff_H > 0, gated correctly by
+/// Night-window overlap → NightDiffHours > 0, gated correctly by
 /// ResolveNightDiffEligible. Only reachable through the windowed mode now
 /// that the no-schedule mode never looks at punches at all (see
 /// RestDayUnscheduledModeTests) -- so every scenario here uses a scheduled
@@ -38,8 +38,8 @@ public class RestDayNightDiffTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy);
         var summary = Assert.Single(result.Summaries);
 
-        Assert.Equal(2.0, summary.Worked_H);
-        Assert.Equal(1.0, summary.NightDiff_H); // only the 10-11 PM portion
+        Assert.Equal(2.0, summary.WorkedHours);
+        Assert.Equal(1.0, summary.NightDiffHours); // only the 10-11 PM portion
     }
 
     [Fact]
@@ -52,10 +52,10 @@ public class RestDayNightDiffTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy);
         var summary = Assert.Single(result.Summaries);
 
-        // Worked_H is unaffected by night-diff eligibility -- only NightDiff_H
+        // WorkedHours is unaffected by night-diff eligibility -- only NightDiffHours
         // is suppressed.
-        Assert.Equal(2.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.NightDiff_H);
+        Assert.Equal(2.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.NightDiffHours);
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class RestDayNightDiffTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy);
         var summary = Assert.Single(result.Summaries);
 
-        Assert.Equal(2.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.NightDiff_H);
+        Assert.Equal(2.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.NightDiffHours);
     }
 }

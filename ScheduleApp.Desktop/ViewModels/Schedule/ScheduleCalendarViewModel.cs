@@ -779,12 +779,12 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         // RestDayShiftCalculationStrategy's own Status is always
         // PunchStatus.RestDay, whether or not a duty was actually recognized
         // that day (see its own doc comment) -- Payroll/Reports/Excel all key
-        // off Worked_H instead of Status for that distinction, so statusByDate
+        // off WorkedHours instead of Status for that distinction, so statusByDate
         // above can't tell a worked Rest Day apart from a plain day off. The
         // Complete checkmark -- Normal/Flexible-only until now -- reuses that
-        // same Worked_H > 0 signal (the exact test PayrollCalculator already
+        // same WorkedHours > 0 signal (the exact test PayrollCalculator already
         // uses to decide whether the Rest Day Pay premium applies) rather than
-        // introducing a new one: Worked_H can only be positive coming out of
+        // introducing a new one: WorkedHours can only be positive coming out of
         // CalculateWindowedDay with both a clock-in and clock-out punch found,
         // never out of CalculateUnscheduledDay's plain-day-off branch, so a
         // date only lands here when a duty was both scheduled and fulfilled.
@@ -793,7 +793,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         // Status stays PunchStatus.RestDay everywhere else (payroll, the
         // Attendance report, Excel export), so none of those are affected.
         var restDayDutyFulfilledDates = result.Summaries
-            .Where(s => s.ScheduleType == ScheduleType.RestDay && s.Worked_H > 0)
+            .Where(s => s.ScheduleType == ScheduleType.RestDay && s.WorkedHours > 0)
             .Select(s => s.ShiftDate)
             .ToHashSet();
 

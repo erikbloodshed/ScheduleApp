@@ -11,8 +11,8 @@ namespace ScheduleApp.Attendance;
 /// Status is always PunchStatus.RestDay, whether or not a duty was actually
 /// recognized -- there's no separate "worked" vs. "unworked" status; only the
 /// hours fields differ. Neither check ScheduleApp.Payroll.PayrollCalculator
-/// makes reads Status: Worked_H &gt; 0 decides whether the Rest Day Pay
-/// premium applies to a given day, and NightDiff_H &gt; 0 decides whether
+/// makes reads Status: WorkedHours &gt; 0 decides whether the Rest Day Pay
+/// premium applies to a given day, and NightDiffHours &gt; 0 decides whether
 /// Night Diff does.
 ///
 /// Two modes, chosen by whether the ScheduleEntry carries a real
@@ -27,7 +27,7 @@ namespace ScheduleApp.Attendance;
 ///   empty, the same "skip punch matching entirely" shape
 ///   LeaveShiftCalculationStrategy and OfficialBusinessShiftCalculationStrategy's
 ///   own blank (no-scheduled-window) case use -- so a punch recorded on an
-///   unchecked Rest Day is never honored: no Worked_H, no premium, no matter
+///   unchecked Rest Day is never honored: no WorkedHours, no premium, no matter
 ///   what was punched. It also isn't reported back as Orphaned the way a
 ///   punch this strategy did look at but declined to use would be; it falls
 ///   through to AttendanceWorkflowService's Unscheduled bucket instead, same
@@ -39,20 +39,20 @@ namespace ScheduleApp.Attendance;
 ///   *both* the clock-in and clock-out windows) counts as a duty; a Partial
 ///   outcome (only one side found) counts as no duty here too, unlike
 ///   SingleWindowShiftCalculationStrategy itself, which still reports
-///   whichever side it did find. No Remain_H/Undertime either way -- a Rest
+///   whichever side it did find. No RemainHours/Undertime either way -- a Rest
 ///   Day was never a required workday, so falling short of an optional
 ///   expected window isn't a shortfall to dock.
 ///
-/// Overtime_H/Remain_H/LateIn_T/EarlyOut_T are never populated in either
+/// OvertimeHours/RemainHours/LateInDuration/EarlyOutDuration are never populated in either
 /// mode. In particular, hours past a scheduled window's end are not split
 /// into a separate Overtime figure the way SingleWindow/SplitShift would --
-/// they simply extend Worked_H to cover the whole actual clock-in-to-clock-out
+/// they simply extend WorkedHours to cover the whole actual clock-in-to-clock-out
 /// span, and all of it prices through the one Rest Day Pay premium
 /// (ScheduleApp.Payroll.PayrollCalculator) instead. ScheduleEntry.
 /// OvertimeEligibleOverride/ApplyOvertimeRatePercentageOverride/
 /// OvertimeRatePercentageOverride are consequently never read here.
 ///
-/// NightDiff_H/NightDiff_T/NightDiffRatePercentageOverride, when set, reuse
+/// NightDiffHours/NightDiffDuration/NightDiffRatePercentageOverride, when set, reuse
 /// the same NightDifferentialCalculator.ResolveEligible gate and
 /// NightDifferentialCalculator.CalculateHours sum every other strategy
 /// already uses -- only reachable through the windowed mode now, since the
@@ -126,14 +126,14 @@ internal sealed class RestDayShiftCalculationStrategy : IShiftCalculationStrateg
     /// Complete outcome. Only one of the two found (its Partial outcome)
     /// counts as no duty here too, unlike SingleWindowShiftCalculationStrategy
     /// itself, which still reports whichever side it did find and leaves
-    /// Worked_H at zero anyway -- so ClockIn/ClockOut/Worked_H/Worked_T/
-    /// NightDiff_H here all stay at their zero/blank defaults whenever both
+    /// WorkedHours at zero anyway -- so ClockIn/ClockOut/WorkedHours/WorkedDuration/
+    /// NightDiffHours here all stay at their zero/blank defaults whenever both
     /// sides aren't found, not just the hours fields.
     ///
-    /// No clock-out grace-period capping and no Overtime_H -- a Rest Day was
+    /// No clock-out grace-period capping and no OvertimeHours -- a Rest Day was
     /// never a required workday, so there's no "shift end" to measure
     /// overtime against; a clock-out found later than the scheduled window
-    /// (still within the clock-out buffer) simply extends Worked_H to cover
+    /// (still within the clock-out buffer) simply extends WorkedHours to cover
     /// the whole actual clock-in-to-clock-out span.</summary>
     private static (AttendanceSummary Summary, List<AttendanceLog> Claimed, List<AttendanceLog> Unclaimed) CalculateWindowedDay(
         ScheduleEntry schedule,
@@ -216,7 +216,7 @@ internal sealed class RestDayShiftCalculationStrategy : IShiftCalculationStrateg
 
         // No grace-period capping on the clock-out side -- see the class doc
         // comment: hours past the scheduled window's end just extend
-        // Worked_H, never split off into Overtime_H.
+        // WorkedHours, never split off into OvertimeHours.
         DateTime effectiveTimeOut = clockOutPunch.Timestamp;
 
         effectiveTimeIn = TruncateToMinute(effectiveTimeIn);
@@ -228,14 +228,14 @@ internal sealed class RestDayShiftCalculationStrategy : IShiftCalculationStrateg
         }
 
         double totalHours = (effectiveTimeOut - effectiveTimeIn).TotalHours;
-        summary.Worked_H = totalHours;
-        summary.Worked_T = TimeSpan.FromHours(totalHours);
+        summary.WorkedHours = totalHours;
+        summary.WorkedDuration = TimeSpan.FromHours(totalHours);
 
         if (NightDifferentialCalculator.ResolveEligible(schedule))
         {
-            summary.NightDiff_H = NightDifferentialCalculator.CalculateHours(
+            summary.NightDiffHours = NightDifferentialCalculator.CalculateHours(
                 effectiveTimeIn, effectiveTimeOut, policy.NightDiffStart, policy.NightDiffEnd);
-            summary.NightDiff_T = TimeSpan.FromHours(summary.NightDiff_H);
+            summary.NightDiffDuration = TimeSpan.FromHours(summary.NightDiffHours);
             summary.NightDiffRatePercentageOverride = schedule.NightDiffRatePercentageOverride;
         }
 

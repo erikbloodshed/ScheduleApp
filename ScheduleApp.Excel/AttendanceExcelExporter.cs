@@ -525,33 +525,33 @@ public static class AttendanceExcelExporter
             if (s.WorkDay is { } workDay && workDay > 0)
                 ws.Cells[row, cols.WorkDay].Value = workDay;
 
-            if (s.LateIn_T.TotalMinutes > 0)
-                ws.Cells[row, cols.LateIn_T].Value = s.LateIn_T;
+            if (s.LateInDuration.TotalMinutes > 0)
+                ws.Cells[row, cols.LateIn_T].Value = s.LateInDuration;
 
-            if (s.EarlyOut_T.TotalMinutes > 0)
-                ws.Cells[row, cols.EarlyOut_T].Value = s.EarlyOut_T;
+            if (s.EarlyOutDuration.TotalMinutes > 0)
+                ws.Cells[row, cols.EarlyOut_T].Value = s.EarlyOutDuration;
 
-            if (s.Remain_H > 0)
+            if (s.RemainHours > 0)
             {
-                ws.Cells[row, cols.Remain_T].Value = s.Remain_T;
-                ws.Cells[row, cols.Remain_H].Value = s.Remain_H;
+                ws.Cells[row, cols.Remain_T].Value = s.RemainDuration;
+                ws.Cells[row, cols.Remain_H].Value = s.RemainHours;
             }
 
-            if (s.Overtime_H > 0)
+            if (s.OvertimeHours > 0)
             {
-                ws.Cells[row, cols.Overtime_T].Value = s.Overtime_T;
-                ws.Cells[row, cols.Overtime_H].Value = s.Overtime_H;
+                ws.Cells[row, cols.Overtime_T].Value = s.OvertimeDuration;
+                ws.Cells[row, cols.Overtime_H].Value = s.OvertimeHours;
             }
 
-            // s.NightDiff_H is always 0 for Official Business (see
+            // s.NightDiffHours is always 0 for Official Business (see
             // OfficialBusinessShiftCalculationStrategy), so this naturally leaves
             // an OB row's night-diff cells blank without a separate ScheduleType
             // check here -- unlike the live-formula branch below, which derives
             // night diff from ClockIn/ClockOut directly and so does need one.
-            if (s.NightDiff_H > 0)
+            if (s.NightDiffHours > 0)
             {
-                ws.Cells[row, cols.NightDiff_T].Value = s.NightDiff_T;
-                ws.Cells[row, cols.NightDiff_H].Value = s.NightDiff_H;
+                ws.Cells[row, cols.NightDiff_T].Value = s.NightDiffDuration;
+                ws.Cells[row, cols.NightDiff_H].Value = s.NightDiffHours;
             }
 
             return;
@@ -870,6 +870,13 @@ public static class AttendanceExcelExporter
     /// the only thing that changes between the per-department-sheet layout and
     /// the single-sheet layout, so all the writer methods above stay identical
     /// regardless of which mode is active.
+    ///
+    /// The LateIn_T/Remain_H-style member names here are deliberately NOT the
+    /// AttendanceSummary property names they read from (those are LateInDuration,
+    /// RemainHours, and so on). These name the *spreadsheet* columns, and WriteHeaderRow
+    /// writes the same identifiers as the header text -- people read them in the exported
+    /// report and key their own downstream sheets off them, so they are a published
+    /// format rather than an internal name, and they stay as they are.
     /// </summary>
     private sealed class SummaryColumns
     {

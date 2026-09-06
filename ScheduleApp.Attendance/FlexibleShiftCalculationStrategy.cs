@@ -35,7 +35,7 @@ namespace ScheduleApp.Attendance;
 /// - RestrictedTimeIn never removes a punch from the search or the pairing --
 ///   an early punch still pairs normally and still shows up in the raw
 ///   ClockIn -- it only clamps the *effective* start time used for the
-///   Worked_H/NightDiff_H math (applied per resulting pair, after the merge
+///   WorkedHours/NightDiffHours math (applied per resulting pair, after the merge
 ///   pass below), the same "no credit before the window opens" idea
 ///   SingleWindowShiftCalculationStrategy/SplitShiftCalculationStrategy apply
 ///   to their own scheduled starts, gated the same way behind
@@ -92,7 +92,7 @@ internal sealed class FlexibleShiftCalculationStrategy : IShiftCalculationStrate
     /// <summary>Every punch within the day's search boundary counts, sorted
     /// and paired off sequentially (1st=in, 2nd=out, 3rd=in, ...), worked
     /// hours compared against the day's single WorkTimeHours target.
-    /// LateIn_T/EarlyOut_T stay zero -- there's no fixed target time to be
+    /// LateInDuration/EarlyOutDuration stay zero -- there's no fixed target time to be
     /// late or early against when nothing bounds *when* punches are allowed.
     ///
     /// Two adjacent pairs only count as separate work intervals if the gap
@@ -102,7 +102,7 @@ internal sealed class FlexibleShiftCalculationStrategy : IShiftCalculationStrate
     /// two pairs are merged into one continuous interval instead of being
     /// reported as two -- without this, e.g. a stray near-duplicate tap a
     /// minute after the real clock-out would silently start a second "pair"
-    /// and inflate Worked_H, or (worse) leave a dangling unpaired punch that
+    /// and inflate WorkedHours, or (worse) leave a dangling unpaired punch that
     /// turns an otherwise-Complete day into Partial. This merge pass runs on
     /// the raw punch timestamps -- it's unaffected by RestrictedTimeIn's
     /// capping below, which only ever touches the totalHours/night-diff math
@@ -111,7 +111,7 @@ internal sealed class FlexibleShiftCalculationStrategy : IShiftCalculationStrate
     /// Night diff has no single "effective" capped/graced interval to work
     /// from here (there's no one scheduled window to cap against) -- it's
     /// summed per resulting pair instead, each pair independently capped the
-    /// same way Worked_H is below -- policy is only needed for its
+    /// same way WorkedHours is below -- policy is only needed for its
     /// NightDiffStart/NightDiffEnd.</summary>
     private static (AttendanceSummary Summary, List<AttendanceLog> Claimed, List<AttendanceLog> Unclaimed) CalculateUnrestrictedDay(
         ScheduleEntry schedule,

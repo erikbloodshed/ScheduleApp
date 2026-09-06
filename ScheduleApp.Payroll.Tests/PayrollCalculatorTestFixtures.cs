@@ -53,13 +53,13 @@ internal static class PayrollCalculatorTestFixtures
     /// RestDayShiftCalculationStrategy: a day is never partly RestDay).
     /// workedHours defaults to 0 -- an unworked Rest Day -- which is also
     /// exactly what an unpaired-punch Rest Day looks like by the time
-    /// PayrollCalculator sees it (§5's "safe" rule zeroes Worked_H before
+    /// PayrollCalculator sees it (§5's "safe" rule zeroes WorkedHours before
     /// this summary is ever built), so the same helper covers both cases.</summary>
     public static void MakeRestDay(AttendanceSummary summary, double workedHours = 0)
     {
         summary.ScheduleType = ScheduleType.RestDay;
         summary.Status = PunchStatus.RestDay;
-        summary.Worked_H = workedHours;
+        summary.WorkedHours = workedHours;
     }
 
     public static void MakeAbsent(AttendanceSummary summary)

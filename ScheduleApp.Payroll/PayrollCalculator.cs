@@ -190,7 +190,7 @@ public static class PayrollCalculator
         // Each day's *hours* are rounded to 2 dp (RoundHours) before they're
         // used for anything -- both the pay math right below and the period
         // totals (undertimeHours/overtimeHours/nightDiffHours) that feed the
-        // "(x.xxH)" labels. AttendanceSummary.Overtime_H/NightDiff_H/Remain_H
+        // "(x.xxH)" labels. AttendanceSummary.OvertimeHours/NightDiffHours/RemainHours
         // arrive as raw doubles (full TimeSpan precision, e.g. 2.61666...
         // for 2h37m), and multiplying pay off that raw figure while only
         // *displaying* a 2dp-rounded version of it (the old behavior) meant
@@ -303,11 +303,11 @@ public static class PayrollCalculator
             // or not (confirmed assumption 7).
             foreach (var day in dayRows)
             {
-                decimal dayUndertimeHours = RoundHours(day.Remain_H);
-                decimal dayOvertimeHours = RoundHours(day.Overtime_H);
-                decimal dayNightDiffHours = RoundHours(day.NightDiff_H);
+                decimal dayUndertimeHours = RoundHours(day.RemainHours);
+                decimal dayOvertimeHours = RoundHours(day.OvertimeHours);
+                decimal dayNightDiffHours = RoundHours(day.NightDiffHours);
                 decimal dayRestDayHours = day.ScheduleType == ScheduleType.RestDay
-                    ? RoundHours(day.Worked_H)
+                    ? RoundHours(day.WorkedHours)
                     : 0m;
 
                 undertimeHours += dayUndertimeHours;
@@ -332,7 +332,7 @@ public static class PayrollCalculator
                 }
 
                 // Rest Day Pay: only when the day resolves to an unambiguous
-                // duty (Worked_H > 0 -- RestDayShiftCalculationStrategy only
+                // duty (WorkedHours > 0 -- RestDayShiftCalculationStrategy only
                 // populates it for a clean punch match or both ends of a
                 // scheduled window, per the design doc's §5). Applies to both
                 // employee types -- a Daily-rated employee can just as easily
@@ -645,7 +645,7 @@ public static class PayrollCalculator
     /// parameterized to say so explicitly.
     ///
     /// Nonzero for a day that resolves to <see cref="PunchStatus.Complete"/> or an
-    /// actually-worked <see cref="PunchStatus.RestDay"/> (Worked_H > 0 -- see
+    /// actually-worked <see cref="PunchStatus.RestDay"/> (WorkedHours > 0 -- see
     /// RestDayShiftCalculationStrategy's own doc comment for why Status alone can't
     /// tell a worked Rest Day from an unworked one) -- this now stacks with whatever
     /// Rest Day Pay that same duty separately earns in <see cref="Calculate"/>'s own
@@ -728,11 +728,11 @@ public static class PayrollCalculator
 
             // A Rest Day's Status is always PunchStatus.RestDay whether or not a
             // duty was actually recognized that day (see
-            // RestDayShiftCalculationStrategy's own doc comment) -- Worked_H > 0
+            // RestDayShiftCalculationStrategy's own doc comment) -- WorkedHours > 0
             // is what actually tells a worked Rest Day apart from an unworked
             // one, the same signal Calculate's own Rest Day Pay line uses.
             bool restDayDutyWorked = dayStatus == PunchStatus.RestDay
-                && dayRows.Any(r => RoundHours(r.Worked_H) > 0);
+                && dayRows.Any(r => RoundHours(r.WorkedHours) > 0);
 
             // "Worked the holiday" now covers both an ordinary Complete day and
             // a Rest Day actually worked -- company policy update: a listed
@@ -788,8 +788,8 @@ public static class PayrollCalculator
             // time.
             foreach (var day in dayRows)
             {
-                decimal dayOvertimeHours = RoundHours(day.Overtime_H);
-                decimal dayNightDiffHours = RoundHours(day.NightDiff_H);
+                decimal dayOvertimeHours = RoundHours(day.OvertimeHours);
+                decimal dayNightDiffHours = RoundHours(day.NightDiffHours);
 
                 if (dayOvertimeHours > 0)
                 {
@@ -888,7 +888,7 @@ public static class PayrollCalculator
     /// order matters.</summary>
     private static decimal Round(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
-    /// <summary>Rounds one day's Overtime_H/NightDiff_H/Remain_H (raw
+    /// <summary>Rounds one day's OvertimeHours/NightDiffHours/RemainHours (raw
     /// TimeSpan-derived doubles, e.g. 2.61666... for 2h37m) to 2 dp, same
     /// away-from-zero-on-a-tie convention as <see cref="Round"/> above --
     /// the opposite rule from Round itself: this one is deliberately applied

@@ -5,6 +5,7 @@ using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Configuration;
 using ScheduleApp.Data;
 using ScheduleApp.Data.Attendance;
+using ScheduleApp.PushListener.Logging;
 using ScheduleApp.PushListener.Services;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -144,33 +145,22 @@ try
             var pending = (await strategy.ExecuteAsync(() => db.Database.GetPendingMigrationsAsync())).ToList();
             if (pending.Count > 0)
             {
-                startupLogger.LogWarning(
-                    "{PendingCount} pending EF Core migration(s) on ScheduleAppDb. This listener " +
-                    "does not apply migrations itself -- run ScheduleApp.Desktop (or `dotnet ef " +
-                    "database update`) at least once first, since it owns the schema.",
-                    pending.Count);
+                PushListenerLog.PendingMigrations(startupLogger, pending.Count);
             }
             else
             {
-                startupLogger.LogInformation("Connected to ScheduleAppDb -- schema is up to date.");
+                PushListenerLog.SchemaUpToDate(startupLogger);
             }
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex,
-                "Could not verify ScheduleAppDb's schema. Check the connection string, that the " +
-                "service account has a SQL Server login (see README), and that SQL Server Express " +
-                "is running and reachable from this machine.");
+            PushListenerLog.SchemaCheckFailed(startupLogger, ex);
         }
     }
 
     app.MapControllers();
 
-#pragma warning disable CA1873 // Avoid potentially expensive logging
-    startupLogger.LogInformation(
-        "ScheduleApp.PushListener listening on {ListenUrl} -- waiting for device pushes at /iclock/*.",
-        listenUrl);
-#pragma warning restore CA1873 // Avoid potentially expensive logging
+    PushListenerLog.Listening(startupLogger, listenUrl);
 
     app.Run();
 }

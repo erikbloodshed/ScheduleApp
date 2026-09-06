@@ -27,7 +27,7 @@ public static class FlexibleWorkedHours
     /// only filters the search (see
     /// <see cref="FlexiblePairingBuilder.SearchWindow"/>). Night diff is summed
     /// per capped pair for the same reason -- there's no single scheduled window
-    /// to measure against. LateIn_T/EarlyOut_T stay zero: a Flexible day has no
+    /// to measure against. LateInDuration/EarlyOutDuration stay zero: a Flexible day has no
     /// fixed target time to be late or early against.
     ///
     /// <paramref name="orderedPunches"/> is the day's punch list in timestamp
@@ -81,10 +81,10 @@ public static class FlexibleWorkedHours
             }
         }
 
-        summary.Worked_H = totalHours;
-        summary.Worked_T = TimeSpan.FromHours(totalHours);
-        summary.NightDiff_H = nightDiffHours;
-        summary.NightDiff_T = TimeSpan.FromHours(nightDiffHours);
+        summary.WorkedHours = totalHours;
+        summary.WorkedDuration = TimeSpan.FromHours(totalHours);
+        summary.NightDiffHours = nightDiffHours;
+        summary.NightDiffDuration = TimeSpan.FromHours(nightDiffHours);
         if (qualifiesForNightDiff)
         {
             summary.NightDiffRatePercentageOverride = schedule.NightDiffRatePercentageOverride;
@@ -100,16 +100,16 @@ public static class FlexibleWorkedHours
 
             if (totalHours < requiredHoursDouble)
             {
-                summary.Remain_H = requiredHoursDouble - totalHours;
-                summary.Remain_T = TimeSpan.FromHours(summary.Remain_H);
+                summary.RemainHours = requiredHoursDouble - totalHours;
+                summary.RemainDuration = TimeSpan.FromHours(summary.RemainHours);
             }
             else if (totalHours > requiredHoursDouble && ResolveOvertimeEligible(schedule))
             {
                 // ScheduleEntry.OvertimeEligibleOverride / Employee.QualifiesForOvertime --
                 // same PH Labor Code Art. 82 exemption as QualifiesForNightDiff above,
                 // applied independently.
-                summary.Overtime_H = totalHours - requiredHoursDouble;
-                summary.Overtime_T = TimeSpan.FromHours(summary.Overtime_H);
+                summary.OvertimeHours = totalHours - requiredHoursDouble;
+                summary.OvertimeDuration = TimeSpan.FromHours(summary.OvertimeHours);
                 summary.OvertimeRatePercentageOverride = schedule.OvertimeRatePercentageOverride;
                 summary.ApplyOvertimeRatePercentage = ResolveApplyOvertimeRatePercentage(schedule);
             }

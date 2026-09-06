@@ -8,7 +8,7 @@ namespace ScheduleApp.Attendance.Tests;
 /// <summary>
 /// Covers FlexibleShiftCalculationStrategy's odd-count normalization: an odd
 /// number of effective punches used to leave the last punch dangling
-/// (Partial, and Worked_H computed only from whatever Pass 1 happened to
+/// (Partial, and WorkedHours computed only from whatever Pass 1 happened to
 /// pair sequentially -- see the class doc comment's old behavior). Now the
 /// smallest adjacent gap in the day is checked first; if it's under
 /// AttendancePolicy.FlexibleMinimumBreakGap, the noisier side of that pair is
@@ -50,7 +50,7 @@ public class FlexibleShiftOddPunchNormalizationTests
     /// 8:38 is dropped and the day normalizes to (8:30, 17:43), a single
     /// ~9h13m interval. Before this fix, Pass 1 would have paired
     /// (8:30,8:38) as an 8-minute "interval" and left 17:43 dangling --
-    /// Worked_H would have come out to 0.13h instead of ~9.22h.</summary>
+    /// WorkedHours would have come out to 0.13h instead of ~9.22h.</summary>
     [Fact]
     public void ShortGapAtStart_DropsSecondPunch_NormalizesToFirstAndLast()
     {
@@ -69,7 +69,7 @@ public class FlexibleShiftOddPunchNormalizationTests
         Assert.Equal(PunchStatus.Complete, summary.Status);
         Assert.Equal(new TimeOnly(8, 30), summary.ClockIn);
         Assert.Equal(new TimeOnly(17, 43), summary.ClockOut);
-        Assert.Equal(9.0 + 13.0 / 60.0, summary.Worked_H, precision: 3);
+        Assert.Equal(9.0 + 13.0 / 60.0, summary.WorkedHours, precision: 3);
 
         Assert.Equal(2, result.ClaimedPunches.Count);
         var unclaimed = Assert.Single(result.UnclaimedPunches);
@@ -96,7 +96,7 @@ public class FlexibleShiftOddPunchNormalizationTests
         Assert.Equal(PunchStatus.Complete, summary.Status);
         Assert.Equal(new TimeOnly(8, 30), summary.ClockIn);
         Assert.Equal(new TimeOnly(17, 45), summary.ClockOut);
-        Assert.Equal(9.0 + 15.0 / 60.0, summary.Worked_H, precision: 3);
+        Assert.Equal(9.0 + 15.0 / 60.0, summary.WorkedHours, precision: 3);
 
         Assert.Equal(2, result.ClaimedPunches.Count);
         var unclaimed = Assert.Single(result.UnclaimedPunches);
@@ -129,7 +129,7 @@ public class FlexibleShiftOddPunchNormalizationTests
         Assert.Equal(PunchStatus.Complete, summary.Status);
         Assert.Equal(new TimeOnly(8, 0), summary.ClockIn);
         Assert.Equal(new TimeOnly(17, 0), summary.ClockOut);
-        Assert.Equal(8.0, summary.Worked_H, precision: 3);
+        Assert.Equal(8.0, summary.WorkedHours, precision: 3);
 
         Assert.Equal(4, result.ClaimedPunches.Count);
         var unclaimed = Assert.Single(result.UnclaimedPunches);
@@ -139,7 +139,7 @@ public class FlexibleShiftOddPunchNormalizationTests
     /// <summary>An odd count where the smallest adjacent gap is still at or
     /// above FlexibleMinimumBreakGap doesn't get normalized -- there's no
     /// confident duplicate to remove, so this falls through to the
-    /// pre-existing dangling-last-punch behavior (Partial, and Worked_H
+    /// pre-existing dangling-last-punch behavior (Partial, and WorkedHours
     /// reflecting only the sequentially-paired punches).</summary>
     [Fact]
     public void NoGapUnderThreshold_FallsBackToDanglingLastPunch()
@@ -158,7 +158,7 @@ public class FlexibleShiftOddPunchNormalizationTests
 
         // Unchanged pre-existing behavior: (8:00,12:00) pairs, 17:00 dangles.
         Assert.Equal(PunchStatus.Partial, summary.Status);
-        Assert.Equal(4.0, summary.Worked_H, precision: 3);
+        Assert.Equal(4.0, summary.WorkedHours, precision: 3);
         Assert.Equal(3, result.ClaimedPunches.Count);
         Assert.Empty(result.UnclaimedPunches);
     }

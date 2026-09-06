@@ -33,8 +33,8 @@ namespace ScheduleApp.Attendance;
 /// untouched. An early clock-in is capped up to the
 /// segment's start (no credit); a clock-out within the grace period of the
 /// segment's end is capped down to it (no overtime); beyond the grace
-/// period, overtime is the actual time past the segment's end. LateIn_T/
-/// EarlyOut_T/Remain_T follow the same "minutes late plus minutes early"
+/// period, overtime is the actual time past the segment's end. LateInDuration/
+/// EarlyOutDuration/RemainDuration follow the same "minutes late plus minutes early"
 /// model as SingleWindowShiftCalculationStrategy uses for Normal -- not the
 /// "hours short of the day's total" model FlexibleShiftCalculationStrategy
 /// uses for a Flexible day -- since AttendanceExcelExporter reuses that
@@ -274,18 +274,18 @@ internal sealed class SplitShiftCalculationStrategy : IShiftCalculationStrategy
             return (summary, clockInPunch, clockOutPunch, considered); // degenerate ordering -- nothing further to compute
 
         double totalHours = (effectiveTimeOut - effectiveTimeIn).TotalHours;
-        summary.Worked_H = totalHours;
-        summary.Worked_T = TimeSpan.FromHours(totalHours);
+        summary.WorkedHours = totalHours;
+        summary.WorkedDuration = TimeSpan.FromHours(totalHours);
 
         // ScheduleEntry.NightDiffEligibleOverride / Employee.QualifiesForNightDiff --
         // see SingleWindowShiftCalculationStrategy for the PH Labor Code Art. 82
-        // rationale and the per-day override this revision adds. Worked_T above
+        // rationale and the per-day override this revision adds. WorkedDuration above
         // is unaffected; only this figure is suppressed to zero when not eligible.
         if (NightDifferentialCalculator.ResolveEligible(schedule))
         {
-            summary.NightDiff_H = NightDifferentialCalculator.CalculateHours(
+            summary.NightDiffHours = NightDifferentialCalculator.CalculateHours(
                 effectiveTimeIn, effectiveTimeOut, policy.NightDiffStart, policy.NightDiffEnd);
-            summary.NightDiff_T = TimeSpan.FromHours(summary.NightDiff_H);
+            summary.NightDiffDuration = TimeSpan.FromHours(summary.NightDiffHours);
             summary.NightDiffRatePercentageOverride = schedule.NightDiffRatePercentageOverride;
         }
 
@@ -299,18 +299,18 @@ internal sealed class SplitShiftCalculationStrategy : IShiftCalculationStrategy
         // different Late/Early/Remain depending on policy.UseExcelFormula.
         // Same grace-period carve-out as SingleWindowShiftCalculationStrategy -- a
         // punch within policy.LateInEarlyOutGraceMinutes of this segment's own
-        // start/end is exactly on time (LateIn_T/EarlyOut_T stay zero); past that,
+        // start/end is exactly on time (LateInDuration/EarlyOutDuration stay zero); past that,
         // the entire difference counts. See AttendancePolicy.LateInEarlyOutGraceMinutes.
         if (effectiveTimeIn > segStart &&
             (effectiveTimeIn - segStart).TotalMinutes > policy.LateInEarlyOutGraceMinutes)
-            summary.LateIn_T = effectiveTimeIn - segStart;
+            summary.LateInDuration = effectiveTimeIn - segStart;
 
         if (effectiveTimeOut < segEnd &&
             (segEnd - effectiveTimeOut).TotalMinutes > policy.LateInEarlyOutGraceMinutes)
-            summary.EarlyOut_T = segEnd - effectiveTimeOut;
+            summary.EarlyOutDuration = segEnd - effectiveTimeOut;
 
-        summary.Remain_T = summary.LateIn_T + summary.EarlyOut_T;
-        summary.Remain_H = summary.Remain_T.TotalHours;
+        summary.RemainDuration = summary.LateInDuration + summary.EarlyOutDuration;
+        summary.RemainHours = summary.RemainDuration.TotalHours;
 
         // ScheduleEntry.OvertimeEligibleOverride / Employee.QualifiesForOvertime --
         // same PH Labor Code Art. 82 exemption as NightDiff above, applied
@@ -325,8 +325,8 @@ internal sealed class SplitShiftCalculationStrategy : IShiftCalculationStrategy
 
             if (overtimeHours > 0)
             {
-                summary.Overtime_H = overtimeHours;
-                summary.Overtime_T = TimeSpan.FromHours(overtimeHours);
+                summary.OvertimeHours = overtimeHours;
+                summary.OvertimeDuration = TimeSpan.FromHours(overtimeHours);
                 summary.OvertimeRatePercentageOverride = schedule.OvertimeRatePercentageOverride;
                 summary.ApplyOvertimeRatePercentage = ResolveApplyOvertimeRatePercentage(schedule);
             }

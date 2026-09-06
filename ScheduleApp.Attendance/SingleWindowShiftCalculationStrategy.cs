@@ -174,43 +174,43 @@ internal sealed class SingleWindowShiftCalculationStrategy : IShiftCalculationSt
         }
 
         double totalHours = (effectiveTimeOut - effectiveTimeIn).TotalHours;
-        summary.Worked_H = totalHours;
-        summary.Worked_T = TimeSpan.FromHours(totalHours);
+        summary.WorkedHours = totalHours;
+        summary.WorkedDuration = TimeSpan.FromHours(totalHours);
 
         // Employee.QualifiesForNightDiff -- e.g. false for managerial/supervisory
         // staff, who under PH Labor Code Art. 82 aren't entitled to night
         // differential pay even though they still clock in and out normally.
-        // Worked_T above is unaffected; only this figure is suppressed to zero.
+        // WorkedDuration above is unaffected; only this figure is suppressed to zero.
         // ScheduleEntry.NightDiffEligibleOverride takes priority when set (a
         // per-day exception); missing Employee (shouldn't normally happen)
         // defaults to eligible, same as before this override existed.
         if (NightDifferentialCalculator.ResolveEligible(schedule))
         {
-            summary.NightDiff_H = NightDifferentialCalculator.CalculateHours(
+            summary.NightDiffHours = NightDifferentialCalculator.CalculateHours(
                 effectiveTimeIn, effectiveTimeOut, policy.NightDiffStart, policy.NightDiffEnd);
-            summary.NightDiff_T = TimeSpan.FromHours(summary.NightDiff_H);
+            summary.NightDiffDuration = TimeSpan.FromHours(summary.NightDiffHours);
             summary.NightDiffRatePercentageOverride = schedule.NightDiffRatePercentageOverride;
         }
 
         // A punch within policy.LateInEarlyOutGraceMinutes of the scheduled start/end
-        // is treated as exactly on time -- LateIn_T/EarlyOut_T stay zero rather than
+        // is treated as exactly on time -- LateInDuration/EarlyOutDuration stay zero rather than
         // reporting a couple minutes' slack. Past the grace period, the *entire*
         // difference counts, not just the amount beyond it -- see
         // AttendancePolicy.LateInEarlyOutGraceMinutes's own doc comment.
         if (effectiveTimeIn > targetTimeInStart &&
             (effectiveTimeIn - targetTimeInStart).TotalMinutes > policy.LateInEarlyOutGraceMinutes)
         {
-            summary.LateIn_T = effectiveTimeIn - targetTimeInStart;
+            summary.LateInDuration = effectiveTimeIn - targetTimeInStart;
         }
 
         if (effectiveTimeOut < targetTimeOutStart &&
             (targetTimeOutStart - effectiveTimeOut).TotalMinutes > policy.LateInEarlyOutGraceMinutes)
         {
-            summary.EarlyOut_T = targetTimeOutStart - effectiveTimeOut;
+            summary.EarlyOutDuration = targetTimeOutStart - effectiveTimeOut;
         }
 
-        summary.Remain_T = summary.LateIn_T + summary.EarlyOut_T;
-        summary.Remain_H = summary.Remain_T.TotalHours;
+        summary.RemainDuration = summary.LateInDuration + summary.EarlyOutDuration;
+        summary.RemainHours = summary.RemainDuration.TotalHours;
 
         // ScheduleEntry.OvertimeEligibleOverride / Employee.QualifiesForOvertime --
         // same PH Labor Code Art. 82 exemption as NightDiff above, applied
@@ -234,8 +234,8 @@ internal sealed class SingleWindowShiftCalculationStrategy : IShiftCalculationSt
 
             if (overtimeHours > 0)
             {
-                summary.Overtime_H = overtimeHours;
-                summary.Overtime_T = TimeSpan.FromHours(summary.Overtime_H);
+                summary.OvertimeHours = overtimeHours;
+                summary.OvertimeDuration = TimeSpan.FromHours(summary.OvertimeHours);
                 summary.OvertimeRatePercentageOverride = schedule.OvertimeRatePercentageOverride;
                 summary.ApplyOvertimeRatePercentage = ResolveApplyOvertimeRatePercentage(schedule);
             }

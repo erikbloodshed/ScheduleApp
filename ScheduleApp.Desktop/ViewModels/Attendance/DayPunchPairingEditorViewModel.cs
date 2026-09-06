@@ -492,16 +492,16 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         var preview = new AttendanceSummary { Span = _schedule.WorkTimeHours };
         FlexibleWorkedHours.Populate(preview, pairing, _schedule, _policy, _dayPunches);
 
-        WorkedText = FormatDuration(preview.Worked_T);
-        if (preview.Overtime_T > TimeSpan.Zero)
+        WorkedText = FormatDuration(preview.WorkedDuration);
+        if (preview.OvertimeDuration > TimeSpan.Zero)
         {
             RemainderLabel = "Overtime";
-            RemainderText = FormatDuration(preview.Overtime_T);
+            RemainderText = FormatDuration(preview.OvertimeDuration);
         }
         else
         {
             RemainderLabel = "Remaining";
-            RemainderText = preview.Remain_T > TimeSpan.Zero ? FormatDuration(preview.Remain_T) : "—";
+            RemainderText = preview.RemainDuration > TimeSpan.Zero ? FormatDuration(preview.RemainDuration) : "—";
         }
 
         SetPreviewStatus(preview.Status);

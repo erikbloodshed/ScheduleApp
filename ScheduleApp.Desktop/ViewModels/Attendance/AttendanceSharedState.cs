@@ -15,7 +15,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// gated by it; each of those subscribes to PropertyChanged(IsRunning) in its own
 /// constructor and re-evaluates its own commands' CanExecute, the same way the original
 /// single OnIsRunningChanged handler used to notify all of them at once.</summary>
-public partial class AttendanceBusyState : ObservableObject
+public partial class AttendanceBusyState : ObservableObject, IDisposable
 {
     private readonly IStatusBarService _statusBarService;
     private readonly CancellationToken _shutdownToken;
@@ -410,6 +410,20 @@ public partial class AttendanceBusyState : ObservableObject
     {
         _cts?.Dispose();
         _cts = value ? CancellationTokenSource.CreateLinkedTokenSource(_shutdownToken) : null;
+    }
+
+    /// <summary>Releases _gate, plus whichever _cts OnIsRunningChanged last created --
+    /// that setter already disposes the previous source on every transition, so the only
+    /// one that can still be live here is the one belonging to an operation that was
+    /// still running at shutdown. Registered AddScoped (see App.xaml.cs), and App only
+    /// ever creates the one scope, so this runs when that scope is disposed at app
+    /// exit.</summary>
+    public void Dispose()
+    {
+        _cts?.Dispose();
+        _cts = null;
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
 

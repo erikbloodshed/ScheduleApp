@@ -53,6 +53,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// second one through blocks on the first, then reads the snapshot the first just installed
 /// instead of firing a second, redundant pair of queries.</summary>
 public sealed class ActiveRosterProvider(IScheduleRepository scheduleRepository, AttendanceDataVersion dataVersion)
+    : IDisposable
 {
     private readonly IScheduleRepository _scheduleRepository = scheduleRepository;
     private readonly AttendanceDataVersion _dataVersion = dataVersion;
@@ -89,4 +90,8 @@ public sealed class ActiveRosterProvider(IScheduleRepository scheduleRepository,
             _gate.Release();
         }
     }
+
+    /// <summary>Releases _gate. Registered AddScoped (see App.xaml.cs), and App only ever
+    /// creates the one scope, so this runs when that scope is disposed at app exit.</summary>
+    public void Dispose() => _gate.Dispose();
 }

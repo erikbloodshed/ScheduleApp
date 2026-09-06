@@ -51,8 +51,8 @@ public class AttendanceSummary
     /// <summary>Which ScheduleType produced this summary. Status alone can't tell a
     /// Flexible day apart from a Normal one -- both report Complete/Partial/Absent --
     /// so AttendanceExcelExporter reads this to label the Type column and to pick
-    /// what Remain_T/Overtime_T mean in that column's header tooltip. It is *not*
-    /// what decides literal-values-vs-live-formula for Worked_T etc. -- that's
+    /// what RemainDuration/OvertimeDuration mean in that column's header tooltip. It is *not*
+    /// what decides literal-values-vs-live-formula for WorkedDuration etc. -- that's
     /// HasScheduledWindow below, since a SplitShift row needs the formula
     /// just as much as a Normal row does.</summary>
     public ScheduleType ScheduleType { get; set; } = ScheduleType.Normal;
@@ -94,27 +94,27 @@ public class AttendanceSummary
     public bool ClockOutIsManual { get; set; }
 
     // Durations
-    public TimeSpan Worked_T { get; set; } = TimeSpan.Zero;
-    public TimeSpan LateIn_T { get; set; } = TimeSpan.Zero;
-    public TimeSpan EarlyOut_T { get; set; } = TimeSpan.Zero;
-    public TimeSpan Remain_T { get; set; } = TimeSpan.Zero;
-    public TimeSpan Overtime_T { get; set; } = TimeSpan.Zero;
+    public TimeSpan WorkedDuration { get; set; } = TimeSpan.Zero;
+    public TimeSpan LateInDuration { get; set; } = TimeSpan.Zero;
+    public TimeSpan EarlyOutDuration { get; set; } = TimeSpan.Zero;
+    public TimeSpan RemainDuration { get; set; } = TimeSpan.Zero;
+    public TimeSpan OvertimeDuration { get; set; } = TimeSpan.Zero;
 
-    /// <summary>The portion of Worked_T that falls within AttendancePolicy.NightDiffStart/
-    /// NightDiffEnd -- not an amount on top of Worked_T, but a subset of it (same relationship
+    /// <summary>The portion of WorkedDuration that falls within AttendancePolicy.NightDiffStart/
+    /// NightDiffEnd -- not an amount on top of WorkedDuration, but a subset of it (same relationship
     /// Excel's live formula computes; see AttendanceExcelExporter). Always zero for Official
     /// Business (see OfficialBusinessShiftCalculationStrategy) and for Leave/Absent/Partial
     /// days, since night diff only credits actual worked time.</summary>
-    public TimeSpan NightDiff_T { get; set; } = TimeSpan.Zero;
+    public TimeSpan NightDiffDuration { get; set; } = TimeSpan.Zero;
 
     // Decimal measurements
-    public double Worked_H { get; set; }
-    public double Remain_H { get; set; }
-    public double Overtime_H { get; set; }
-    public double NightDiff_H { get; set; }
+    public double WorkedHours { get; set; }
+    public double RemainHours { get; set; }
+    public double OvertimeHours { get; set; }
+    public double NightDiffHours { get; set; }
 
     /// <summary>
-    /// Worked_H expressed as a fraction of a full work day, where "1 work day"
+    /// WorkedHours expressed as a fraction of a full work day, where "1 work day"
     /// is this day's own scheduled Work Time -- Span, i.e.
     /// ScheduleEntry.WorkTimeHours -- not a global standard-hours constant.
     /// Deliberately keyed off Span rather than PayrollPolicy.StandardHoursPerDay:
@@ -131,14 +131,14 @@ public class AttendanceSummary
     /// than a misleading 0.00.
     ///
     /// Capped at 1.0: hours beyond the scheduled Work Time already show up in
-    /// Overtime_H/Overtime_T, so this isn't a second place the same hours get
-    /// credited -- a day with heavy overtime still reports Overtime_H in full,
+    /// OvertimeHours/OvertimeDuration, so this isn't a second place the same hours get
+    /// credited -- a day with heavy overtime still reports OvertimeHours in full,
     /// it just doesn't also push WorkDay past 1.0. An Official Business day
     /// lands on exactly 1.0, since OfficialBusinessShiftCalculationStrategy
-    /// sets Worked_H equal to Span for that status.
+    /// sets WorkedHours equal to Span for that status.
     /// </summary>
     public decimal? WorkDay => Span is { } span && span > 0
-        ? Math.Min((decimal)Worked_H / span, 1.0m)
+        ? Math.Min((decimal)WorkedHours / span, 1.0m)
         : null;
 
     /// <summary>
@@ -156,13 +156,13 @@ public class AttendanceSummary
     /// so this class still spares PayrollCalculator from having to re-read
     /// ScheduleEntry itself -- it just resolves the last step (the global
     /// default) where the policy value actually lives. Only meaningful when
-    /// Overtime_H > 0 and <see cref="ApplyOvertimeRatePercentage"/> is true.
+    /// OvertimeHours > 0 and <see cref="ApplyOvertimeRatePercentage"/> is true.
     /// </summary>
     public decimal? OvertimeRatePercentageOverride { get; set; }
 
     /// <summary>Same idea as <see cref="OvertimeRatePercentageOverride"/>, but for
     /// ScheduleEntry.NightDiffRatePercentageOverride / PayrollPolicy.NightDiffRatePercentage.
-    /// Only meaningful when NightDiff_H > 0.</summary>
+    /// Only meaningful when NightDiffHours > 0.</summary>
     public decimal? NightDiffRatePercentageOverride { get; set; }
 
     /// <summary>
@@ -173,7 +173,7 @@ public class AttendanceSummary
     /// the two rate-percentage fields above) since both inputs -- ScheduleEntry
     /// and Employee -- are already in hand at the point a shift-calculation
     /// strategy builds this summary, with no PayrollPolicy dependency needed.
-    /// Independent of whether overtime is eligible at all (Overtime_H is already
+    /// Independent of whether overtime is eligible at all (OvertimeHours is already
     /// zero for ineligible days, suppressed upstream by the shift-calculation
     /// strategies -- this flag only distinguishes straight-time overtime from
     /// premium overtime among days that *do* have overtime hours). No Night Diff

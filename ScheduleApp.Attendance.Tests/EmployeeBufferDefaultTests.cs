@@ -173,10 +173,10 @@ public class EmployeeBufferDefaultTests
         var summary = Assert.Single(result.Summaries);
 
         // RestDay only recognizes a duty when *both* sides are found -- one
-        // side missing (same as this case) reports zero Worked_H, same as an
+        // side missing (same as this case) reports zero WorkedHours, same as an
         // unscheduled Rest Day, even though ClockOut/ClockIn stay unset on the
         // summary the same way Partial's own two fields do for Normal above.
         Assert.Equal(PunchStatus.RestDay, summary.Status);
-        Assert.Equal(0.0, summary.Worked_H);
+        Assert.Equal(0.0, summary.WorkedHours);
     }
 }

@@ -49,7 +49,7 @@ public class AttendanceSummaryRow
     public required string OvertimeHoursText { get; init; }
 
     /// <summary>Blank on Official Business the same way it's blank for any other
-    /// zero result -- s.NightDiff_H/NightDiff_T are always zero for OB (see
+    /// zero result -- s.NightDiffHours/NightDiffDuration are always zero for OB (see
     /// OfficialBusinessShiftCalculationStrategy), so no separate check is needed
     /// here beyond the FormatDurationOrBlank/FormatHoursOrBlank zero-blanking
     /// every other duration column already gets.</summary>
@@ -110,14 +110,14 @@ public class AttendanceSummaryRow
             // cluttering the grid with "0:00"/"0.00" -- same treatment
             // Late In/Early Out and the Hours columns already had.
             WorkDayText = noPunchExpected ? Blank : FormatWorkDayOrBlank(s.WorkDay),
-            LateInText = noPunchExpected ? Blank : FormatDurationOrBlank(s.LateIn_T),
-            EarlyOutText = noPunchExpected ? Blank : FormatDurationOrBlank(s.EarlyOut_T),
-            RemainText = noPunchExpected ? Blank : FormatDurationOrBlank(s.Remain_T),
-            RemainHoursText = noPunchExpected ? Blank : FormatHoursOrBlank(s.Remain_H),
-            OvertimeText = noPunchExpected ? Blank : FormatDurationOrBlank(s.Overtime_T),
-            OvertimeHoursText = noPunchExpected ? Blank : FormatHoursOrBlank(s.Overtime_H),
-            NightDiffText = noPunchExpected ? Blank : FormatDurationOrBlank(s.NightDiff_T),
-            NightDiffHoursText = noPunchExpected ? Blank : FormatHoursOrBlank(s.NightDiff_H),
+            LateInText = noPunchExpected ? Blank : FormatDurationOrBlank(s.LateInDuration),
+            EarlyOutText = noPunchExpected ? Blank : FormatDurationOrBlank(s.EarlyOutDuration),
+            RemainText = noPunchExpected ? Blank : FormatDurationOrBlank(s.RemainDuration),
+            RemainHoursText = noPunchExpected ? Blank : FormatHoursOrBlank(s.RemainHours),
+            OvertimeText = noPunchExpected ? Blank : FormatDurationOrBlank(s.OvertimeDuration),
+            OvertimeHoursText = noPunchExpected ? Blank : FormatHoursOrBlank(s.OvertimeHours),
+            NightDiffText = noPunchExpected ? Blank : FormatDurationOrBlank(s.NightDiffDuration),
+            NightDiffHoursText = noPunchExpected ? Blank : FormatHoursOrBlank(s.NightDiffHours),
 
             Status = s.Status,
             StatusText = s.Status.ToText(),
@@ -146,7 +146,7 @@ public class AttendanceSummaryRow
     private static string FormatTime(TimeOnly t) => TimeDisplayFormat.Format(t);
 
     // Same elapsed-hours idea as FormatTime, but for a TimeSpan duration
-    // (Worked_T etc.) instead of a time-of-day -- matches Excel's "[h]:mm"
+    // (WorkedDuration etc.) instead of a time-of-day -- matches Excel's "[h]:mm"
     // bracket format, i.e. total elapsed hours rather than hours-mod-24.
     private static string FormatDuration(TimeSpan ts)
     {

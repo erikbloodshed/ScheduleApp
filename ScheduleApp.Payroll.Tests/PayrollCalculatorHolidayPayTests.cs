@@ -161,8 +161,8 @@ public class PayrollCalculatorHolidayPayTests
         var summaries = BuildDays(employee.Pin, Start, End,
             (Holiday, s =>
             {
-                s.Overtime_H = 2.0;
-                s.NightDiff_H = 1.0;
+                s.OvertimeHours = 2.0;
+                s.NightDiffHours = 1.0;
             }));
 
         var (amount, days) = PayrollCalculator.CalculateHolidayPay(

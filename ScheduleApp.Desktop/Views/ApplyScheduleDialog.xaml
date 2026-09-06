@@ -272,7 +272,7 @@
                                      Grid.Column="0"
                                      HorizontalAlignment="Left"
                                      Margin="0,0,4,0"
-                                     ToolTip="Caps how early a punch counts toward Worked_H -- early punches still stay in the search/pairing and still show in ClockIn, just clamped for the hours math (see FlexibleShiftCalculationStrategy)." />
+                                     ToolTip="Caps how early a punch counts toward WorkedHours -- early punches still stay in the search/pairing and still show in ClockIn, just clamped for the hours math (see FlexibleShiftCalculationStrategy)." />
                 <controls:TimePicker x:Name="RestrictedTimeOutPicker"
                                      Grid.Row="1"
                                      Grid.Column="1"
@@ -418,16 +418,16 @@
 
         <!-- Overtime/Night Diff per-day overrides, added by the Attendance & Payroll
              Calculation Refactor Plan - visible for Normal, Flexible, SplitShift
-             (all three compute Overtime_H/NightDiff_H; see
+             (all three compute OvertimeHours/NightDiffHours; see
              SingleWindowShiftCalculationStrategy/FlexibleShiftCalculationStrategy/
              SplitShiftCalculationStrategy), and RestDay too - though RestDay only
              ever acts on the Night Diff half of this panel (RestDayShiftCalculationStrategy
-             never populates Overtime_H in either of its modes, so the Overtime
+             never populates OvertimeHours in either of its modes, so the Overtime
              controls are inert but harmless for it; a separate, pre-existing gap,
              not addressed here). Hidden for Leave and Official Business (neither
              ever has overtime or night diff hours - see
              OfficialBusinessShiftCalculationStrategy's own doc comment on why it
-             deliberately never sets NightDiff_H). Rows 12-13, below the
+             deliberately never sets NightDiffHours). Rows 12-13, below the
              type-specific rows above rather than sharing with any of them, since -
              unlike Normal-buffers-vs-Split-Shift-segments-vs-Restricted-window -
              this section is shown for four of the five types at once, not exactly

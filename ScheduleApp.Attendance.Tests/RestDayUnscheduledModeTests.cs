@@ -28,10 +28,10 @@ public class RestDayUnscheduledModeTests
         Assert.Equal(PunchStatus.RestDay, summary.Status);
         Assert.Null(summary.ClockIn);
         Assert.Null(summary.ClockOut);
-        Assert.Equal(0.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.NightDiff_H);
-        Assert.Equal(0.0, summary.Overtime_H);
-        Assert.Equal(0.0, summary.Remain_H);
+        Assert.Equal(0.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.NightDiffHours);
+        Assert.Equal(0.0, summary.OvertimeHours);
+        Assert.Equal(0.0, summary.RemainHours);
 
         Assert.Empty(result.ClaimedPunches);
         Assert.Empty(result.UnclaimedPunches);
@@ -59,8 +59,8 @@ public class RestDayUnscheduledModeTests
         Assert.Equal(PunchStatus.RestDay, summary.Status);
         Assert.Null(summary.ClockIn);
         Assert.Null(summary.ClockOut);
-        Assert.Equal(0.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.NightDiff_H);
+        Assert.Equal(0.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.NightDiffHours);
 
         // Not claimed by this schedule entry -- it never looked at punches
         // at all, so these fall through to AttendanceWorkflowService's
@@ -89,7 +89,7 @@ public class RestDayUnscheduledModeTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy);
         var summary = Assert.Single(result.Summaries);
 
-        Assert.Equal(0.0, summary.Worked_H);
+        Assert.Equal(0.0, summary.WorkedHours);
         Assert.Null(summary.ClockIn);
         Assert.Null(summary.ClockOut);
         Assert.Equal(PunchStatus.RestDay, summary.Status);

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using ScheduleApp.Core.Attendance;
+using ScheduleApp.PushListener.Logging;
 using ScheduleApp.PushListener.Services;
 
 namespace ScheduleApp.PushListener.Controllers;
@@ -56,8 +57,7 @@ public class IClockController(
         var state = _devices.GetOrAdd(sn);
         state.LastSeenUtc = DateTime.UtcNow;
 
-        _logger.LogInformation("Handshake from SN={SerialNumber}, remote={RemoteAddress}",
-            sn, HttpContext.Connection.RemoteIpAddress);
+        PushListenerLog.Handshake(_logger, sn, HttpContext.Connection.RemoteIpAddress);
 
         var response = new StringBuilder()
             .Append("GET OPTION FROM: ").Append(sn).Append("\r\n")
@@ -177,18 +177,21 @@ public class IClockController(
                 // grepping raw_uploads.log by hand -- if this only ever shows {0,1} in
                 // practice, PunchTypeLabel's wider 2-5 cases are simply dead code for this
                 // device/firmware, which is a fine outcome too.
-                var distinctStatuses = batch.Select(l => l.PunchType).Distinct().OrderBy(v => v);
-                _logger.LogInformation(
-                    "ATTLOG SN={SerialNumber} received={Received} new={New} duplicate={Duplicate} " +
-                    "skippedNonNumericPin={SkippedNonNumericPin} statuses=[{Statuses}]",
-                    sn, batch.Count, result.NewRecords, result.DuplicateRecords, skippedNonNumericPins,
-                    string.Join(",", distinctStatuses));
+                // Guarded because the statuses string is the one genuinely non-trivial
+                // argument on this path -- a LINQ pass over the whole batch plus a
+                // string.Join -- and this runs on every device poll. Everything else
+                // below is a field read, so no other call site needs this.
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    var distinctStatuses = batch.Select(l => l.PunchType).Distinct().OrderBy(v => v);
+                    var statuses = string.Join(",", distinctStatuses);
+                    PushListenerLog.AttLogProcessed(_logger, sn, batch.Count, result.NewRecords,
+                        result.DuplicateRecords, skippedNonNumericPins, statuses);
+                }
             }
             else if (skippedNonNumericPins > 0)
             {
-                _logger.LogInformation(
-                    "ATTLOG SN={SerialNumber} received=0 usable records, skippedNonNumericPin={SkippedNonNumericPin}",
-                    sn, skippedNonNumericPins);
+                PushListenerLog.AttLogAllSkipped(_logger, sn, skippedNonNumericPins);
             }
 
             state.AttLogStamp += processed;
@@ -223,8 +226,7 @@ public class IClockController(
 
         if (state.PendingCommands.TryDequeue(out var cmd))
         {
-            _logger.LogInformation("Sending queued command to SN={SerialNumber}: C:{CommandId}:{CommandText}",
-                sn, cmd.Id, cmd.Text);
+            PushListenerLog.SendingQueuedCommand(_logger, sn, cmd.Id, cmd.Text);
             return Content($"C:{cmd.Id}:{cmd.Text}\r\n", PlainText);
         }
 
@@ -243,7 +245,7 @@ public class IClockController(
         var body = await reader.ReadToEndAsync();
 
         _rawLog.Append($"POST devicecmd SN={sn}", body);
-        _logger.LogInformation("Command result from SN={SerialNumber}: {Body}", sn, body);
+        PushListenerLog.CommandResult(_logger, sn, body);
 
         return Content("OK\r\n", PlainText);
     }
@@ -259,8 +261,7 @@ public class IClockController(
     {
         using var ms = new MemoryStream();
         await Request.Body.CopyToAsync(ms);
-        _logger.LogInformation("fdata upload from SN={SerialNumber}: {ByteCount} bytes (not stored)",
-            sn, ms.Length);
+        PushListenerLog.BiometricUpload(_logger, sn, ms.Length);
         return Content("OK\r\n", PlainText);
     }
 
@@ -275,7 +276,7 @@ public class IClockController(
     [HttpPost("ping")]
     public IActionResult Ping([FromQuery(Name = "SN")] string? sn)
     {
-        _logger.LogDebug("Ping from SN={SerialNumber}", sn);
+        PushListenerLog.Ping(_logger, sn);
         return Content("OK\r\n", PlainText);
     }
 }

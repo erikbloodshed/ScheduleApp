@@ -5,6 +5,19 @@
     <Nullable>enable</Nullable>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!-- The tree builds warning-free (Debug and Release), so warnings are errors: the
+         alternative is a warning count that creeps back up until nobody reads it. Rules
+         that are wrong for this codebase are turned off explicitly in .editorconfig, with
+         a note on each, rather than left to accumulate as noise. If a new warning is
+         genuinely not worth fixing, silence it there (or with a justified
+         [SuppressMessage]) instead of relaxing this. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- ...except NuGet audit advisories. Those fire on a newly published CVE against a
+         package with no change on our side, and a build that breaks overnight on nobody's
+         commit teaches people to disable the whole setting. They still show as warnings. -->
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 
 </Project>

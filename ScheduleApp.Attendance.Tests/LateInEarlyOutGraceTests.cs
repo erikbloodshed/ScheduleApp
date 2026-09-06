@@ -7,10 +7,10 @@ namespace ScheduleApp.Attendance.Tests;
 
 /// <summary>
 /// Covers AttendancePolicy.LateInEarlyOutGraceMinutes: a punch within the grace
-/// period of the scheduled start/end reports zero LateIn_T/EarlyOut_T, and once
+/// period of the scheduled start/end reports zero LateInDuration/EarlyOutDuration, and once
 /// past it the *entire* difference counts, not just the excess over the grace
 /// period -- see that property's own doc comment. Exercises both strategies
-/// that populate LateIn_T/EarlyOut_T at all (SingleWindowShiftCalculationStrategy
+/// that populate LateInDuration/EarlyOutDuration at all (SingleWindowShiftCalculationStrategy
 /// for Normal, SplitShiftCalculationStrategy for each segment), through the
 /// public AttendanceCalculator.CalculateShift entry point, same convention as
 /// the other test classes in this project.
@@ -53,8 +53,8 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.Zero, summary.LateIn_T);
-        Assert.Equal(0.0, summary.Remain_H);
+        Assert.Equal(TimeSpan.Zero, summary.LateInDuration);
+        Assert.Equal(0.0, summary.RemainHours);
     }
 
     [Theory]
@@ -76,8 +76,8 @@ public class LateInEarlyOutGraceTests
         Assert.Equal(PunchStatus.Complete, summary.Status);
         // The entire difference counts once past the grace period, not just
         // (minutesLate - grace) -- e.g. 6 minutes late reports as 6, not 1.
-        Assert.Equal(TimeSpan.FromMinutes(minutesLate), summary.LateIn_T);
-        Assert.Equal(minutesLate / 60.0, summary.Remain_H, precision: 6);
+        Assert.Equal(TimeSpan.FromMinutes(minutesLate), summary.LateInDuration);
+        Assert.Equal(minutesLate / 60.0, summary.RemainHours, precision: 6);
     }
 
     [Theory]
@@ -98,8 +98,8 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.Zero, summary.EarlyOut_T);
-        Assert.Equal(0.0, summary.Remain_H);
+        Assert.Equal(TimeSpan.Zero, summary.EarlyOutDuration);
+        Assert.Equal(0.0, summary.RemainHours);
     }
 
     [Theory]
@@ -119,8 +119,8 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.FromMinutes(minutesEarly), summary.EarlyOut_T);
-        Assert.Equal(minutesEarly / 60.0, summary.Remain_H, precision: 6);
+        Assert.Equal(TimeSpan.FromMinutes(minutesEarly), summary.EarlyOutDuration);
+        Assert.Equal(minutesEarly / 60.0, summary.RemainHours, precision: 6);
     }
 
     [Fact]
@@ -137,10 +137,10 @@ public class LateInEarlyOutGraceTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, RestDayTestFixtures.DefaultPolicy);
         var summary = Assert.Single(result.Summaries);
 
-        Assert.Equal(TimeSpan.FromMinutes(10), summary.LateIn_T);
-        Assert.Equal(TimeSpan.FromMinutes(15), summary.EarlyOut_T);
-        Assert.Equal(TimeSpan.FromMinutes(25), summary.Remain_T);
-        Assert.Equal(25 / 60.0, summary.Remain_H, precision: 6);
+        Assert.Equal(TimeSpan.FromMinutes(10), summary.LateInDuration);
+        Assert.Equal(TimeSpan.FromMinutes(15), summary.EarlyOutDuration);
+        Assert.Equal(TimeSpan.FromMinutes(25), summary.RemainDuration);
+        Assert.Equal(25 / 60.0, summary.RemainHours, precision: 6);
     }
 
     /// <summary>A policy with the grace period turned off (0) restores the
@@ -161,7 +161,7 @@ public class LateInEarlyOutGraceTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, zeroGracePolicy);
         var summary = Assert.Single(result.Summaries);
 
-        Assert.Equal(TimeSpan.FromMinutes(1), summary.LateIn_T);
+        Assert.Equal(TimeSpan.FromMinutes(1), summary.LateInDuration);
     }
 
     private static ScheduleEntry SplitShiftSchedule(Employee employee, TimeOnly segmentIn, TimeOnly segmentOut) => new()
@@ -191,7 +191,7 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.Zero, summary.LateIn_T);
+        Assert.Equal(TimeSpan.Zero, summary.LateInDuration);
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.FromMinutes(7), summary.LateIn_T);
+        Assert.Equal(TimeSpan.FromMinutes(7), summary.LateInDuration);
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.Zero, summary.EarlyOut_T);
+        Assert.Equal(TimeSpan.Zero, summary.EarlyOutDuration);
     }
 
     [Fact]
@@ -245,6 +245,6 @@ public class LateInEarlyOutGraceTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(TimeSpan.FromMinutes(7), summary.EarlyOut_T);
+        Assert.Equal(TimeSpan.FromMinutes(7), summary.EarlyOutDuration);
     }
 }

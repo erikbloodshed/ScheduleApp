@@ -108,7 +108,7 @@ public class OverriddenFlexibleShiftPairingTests
         // Segment 0 is whole (8:00 -> 13:00 = 5h); segment 1 holds only the stray,
         // so it stays unpaired and the day is still Partial -- but the 5h is now
         // credited, which it wasn't before.
-        Assert.Equal(5.0, summary.Worked_H, precision: 3);
+        Assert.Equal(5.0, summary.WorkedHours, precision: 3);
         Assert.Equal(PunchStatus.Partial, summary.Status);
         Assert.Equal(2, result.ClaimedPunches.Count);
         Assert.Same(stray, Assert.Single(result.UnclaimedPunches));
@@ -141,7 +141,7 @@ public class OverriddenFlexibleShiftPairingTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Complete, summary.Status);
-        Assert.Equal(8.0, summary.Worked_H, precision: 3); // 4h + 4h
+        Assert.Equal(8.0, summary.WorkedHours, precision: 3); // 4h + 4h
         Assert.Equal(4, result.ClaimedPunches.Count);
         Assert.Empty(result.UnclaimedPunches);
 
@@ -184,7 +184,7 @@ public class OverriddenFlexibleShiftPairingTests
         // in that same segment -- leaving segment 0 as in/out/in, i.e. one whole
         // interval plus an orphan.
         Assert.Equal(PunchStatus.Partial, summary.Status);
-        Assert.Equal(9.0, summary.Worked_H, precision: 3); // the saved 8:00->17:00 still counts
+        Assert.Equal(9.0, summary.WorkedHours, precision: 3); // the saved 8:00->17:00 still counts
         Assert.Same(lateArrival, Assert.Single(after.UnclaimedPunches));
     }
 
@@ -209,7 +209,7 @@ public class OverriddenFlexibleShiftPairingTests
         var summary = Assert.Single(result.Summaries);
 
         Assert.Equal(PunchStatus.Partial, summary.Status);
-        Assert.Equal(0.0, summary.Worked_H);
+        Assert.Equal(0.0, summary.WorkedHours);
         Assert.Same(morningIn, Assert.Single(result.UnclaimedPunches));
     }
 
@@ -262,7 +262,7 @@ public class OverriddenFlexibleShiftPairingTests
         var a = Assert.Single(withOverride.Summaries);
         var b = Assert.Single(withoutOverride.Summaries);
         Assert.Equal(b.Status, a.Status);
-        Assert.Equal(b.Worked_H, a.Worked_H, precision: 6);
+        Assert.Equal(b.WorkedHours, a.WorkedHours, precision: 6);
         Assert.Equal(b.ClockIn, a.ClockIn);
         Assert.Equal(b.ClockOut, a.ClockOut);
     }
@@ -300,7 +300,7 @@ public class OverriddenFlexibleShiftPairingTests
         var result = AttendanceCalculator.CalculateShift(schedule, punches, DefaultPolicy, pairing);
         var summary = Assert.Single(result.Summaries);
 
-        Assert.Equal(9.0 + 35.0 / 60.0, summary.Worked_H, precision: 3); // 8:08 -> 17:43
+        Assert.Equal(9.0 + 35.0 / 60.0, summary.WorkedHours, precision: 3); // 8:08 -> 17:43
         Assert.Same(firstTap, Assert.Single(result.UnclaimedPunches));
     }
 }

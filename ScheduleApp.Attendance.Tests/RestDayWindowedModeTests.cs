@@ -58,9 +58,9 @@ public class RestDayWindowedModeTests
         // The whole 8 AM-7 PM span, not capped at the scheduled 8 hours --
         // hours past the scheduled end are Rest Day Pay, not a separate
         // Overtime figure (§5).
-        Assert.Equal(11.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.Overtime_H);
-        Assert.Equal(0.0, summary.Remain_H);
+        Assert.Equal(11.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.OvertimeHours);
+        Assert.Equal(0.0, summary.RemainHours);
     }
 
     [Fact]
@@ -90,9 +90,9 @@ public class RestDayWindowedModeTests
         Assert.Equal(new TimeOnly(16, 0), summary.CheckOut);
         Assert.Null(summary.ClockIn);
         Assert.Null(summary.ClockOut);
-        Assert.Equal(0.0, summary.Worked_H);
-        Assert.Equal(0.0, summary.NightDiff_H);
-        Assert.Equal(0.0, summary.Overtime_H);
-        Assert.Equal(0.0, summary.Remain_H);
+        Assert.Equal(0.0, summary.WorkedHours);
+        Assert.Equal(0.0, summary.NightDiffHours);
+        Assert.Equal(0.0, summary.OvertimeHours);
+        Assert.Equal(0.0, summary.RemainHours);
     }
 }

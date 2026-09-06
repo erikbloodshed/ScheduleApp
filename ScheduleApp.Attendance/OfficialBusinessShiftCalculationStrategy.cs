@@ -11,7 +11,7 @@ namespace ScheduleApp.Attendance;
 /// TimeIn/WorkTimeHours (the Set Schedule dialog collects both for
 /// OfficialBusiness the same way it does for Normal), because the employee
 /// is still credited for the day. Whenever both are present, ClockIn/ClockOut
-/// are set equal to that scheduled TimeIn/TimeOut and Worked_T/Worked_H equal
+/// are set equal to that scheduled TimeIn/TimeOut and WorkedDuration/WorkedHours equal
 /// to WorkTimeHours -- as if the whole scheduled window was worked -- so the
 /// Excel summary report and the in-app grid show real, non-blank times and
 /// totals for the day (and so those hours count toward the totals row) the
@@ -20,7 +20,7 @@ namespace ScheduleApp.Attendance;
 /// field (e.g. one saved before this field pair was required for
 /// OfficialBusiness) falls back to the old blank-row shape.
 ///
-/// Deliberately never sets NightDiff_T/NightDiff_H, even when the scheduled
+/// Deliberately never sets NightDiffDuration/NightDiffHours, even when the scheduled
 /// TimeIn/TimeOut window above overlaps AttendancePolicy.NightDiffStart/
 /// NightDiffEnd -- an official-business day is credited for the hours, not
 /// for actually being on the clock during them, and night diff only ever
@@ -63,8 +63,8 @@ internal sealed class OfficialBusinessShiftCalculationStrategy : IShiftCalculati
             summary.ClockIn = scheduledTimeIn;
             summary.ClockOut = scheduledTimeOut;
 
-            summary.Worked_H = (double)workTimeHours;
-            summary.Worked_T = TimeSpan.FromHours(summary.Worked_H);
+            summary.WorkedHours = (double)workTimeHours;
+            summary.WorkedDuration = TimeSpan.FromHours(summary.WorkedHours);
         }
         else
         {

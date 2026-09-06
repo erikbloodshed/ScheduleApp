@@ -45,7 +45,7 @@ public class Employee
     /// aren't entitled to overtime pay even though they still clock in and out
     /// normally. Defaults to true (the common case). Read by
     /// SingleWindowShiftCalculationStrategy/FlexibleShiftCalculationStrategy at the
-    /// point they'd otherwise set AttendanceSummary.Overtime_H/Overtime_T -- worked
+    /// point they'd otherwise set AttendanceSummary.OvertimeHours/OvertimeDuration -- worked
     /// hours, lateness, etc. are still computed as normal; only the overtime figure
     /// is suppressed to zero when this is false. Independent of
     /// QualifiesForNightDiff -- an employee can be exempt from one and not the other.
@@ -58,7 +58,7 @@ public class Employee
     /// Art. 82 exemption and how the two flags are applied independently.
     /// Defaults to true (the common case). Read by
     /// SingleWindowShiftCalculationStrategy/FlexibleShiftCalculationStrategy at the
-    /// point they'd otherwise set AttendanceSummary.NightDiff_H/NightDiff_T.
+    /// point they'd otherwise set AttendanceSummary.NightDiffHours/NightDiffDuration.
     /// </summary>
     public bool QualifiesForNightDiff { get; set; } = true;
 
