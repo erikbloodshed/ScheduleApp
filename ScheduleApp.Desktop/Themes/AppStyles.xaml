@@ -61,6 +61,26 @@
         <Setter Property="FontSize" Value="12" />
     </Style>
 
+    <!-- The bold label that opens a group of related fields ("Attendance policy",
+         "Payslip"). Replaces a one-off FontWeight="SemiBold" TextBlock, which after the
+         caption brush above is the most-repeated inline formatting in this app's XAML -
+         some 19 files carry their own copy. SettingsDialog is the first tenant; the rest
+         can move onto this key whenever they're next touched, rather than in one sweep. -->
+    <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+
+    <!-- The wrapped explanatory paragraph under one of those headers - CaptionTextStyle
+         plus the TextWrapping and bottom margin every such paragraph was setting inline
+         anyway. BasedOn rather than a copy so the size/color stay defined in exactly one
+         place; note that means 12px, where the older hand-rolled versions of this used
+         11px. One point isn't worth a second style. -->
+    <Style x:Key="SectionCaptionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
     <!-- One row of a compact flyout menu (MainWindow's own AttendanceFlyout is the first
          tenant) - plain-Button chrome stripped down to a left-aligned, full-width menu
          row that highlights on hover, using the theme's own control-fill brush instead of

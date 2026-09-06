@@ -20,15 +20,23 @@ namespace ScheduleApp.Desktop.Views;
 /// has them, otherwise whatever appsettings.json has) -- see MainWindow.SettingsButton_Click
 /// for where those come from.
 ///
-/// Covers seven groups: the connection string, the Attendance tab's device defaults, the
-/// default work-time-hours seeded into new schedule entries, the Attendance Policy
-/// buffers/flags, the Net Pay rounding multiple (the one PayrollPolicy field exposed
-/// here -- see PayrollPolicy.NetPayRoundingMultiple's own doc comment for why it alone,
-/// and not the rest of PayrollPolicy, has a dialog field), the sign-in page's logo, and
-/// the company name every generated payslip prints -- none of which except the
-/// connection string affects Push Listener (it never reads Attendance:DefaultWorkTimeHours,
-/// Attendance:Policy, Payroll:Policy, Payroll:CompanyName, or SignIn:LogoPath) but they
-/// all live in the same dialog/file for one place to manage all of it.
+/// Covers seven config groups, laid out across five tabs -- Database (the connection
+/// string), Device (the Attendance page's device defaults), Attendance (the default
+/// work-time-hours seeded into new schedule entries, plus the Attendance Policy
+/// buffers/flags), Payroll (the company name every generated payslip prints, plus the Net
+/// Pay rounding multiple -- the one PayrollPolicy field exposed here; see
+/// PayrollPolicy.NetPayRoundingMultiple's own doc comment for why it alone, and not the
+/// rest of PayrollPolicy, has a dialog field), and Sign-in (the sign-in page's logo).
+/// None of it except the connection string affects Push Listener (it never reads
+/// Attendance:DefaultWorkTimeHours, Attendance:Policy, Payroll:Policy,
+/// Payroll:CompanyName, or SignIn:LogoPath) but it all lives in the same dialog/file for
+/// one place to manage all of it.
+///
+/// A field belongs on the tab that owns its *change group*, which isn't always the tab its
+/// wording suggests -- UseExcelFormula reads like a reporting setting but is an
+/// AttendancePolicy field, so it sits on Attendance. That rule exists because
+/// SharedConfigWriter.Save writes whole sections: splitting one group across two tabs
+/// would mean an edit on one tab silently rewrites values the other tab was showing.
 ///
 /// Save only exposes the groups that actually changed from what the dialog was opened
 /// with (see the Changed* properties) -- so fixing just the connection string doesn't
@@ -39,8 +47,10 @@ namespace ScheduleApp.Desktop.Views;
 ///
 /// Same self-validating-on-Save shape as ApplyScheduleDialog: Save only commits parsed
 /// values once everything on the form has parsed cleanly, so a bad edit can't silently
-/// write a zero/garbage value into the shared file. Cancelling leaves the shared file
-/// untouched.
+/// write a zero/garbage value into the shared file. Every failure routes through
+/// ShowFieldError, which selects the offending field's tab first -- a bare message box is
+/// no help when the field it's complaining about is two tabs away. Cancelling leaves the
+/// shared file untouched.
 /// </summary>
 public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
 {
@@ -184,20 +194,65 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
             LogoStatusText.Text = "Using the default logo.";
         }
 
-        Loaded += (_, _) => ConnectionStringBox.Focus();
+        // Database is deliberately the first tab, so this would work on its own -- going
+        // through RevealField means reordering the tabs later can't quietly turn the
+        // opening focus into a no-op on a tab that hasn't been realized yet.
+        Loaded += (_, _) =>
+        {
+            RevealField(ConnectionStringBox);
+            ConnectionStringBox.Focus();
+        };
+    }
+
+    /// <summary>Selects whichever tab <paramref name="field"/> lives on and scrolls it
+    /// into view, so a validation message never points at a field the user can't see.
+    /// Walks the *logical* tree rather than the visual one deliberately: an unselected
+    /// TabItem has no visual children at all (a TabControl only realizes the tab that's
+    /// showing), but TabItem.Content -- and every ScrollViewer/StackPanel/DockPanel
+    /// between it and the field -- is a logical child no matter which tab is up. Walking
+    /// up from the field rather than being handed a tab also means a field can never be
+    /// paired with the wrong one, and moving a field between tabs needs no change here at
+    /// all -- which is why none of the TabItems in the XAML has an x:Name.</summary>
+    private void RevealField(Control field)
+    {
+        for (DependencyObject? node = field; node is not null; node = LogicalTreeHelper.GetParent(node))
+        {
+            if (node is TabItem tab)
+                tab.IsSelected = true;
+        }
+
+        // The tab just selected only becomes a real visual tree on the next measure pass,
+        // and BringIntoView has nothing to scroll until then.
+        SettingsTabs.UpdateLayout();
+        field.BringIntoView();
+    }
+
+    /// <summary>The one way this dialog reports a bad field: switch to its tab, say what's
+    /// wrong, then leave the caret in it with the bad text selected so the fix is one
+    /// keystroke. Focus deliberately comes *after* the message box rather than before --
+    /// dismissing it reactivates this window, and WPF restores focus to whatever held it
+    /// when the window was disabled (the Save button), which would undo an earlier
+    /// Focus() call.</summary>
+    private void ShowFieldError(Control field, string message, string caption)
+    {
+        RevealField(field);
+        MessageBox.Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Warning);
+        field.Focus();
+        (field as TextBox)?.SelectAll();
     }
 
     /// <summary>Backs every "hours" field in the Attendance Policy section -- all eight
     /// share the same rule (a non-negative number), so this avoids repeating the
-    /// TryParse/MessageBox pair eight times.</summary>
-    private static bool TryParseHours(TextBox box, string fieldLabel, out double value)
+    /// TryParse/ShowFieldError pair eight times. Not static any more: reporting a bad
+    /// value now has to reach the TabControl to bring the field into view.</summary>
+    private bool TryParseHours(TextBox box, string fieldLabel, out double value)
     {
         if (double.TryParse(box.Text, out value) && value >= 0)
             return true;
 
-        MessageBox.Show(
+        ShowFieldError(box,
             $"{fieldLabel} must be a number of hours, 0 or greater.",
-            "Invalid value", MessageBoxButton.OK, MessageBoxImage.Warning);
+            "Invalid value");
         return false;
     }
 
@@ -206,14 +261,14 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     /// rather than hours (see AttendancePolicy.LateInEarlyOutGraceMinutes's own doc
     /// comment for why), so it needs its own message rather than TryParseHours'
     /// hours-specific wording.</summary>
-    private static bool TryParseMinutes(TextBox box, string fieldLabel, out double value)
+    private bool TryParseMinutes(TextBox box, string fieldLabel, out double value)
     {
         if (double.TryParse(box.Text, out value) && value >= 0)
             return true;
 
-        MessageBox.Show(
+        ShowFieldError(box,
             $"{fieldLabel} must be a number of minutes, 0 or greater.",
-            "Invalid value", MessageBoxButton.OK, MessageBoxImage.Warning);
+            "Invalid value");
         return false;
     }
 
@@ -267,33 +322,33 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     {
         if (string.IsNullOrWhiteSpace(ConnectionStringBox.Text))
         {
-            MessageBox.Show(
+            ShowFieldError(ConnectionStringBox,
                 "Enter a connection string -- both apps need it to reach the database.",
-                "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Required");
             return;
         }
 
         if (!int.TryParse(PortBox.Text, out var port) || port is <= 0 or > 65535)
         {
-            MessageBox.Show(
+            ShowFieldError(PortBox,
                 "Port must be a number between 1 and 65535.",
-                "Invalid port", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Invalid port");
             return;
         }
 
         if (!uint.TryParse(CommKeyBox.Text, out var commKey))
         {
-            MessageBox.Show(
+            ShowFieldError(CommKeyBox,
                 "Comm key must be a whole number (0 for no password).",
-                "Invalid comm key", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Invalid comm key");
             return;
         }
 
         if (!double.TryParse(DefaultWorkTimeHoursBox.Text, out var defaultWorkTimeHours) || defaultWorkTimeHours <= 0)
         {
-            MessageBox.Show(
+            ShowFieldError(DefaultWorkTimeHoursBox,
                 "Default work time must be a number of hours greater than 0.",
-                "Invalid value", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Invalid value");
             return;
         }
 
@@ -318,35 +373,35 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
 
         if (!TimeDisplayFormat.TryParse(NightDiffStartBox.Text, out var nightDiffStart))
         {
-            MessageBox.Show(
+            ShowFieldError(NightDiffStartBox,
                 "Night differential start must be a valid time, e.g. 10:00 PM.",
-                "Invalid value", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Invalid value");
             return;
         }
 
         if (!TimeDisplayFormat.TryParse(NightDiffEndBox.Text, out var nightDiffEnd))
         {
-            MessageBox.Show(
+            ShowFieldError(NightDiffEndBox,
                 "Night differential end must be a valid time, e.g. 6:00 AM.",
-                "Invalid value", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Invalid value");
             return;
         }
 
         if (!decimal.TryParse(NetPayRoundingMultipleBox.Text, out var netPayRoundingMultiple) ||
             netPayRoundingMultiple <= 0)
         {
-            MessageBox.Show(
+            ShowFieldError(NetPayRoundingMultipleBox,
                 "Net pay rounding must be a number greater than 0 -- e.g. 1 for the nearest " +
                 "whole unit, 0.25 for the nearest quarter.",
-                "Invalid value", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Invalid value");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(CompanyNameBox.Text))
         {
-            MessageBox.Show(
+            ShowFieldError(CompanyNameBox,
                 "Enter the company name to print on generated payslips.",
-                "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Required");
             return;
         }
 
