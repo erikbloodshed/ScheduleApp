@@ -29,10 +29,11 @@ bld/
 ## Publish output
 [Pp]ublish/
 *.[Pp]ublish.xml
-*.pubxml
-*.pubxml.user
 *.azurePubxml
 PublishScripts/
+# Publish profiles are shared build config, so they stay tracked.
+# The .user variant holds per-developer values (and sometimes credentials).
+*.pubxml.user
 
 ## NuGet
 *.nupkg
