@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
+using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Utilities;
 using ScheduleApp.Desktop.Views;
@@ -59,13 +60,33 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// calendar day.</summary>
     private readonly (DateTime Start, DateTime End) _searchWindow;
 
+    /// <summary>Grid-arrangement history for <see cref="UndoCommand"/> -- one entry
+    /// per drop, Add Segment, or Remove Empty, captured just before the change. A
+    /// drop cascades punches forward (see <see cref="MoveCell"/>) instead of swapping
+    /// two, so "drag it back" is no longer a way to undo; this is. Backed by a list
+    /// used as a stack (newest last) so the oldest entry can be dropped once it's
+    /// full. Cleared whenever a manual punch is added or deleted -- those hit the
+    /// database, which Undo can't reverse (see <see cref="AddManualPunchAsync"/>).</summary>
+    private readonly List<GridSnapshot> _undoStack = [];
+
+    private const int MaxUndoDepth = 50;
+
+    /// <summary>One remembered grid arrangement: how many rows there were (so empty
+    /// working segments are restored, not just punch positions -- an empty row names
+    /// no punch, so the placement map alone can't represent it) and where each punch
+    /// sat, in the exact shape <see cref="BuildOverrideMap"/> produces.</summary>
+    private sealed record GridSnapshot(
+        int RowCount,
+        IReadOnlyDictionary<PunchKey, (int Segment, PairingRole Role)> Placement);
+
     public DayPunchPairingEditorViewModel(
         Employee employee,
         ScheduleEntry schedule,
         IReadOnlyList<AttendanceLog> dayPunches,
         AttendancePolicy policy,
         DayPunchPairing? existingPairing,
-        IManualAttendanceLogRepository manualLogRepository)
+        IManualAttendanceLogRepository manualLogRepository,
+        PunchStatus? attendanceStatus)
     {
         _schedule = schedule;
         _policy = policy;
@@ -83,6 +104,33 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
             ? $"{required:0.##} h"
             : "—";
 
+        // Two flags, and they don't always coincide:
+        //
+        //  * PairingAffectsResult -- Flexible only. Only a Flexible day's pairing is
+        //    read back by the calculation (AttendanceCalculator.CalculateShift
+        //    ignores an override for every other type, which matches punches against
+        //    a fixed scheduled window instead). It drives whether Save persists
+        //    anything and whether the footer shows a real verdict or just a punch
+        //    count; DayPunchPairingEditorLauncher skips the write when it's false.
+        //
+        //  * IsReadOnly -- whether the grid can be touched at all. A Flexible day is
+        //    always editable. A *non*-Flexible day is editable only when it opened
+        //    Partial or Absent: dragging, adding, or correcting a punch is then a
+        //    legitimate way to work it toward Complete (a manual punch feeds every
+        //    calculation path; the re-pairing itself still isn't saved). A
+        //    non-Flexible day that's already Complete/Leave/OB is a pure viewer.
+        PairingAffectsResult = schedule.ScheduleType == ScheduleType.Flexible;
+        var dayNeedsWork = attendanceStatus is PunchStatus.Partial or PunchStatus.Absent;
+        IsReadOnly = !PairingAffectsResult && !dayNeedsWork;
+
+        ScheduleTypeText = schedule.ScheduleType.ToText();
+        PairingNote = IsReadOnly
+            ? $"A {ScheduleTypeText} day is matched against its scheduled window, not by " +
+              "pairing. This is a read-only view -- use \"Add Manual Entry…\" on the day to " +
+              "add or correct a punch."
+            : $"A {ScheduleTypeText} day is matched against its scheduled window, so re-pairing " +
+              "here isn't saved. Adding or correcting a punch does fix the day.";
+
         SeedRows(existingPairing);
         Recompute();
     }
@@ -96,6 +144,30 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// <summary>True when this day already had a saved pairing when the editor
     /// opened -- drives whether "Reset to Automatic" is offered at all.</summary>
     public bool HasSavedOverride { get; }
+
+    /// <summary>See the constructor -- true only for a Flexible day, the one type
+    /// whose pairing the calculation reads back. Drives whether the dialog offers
+    /// Save at all and whether the footer shows the live preview or just a punch
+    /// count.</summary>
+    public bool PairingAffectsResult { get; }
+
+    /// <summary>True when the dialog is a pure viewer -- no drag, no Add/Edit/Delete
+    /// of punches, no Add Segment/Remove Empty/Undo. Set only for a non-Flexible day
+    /// whose attendance status is something other than Partial/Absent; a Flexible
+    /// day, or a broken non-Flexible day, stays editable (see the constructor).
+    /// Distinct from <see cref="PairingAffectsResult"/>: a non-Flexible Partial/
+    /// Absent day is editable here yet still persists no pairing. Enforced in the
+    /// view (hidden toolbar, suppressed gestures) and again in every mutator here as
+    /// a backstop.</summary>
+    public bool IsReadOnly { get; }
+
+    /// <summary>The day's ScheduleType label (see ScheduleTypeLabel.ToText).</summary>
+    public string ScheduleTypeText { get; }
+
+    /// <summary>The footer line shown in place of the preview when
+    /// <see cref="PairingAffectsResult"/> is false -- says why there's no verdict
+    /// here and what still counts.</summary>
+    public string PairingNote { get; }
 
     public ObservableCollection<DayPunchPairingRowViewModel> Rows { get; } = [];
 
@@ -124,6 +196,13 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
 
     [ObservableProperty]
     private bool hasUnpairedPunches;
+
+    /// <summary>"3 punches recorded" -- what the footer shows in place of the
+    /// Worked/Required/status preview on a day whose pairing isn't read back (see
+    /// <see cref="PairingAffectsResult"/>), where those figures would be computed
+    /// with rules that day isn't actually calculated by.</summary>
+    [ObservableProperty]
+    private string punchCountText = "No punches recorded";
 
     // ---- Layout -------------------------------------------------------------
 
@@ -200,7 +279,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
 
         // Always leave one empty row at the bottom to drag into, so splitting a
         // segment never needs an Add Row click first.
-        EnsureTrailingEmptyRow();
+        OnRowsChanged();
     }
 
     private void EnsureTrailingEmptyRow()
@@ -209,21 +288,44 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
             Rows.Add(new DayPunchPairingRowViewModel());
     }
 
+    /// <summary>Run after any change to <see cref="Rows"/>' shape (a drop, Add
+    /// Segment, Remove Empty, Undo, a manual punch add/delete): re-establish the
+    /// trailing spare, then re-query the two commands whose CanExecute depends on
+    /// how many rows -- and how many empty ones -- there are now. CommunityToolkit
+    /// doesn't observe <see cref="Rows"/>.Count, so this is the only thing keeping
+    /// "Remove Empty" and "Undo" enabled/disabled correctly after a drag.</summary>
+    private void OnRowsChanged()
+    {
+        EnsureTrailingEmptyRow();
+        RemoveEmptySegmentsCommand.NotifyCanExecuteChanged();
+        UndoCommand.NotifyCanExecuteChanged();
+    }
+
     // ---- Drag & drop --------------------------------------------------------
 
     /// <summary>
-    /// Move <paramref name="dragged"/> into <paramref name="targetRow"/>'s
-    /// <paramref name="targetSlot"/>, swapping whatever was already there back
-    /// into the slot the dragged cell came from. Modelled as a swap rather than
-    /// an insert-and-shift so no punch is ever lost and every drop is reversible
-    /// by dragging back -- and so dropping onto an empty slot simply empties the
-    /// source one.
+    /// Drop <paramref name="dragged"/> into <paramref name="targetRow"/>'s
+    /// <paramref name="targetSlot"/>. An empty target is a plain move -- the punch
+    /// just parks there, nothing else shifts, which is how a gap gets used as
+    /// working space. An occupied target is an *insert*: the punch already there is
+    /// pushed to the next slot in reading order (In then Out within a row, then the
+    /// next row's In), and the one after that, cascading until an empty slot absorbs
+    /// it -- appending a fresh row if the cascade runs off the end.
+    ///
+    /// Not a swap: the dragged punch's old slot is simply vacated and left empty, so
+    /// a run of drops keeps its intent instead of two punches ping-ponging. The
+    /// row-append rule is what carries the old swap model's "no punch is ever lost"
+    /// guarantee -- a cascade can always find somewhere to put what it's carrying.
+    /// <see cref="UndoCommand"/> replaces "drag it back" as the way out.
     /// </summary>
     public void MoveCell(
         DayPunchPairingCellViewModel dragged,
         DayPunchPairingRowViewModel targetRow,
         ColumnSlot targetSlot)
     {
+        if (IsReadOnly)
+            return; // backstop -- the view suppresses the drag gesture too
+
         var source = Locate(dragged);
         if (source is null)
             return;
@@ -232,12 +334,19 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         if (ReferenceEquals(sourceRow, targetRow) && sourceSlot == targetSlot)
             return;
 
-        var displaced = targetRow[targetSlot];
-        targetRow[targetSlot] = dragged;
-        sourceRow[sourceSlot] = displaced;
+        PushUndoSnapshot();
 
-        TrimEmptyRows();
-        EnsureTrailingEmptyRow();
+        // Vacate the source first -- wherever the cascade below sends things, the
+        // dragged punch has left its old slot.
+        sourceRow[sourceSlot] = null;
+
+        var occupant = targetRow[targetSlot];
+        targetRow[targetSlot] = dragged;
+
+        if (occupant is not null)
+            CascadeForward(occupant, Rows.IndexOf(targetRow), targetSlot);
+
+        OnRowsChanged();
         Recompute();
     }
 
@@ -251,38 +360,98 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         return null;
     }
 
-    /// <summary>Drop every empty row -- a swap that vacates a row shouldn't leave
-    /// a gap in the middle of the grid. The trailing spare is re-added by
-    /// <see cref="EnsureTrailingEmptyRow"/> right after.</summary>
-    private void TrimEmptyRows()
+    /// <summary>The slot immediately after (<paramref name="rowIndex"/>,
+    /// <paramref name="slot"/>) in reading order: In -&gt; Out within a row, then the
+    /// next row's In. Null once past the last row's Out -- callers append a row there
+    /// rather than let a cascaded punch fall out of the grid.</summary>
+    private (int RowIndex, ColumnSlot Slot)? NextSlot(int rowIndex, ColumnSlot slot)
     {
-        for (int i = Rows.Count - 1; i >= 0; i--)
+        if (slot == ColumnSlot.In)
+            return (rowIndex, ColumnSlot.Out);
+        return rowIndex + 1 < Rows.Count ? (rowIndex + 1, ColumnSlot.In) : null;
+    }
+
+    /// <summary>Ripple <paramref name="carry"/> into the slots after
+    /// (<paramref name="fromRow"/>, <paramref name="fromSlot"/>) in reading order:
+    /// each occupied slot hands its own punch to <paramref name="carry"/> and takes
+    /// the previous one, until an empty slot ends the chain. A carry that reaches
+    /// past the last slot gets a new row -- an insert never pushes a punch out of
+    /// the grid, which is also what guarantees this terminates.</summary>
+    private void CascadeForward(DayPunchPairingCellViewModel carry, int fromRow, ColumnSlot fromSlot)
+    {
+        var cursor = NextSlot(fromRow, fromSlot);
+        while (true)
         {
-            if (Rows[i].IsEmpty)
-                Rows.RemoveAt(i);
+            int r;
+            ColumnSlot s;
+            if (cursor is null)
+            {
+                Rows.Add(new DayPunchPairingRowViewModel());
+                (r, s) = (Rows.Count - 1, ColumnSlot.In);
+            }
+            else
+            {
+                (r, s) = cursor.Value;
+            }
+
+            var occupant = Rows[r][s];
+            Rows[r][s] = carry;
+            if (occupant is null)
+                return;
+
+            carry = occupant;
+            cursor = NextSlot(r, s);
         }
+    }
+
+    private void PushUndoSnapshot()
+    {
+        _undoStack.Add(new GridSnapshot(Rows.Count, BuildOverrideMap()));
+        if (_undoStack.Count > MaxUndoDepth)
+            _undoStack.RemoveAt(0);
     }
 
     [RelayCommand]
     private void AddRow()
     {
+        PushUndoSnapshot();
         Rows.Add(new DayPunchPairingRowViewModel());
-        RemoveRowCommand.NotifyCanExecuteChanged();
+        OnRowsChanged();
     }
 
-    /// <summary>Removes the last row, but only while it's empty -- a row holding a
-    /// punch can't be deleted, since that would drop the punch out of the grid
-    /// entirely and there'd be nowhere to drag it back from.</summary>
-    [RelayCommand(CanExecute = nameof(CanRemoveRow))]
-    private void RemoveRow()
+    /// <summary>Drops every empty segment in one go, keeping a single trailing spare.
+    /// This is the manual cleanup for the working rows a drag leaves behind now that
+    /// a vacated row stays put (see <see cref="MoveCell"/>) instead of collapsing
+    /// under the pointer. Bound to the "Remove Empty" button.</summary>
+    [RelayCommand(CanExecute = nameof(CanRemoveEmptySegments))]
+    private void RemoveEmptySegments()
     {
-        if (Rows.Count > 0 && Rows[^1].IsEmpty)
-            Rows.RemoveAt(Rows.Count - 1);
-        EnsureTrailingEmptyRow();
-        RemoveRowCommand.NotifyCanExecuteChanged();
+        PushUndoSnapshot();
+
+        for (int i = Rows.Count - 1; i >= 0; i--)
+        {
+            if (Rows[i].IsEmpty)
+                Rows.RemoveAt(i);
+        }
+
+        // No Recompute: an empty row names no punch, so removing one can't change
+        // the pairing or the preview -- only the row indices, which BuildOverrideMap
+        // renumbers on save anyway.
+        OnRowsChanged();
     }
 
-    private bool CanRemoveRow() => Rows.Count > 1 && Rows[^1].IsEmpty;
+    /// <summary>Enabled only when removing would actually change the grid -- there's
+    /// an empty row that isn't just the trailing spare (two or more empties, or a
+    /// single one that isn't the last row).</summary>
+    private bool CanRemoveEmptySegments()
+    {
+        int empties = Rows.Count(r => r.IsEmpty);
+        if (empties == 0)
+            return false;
+        if (empties == 1)
+            return !Rows[^1].IsEmpty;
+        return true;
+    }
 
     // ---- Manual punches -----------------------------------------------------
 
@@ -312,6 +481,8 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// </summary>
     public async Task AddManualPunchAsync(DayPunchPairingRowViewModel row, ColumnSlot slot)
     {
+        if (IsReadOnly)
+            return; // backstop -- the view offers no way to reach this
         if (row[slot] is not null)
             return; // occupied -- Add is only offered on an empty slot
 
@@ -343,7 +514,12 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         row[slot] = new DayPunchPairingCellViewModel { Punch = punch };
         ManualPunchesChanged = true;
 
-        EnsureTrailingEmptyRow();
+        // A new punch in the pool: earlier snapshots don't mention it, so an undo
+        // to one of them could only place it by the safety-net rule (see
+        // RestoreGrid) rather than truly reverse anything. Adding or deleting a
+        // punch starts a fresh history.
+        _undoStack.Clear();
+        OnRowsChanged();
         Recompute();
     }
 
@@ -353,7 +529,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// button for one) -- see ManualAttendanceLog's own doc comment.</summary>
     public async Task EditManualPunchAsync(DayPunchPairingCellViewModel cell)
     {
-        if (!cell.IsManual)
+        if (IsReadOnly || !cell.IsManual)
             return;
 
         var located = Locate(cell);
@@ -401,7 +577,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// clock reported, while a manual entry is this app's own typed data.</summary>
     public async Task DeleteManualPunchAsync(DayPunchPairingCellViewModel cell)
     {
-        if (!cell.IsManual)
+        if (IsReadOnly || !cell.IsManual)
             return;
 
         var confirm = MessageBox.Show(
@@ -417,8 +593,11 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         _dayPunches.RemoveAll(p => ReferenceEquals(p, cell.Punch));
         ManualPunchesChanged = true;
 
-        TrimEmptyRows();
-        EnsureTrailingEmptyRow();
+        // The row this punch was in stays put, empty -- "Remove Empty" clears it.
+        // History is dropped for the same reason as the add path above: a snapshot
+        // that still references this punch can no longer be honoured cleanly.
+        _undoStack.Clear();
+        OnRowsChanged();
         Recompute();
     }
 
@@ -466,6 +645,15 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     private void Recompute()
     {
         var pairing = FlexiblePairingBuilder.BuildFromOverride(_dayPunches, BuildOverrideMap());
+
+        // Set before the no-punch short circuit below -- it's the whole of the
+        // footer on a day where PairingAffectsResult is false, empty or not.
+        PunchCountText = _dayPunches.Count switch
+        {
+            0 => "No punches recorded",
+            1 => "1 punch recorded",
+            var count => $"{count} punches recorded",
+        };
 
         var unpairedKeys = pairing.Unpaired.Select(PunchKey.Of).ToHashSet();
         foreach (var row in Rows)
@@ -516,7 +704,9 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// <summary>The grid as the map
     /// <see cref="FlexiblePairingBuilder.BuildFromOverride"/> and a saved
     /// <see cref="DayPunchPairing"/> both speak: punch -&gt; (row index,
-    /// In/Out).</summary>
+    /// In/Out). Row index is the literal <see cref="Rows"/> position -- gaps and
+    /// all, since empty working rows count here; <see cref="BuildPairing"/>
+    /// renumbers to a dense sequence only when persisting.</summary>
     private Dictionary<PunchKey, (int Segment, PairingRole Role)> BuildOverrideMap()
     {
         var map = new Dictionary<PunchKey, (int Segment, PairingRole Role)>();
@@ -528,29 +718,132 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         return map;
     }
 
+    // ---- Undo -------------------------------------------------------------------
+
+    /// <summary>Steps the grid back one arrangement change -- a drop, Add Segment,
+    /// or Remove Empty. No redo; the history is cleared whenever a manual punch is
+    /// added or deleted (see <see cref="AddManualPunchAsync"/>), since those hit the
+    /// database and Undo can't reverse them. Cancelling the dialog still throws the
+    /// whole layout away regardless -- this is for stepping back mid-edit.</summary>
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo()
+    {
+        if (_undoStack.Count == 0)
+            return;
+
+        var snapshot = _undoStack[^1];
+        _undoStack.RemoveAt(_undoStack.Count - 1);
+
+        RestoreGrid(snapshot);
+
+        OnRowsChanged();
+        Recompute();
+    }
+
+    private bool CanUndo() => _undoStack.Count > 0;
+
+    /// <summary>Rebuilds <see cref="Rows"/> from a snapshot: the recorded row count
+    /// (so empty working segments come back, not just punch positions), each named
+    /// punch back in its slot, and -- the safety net -- any punch the snapshot
+    /// doesn't mention dropped into the first free slot so it can never vanish from
+    /// the grid. Fresh cells throughout, since the old ones are discarded with the
+    /// old rows; a punch is still identified by <see cref="PunchKey"/>, not by cell
+    /// reference.</summary>
+    private void RestoreGrid(GridSnapshot snapshot)
+    {
+        var cells = _dayPunches.ToDictionary(
+            PunchKey.Of,
+            p => new DayPunchPairingCellViewModel { Punch = p });
+
+        Rows.Clear();
+        for (int i = 0; i < snapshot.RowCount; i++)
+            Rows.Add(new DayPunchPairingRowViewModel());
+
+        var placed = new HashSet<PunchKey>();
+        foreach (var entry in snapshot.Placement)
+        {
+            var key = entry.Key;
+            var (segment, role) = entry.Value;
+
+            if (!cells.TryGetValue(key, out var cell))
+                continue;                                  // punch gone since the snapshot
+            if (segment < 0 || segment >= Rows.Count)
+                continue;                                  // row count shrank since the snapshot
+            var slot = role == PairingRole.In ? ColumnSlot.In : ColumnSlot.Out;
+            if (Rows[segment][slot] is not null)
+                continue;                                  // slot already taken -- shouldn't happen
+
+            Rows[segment][slot] = cell;
+            placed.Add(key);
+        }
+
+        // Anything the snapshot didn't place (a punch added after it was taken, or
+        // dropped by one of the guards above) still has to be somewhere visible and
+        // draggable -- restore is not a way for a punch to leave the grid.
+        foreach (var punch in _dayPunches)
+        {
+            var key = PunchKey.Of(punch);
+            if (!placed.Contains(key))
+                PlaceInFirstFreeSlot(cells[key]);
+        }
+    }
+
+    /// <summary>Drop <paramref name="cell"/> into the first empty slot in reading
+    /// order (In before Out, top row down), adding a row if every slot is
+    /// full.</summary>
+    private void PlaceInFirstFreeSlot(DayPunchPairingCellViewModel cell)
+    {
+        for (int r = 0; r < Rows.Count; r++)
+        {
+            if (Rows[r].InPunch is null) { Rows[r].InPunch = cell; return; }
+            if (Rows[r].OutPunch is null) { Rows[r].OutPunch = cell; return; }
+        }
+        Rows.Add(new DayPunchPairingRowViewModel { InPunch = cell });
+    }
+
     // ---- Saving -------------------------------------------------------------
 
     /// <summary>Turns the finished grid into the row the repository persists. One
     /// slot per filled cell; an empty cell simply isn't represented, which is what
-    /// makes a half-open segment survive a round trip as a half-open
-    /// segment.</summary>
-    public DayPunchPairing BuildPairing(string editedBy) => new()
+    /// makes a half-open segment survive a round trip as a half-open segment.
+    ///
+    /// Segment indices are renumbered to a dense 0..N-1 here. Empty working rows
+    /// carry no punch and so aren't stored -- without renumbering, a grid with an
+    /// empty row in the middle would save with a hole in its index sequence (rows
+    /// 0, 1, 3), and a reopen -- which rebuilds rows by grouping stored indices --
+    /// would silently collapse and renumber it anyway. Renumbering on the way out
+    /// makes what's stored match what a reopen shows, so save -&gt; reopen -&gt; save
+    /// is a genuine no-op. Half-open segments are kept exactly as they sit; only
+    /// fully empty rows drop out. Nothing is merged.</summary>
+    public DayPunchPairing BuildPairing(string editedBy)
     {
-        EmployeeId = EmployeePin,
-        Date = Date,
-        EditedBy = editedBy,
-        Slots = BuildOverrideMap()
-            .Select(entry => new DayPunchPairingSlot
-            {
-                PunchId = entry.Key.PunchId,
-                IsManualPunch = entry.Key.IsManual,
-                SegmentIndex = entry.Value.Segment,
-                Role = entry.Value.Role,
-            })
-            .OrderBy(s => s.SegmentIndex)
-            .ThenBy(s => s.Role)
-            .ToList(),
-    };
+        var map = BuildOverrideMap();
+
+        var denseIndex = map.Values
+            .Select(v => v.Segment)
+            .Distinct()
+            .OrderBy(segment => segment)
+            .Select((segment, ordinal) => (segment, ordinal))
+            .ToDictionary(x => x.segment, x => x.ordinal);
+
+        return new DayPunchPairing
+        {
+            EmployeeId = EmployeePin,
+            Date = Date,
+            EditedBy = editedBy,
+            Slots = map
+                .Select(entry => new DayPunchPairingSlot
+                {
+                    PunchId = entry.Key.PunchId,
+                    IsManualPunch = entry.Key.IsManual,
+                    SegmentIndex = denseIndex[entry.Value.Segment],
+                    Role = entry.Value.Role,
+                })
+                .OrderBy(s => s.SegmentIndex)
+                .ThenBy(s => s.Role)
+                .ToList(),
+        };
+    }
 
     // ---- Formatting ---------------------------------------------------------
 

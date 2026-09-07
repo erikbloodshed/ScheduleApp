@@ -223,24 +223,34 @@ public partial class MonthCalendarControl : UserControl
             });
         }
 
-        // "Edit Punch Pairing…" sits alongside "Add Manual Entry…" -- the two are the
-        // pair of answers to a day whose punches don't add up: add the punch that's
-        // missing, or re-pair the ones already there. Single-tile only, same as that
-        // item (a pairing is per-day, so there's no bulk case), but keyed off the day's
-        // ScheduleType rather than its AttendanceStatus: only Flexible days pair by time
-        // order and can therefore be re-paired (see
-        // AttendanceCalculator.CalculateShift's pairingOverride parameter), and a
-        // Flexible day is worth opening at any status -- a Complete day can still have
-        // two taps merged into one interval that should have been two, and re-opening is
-        // also how an earlier edit gets undone. day.Entry is the day's own ScheduleEntry
-        // (see CalendarDayViewModel), null on a day with no schedule at all.
+        // Sits alongside "Add Manual Entry…" -- the two are the pair of answers to a
+        // day whose punches don't add up: add the punch that's missing, or re-pair
+        // the ones already there. Deliberately not gated on ScheduleType or
+        // AttendanceStatus: the dialog behind this is also the only place a single
+        // day's punches are laid out in order, in/out roles and device-vs-manual
+        // badges included, so it's worth opening on any day -- to read the day as
+        // much as to change it. What it can *do* varies, and the dialog says so
+        // itself rather than this menu having to guess: only a Flexible day's pairing
+        // is read back by the calculation (see AttendanceCalculator.CalculateShift's
+        // pairingOverride parameter), so on every other type it drops its Save button
+        // and its footer shows a punch count instead of a verdict -- see
+        // DayPunchPairingEditorViewModel.PairingAffectsResult. Hence the two headers.
+        //
+        // Single-tile only (a pairing is per-day, so there's no bulk case), and
+        // day.Entry -- the day's own ScheduleEntry, see CalendarDayViewModel -- must
+        // be non-null: the editor is built from one (its search window, required
+        // hours, and overtime/night-diff eligibility all come off it), so a day with
+        // no schedule at all has nothing to open. Raw punches on such a day are still
+        // reachable through the Attendance page's Punch Records grid.
         if (Days?.Count(d => d.IsSelected) == 1
-            && day.Entry?.ScheduleType == ScheduleType.Flexible
+            && day.Entry is not null
             && viewModel.SelectedEmployee is not null)
         {
             menu.Items.Add(new MenuItem
             {
-                Header = "Edit Punch Pairing…",
+                Header = day.Entry.ScheduleType == ScheduleType.Flexible
+                    ? "Edit Punch Pairing…"
+                    : "View Punches…",
                 Command = viewModel.EditPunchPairingForDayCommand,
                 CommandParameter = day
             });

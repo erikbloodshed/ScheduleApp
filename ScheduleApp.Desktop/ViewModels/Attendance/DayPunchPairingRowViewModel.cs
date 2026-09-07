@@ -16,8 +16,10 @@ public enum ColumnSlot
 /// One work segment in the Day Punch Pairing editor: the punch that opened it and
 /// the punch that closed it, either of which may be missing (an empty slot -- a
 /// valid drop target that shows a "missing punch" placeholder, and the visible
-/// shape of a Partial day). Both slots are observable so a drag-drop swap updates
-/// the grid without rebuilding the row.
+/// shape of a Partial day). Both slots are observable so a drag-drop move updates
+/// the grid without rebuilding the row. A fully empty row is legal and persists as
+/// working space (see <see cref="DayPunchPairingEditorViewModel.MoveCell"/>); only
+/// "Remove Empty" or a save clears one out.
 /// </summary>
 public partial class DayPunchPairingRowViewModel : ObservableObject
 {

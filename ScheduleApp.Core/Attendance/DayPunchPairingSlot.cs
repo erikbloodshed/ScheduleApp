@@ -24,9 +24,13 @@ public class DayPunchPairingSlot
     /// <see cref="AttendanceLog"/> row.</summary>
     public bool IsManualPunch { get; set; }
 
-    /// <summary>0-based segment (editor grid row). Punches sharing a
-    /// <see cref="SegmentIndex"/> form one work interval; its In slot pairs with
-    /// its Out slot.</summary>
+    /// <summary>0-based, gapless segment ordinal. Punches sharing a
+    /// <see cref="SegmentIndex"/> form one work interval; its In slot pairs with its
+    /// Out slot. It's the position of the segment *among the occupied ones* -- the
+    /// editor can hold empty working rows between segments, but those carry no punch
+    /// and aren't stored, so a saved pairing renumbers to a dense 0..N-1 (see
+    /// DayPunchPairingEditorViewModel.BuildPairing). Consumers only ever group and
+    /// order by this, never index an array with it.</summary>
     public int SegmentIndex { get; set; }
 
     public PairingRole Role { get; set; }

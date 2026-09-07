@@ -10,6 +10,13 @@
         ShowInTaskbar="False"
         ExtendsContentIntoTitleBar="True"
 >
+    <!-- Ctrl+Z on the window, not the editor UserControl, so the gesture works
+         wherever focus sits. DataContext here is the editor view model (set in the
+         dialog's constructor), so UndoCommand resolves; no free-text box in the grid
+         claims the key first. -->
+    <ui:FluentWindow.InputBindings>
+        <KeyBinding Modifiers="Control" Key="Z" Command="{Binding UndoCommand}" />
+    </ui:FluentWindow.InputBindings>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -36,9 +43,13 @@
                         Padding="12,5"
                         Click="ResetButton_Click" />
 
-                <Button Grid.Column="2" Content="Save" Width="90" IsDefault="True"
+                <!-- Save is collapsed on a day whose pairing the calculation never
+                     reads back. See the constructor. -->
+                <Button x:Name="SaveButton"
+                        Grid.Column="2" Content="Save" Width="90" IsDefault="True"
                         Margin="0,0,8,0" Click="SaveButton_Click" />
-                <Button Grid.Column="3" Content="Cancel" Width="90" IsCancel="True" />
+                <Button x:Name="CancelButton"
+                        Grid.Column="3" Content="Cancel" Width="90" IsCancel="True" />
             </Grid>
         </Border>
     </Grid>

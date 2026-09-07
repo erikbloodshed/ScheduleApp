@@ -23,10 +23,17 @@ namespace ScheduleApp.Desktop.Services;
 public interface IDayPunchPairingEditorLauncher
 {
     /// <summary>Returns true when something was actually written (a pairing saved
-    /// or reset), so a caller that needs to refresh its own view -- the Schedule
-    /// calendar, which isn't driven by AttendanceDataVersion the way the Summary
-    /// grid is -- knows whether it has to.</summary>
-    Task<bool> OpenAsync(Employee employee, DateOnly date, CancellationToken cancellationToken = default);
+    /// or reset, or a manual punch added/corrected on an editable non-Flexible day),
+    /// so a caller that needs to refresh its own view -- the Schedule calendar,
+    /// which isn't driven by AttendanceDataVersion the way the Summary grid is --
+    /// knows whether it has to.
+    ///
+    /// <paramref name="attendanceStatus"/> is the day's computed status as the
+    /// caller already has it (CalendarDayViewModel.AttendanceStatus /
+    /// AttendanceSummaryRow.Status). It decides whether a non-Flexible day opens
+    /// editable (Partial/Absent -- worth fixing) or read-only; pass null when it
+    /// isn't known, which is treated as read-only for a non-Flexible day.</summary>
+    Task<bool> OpenAsync(Employee employee, DateOnly date, PunchStatus? attendanceStatus, CancellationToken cancellationToken = default);
 }
 
 public sealed class DayPunchPairingEditorLauncher(
@@ -45,7 +52,8 @@ public sealed class DayPunchPairingEditorLauncher(
 
 
     public async Task<bool> OpenAsync(
-        Employee employee, DateOnly date, CancellationToken cancellationToken = default)
+        Employee employee, DateOnly date, PunchStatus? attendanceStatus,
+        CancellationToken cancellationToken = default)
     {
         var entries = await scheduleRepository.GetScheduleEntriesForPeriodAsync(
             date, date, new HashSet<int> { employee.Pin }, cancellationToken);
@@ -59,21 +67,18 @@ public sealed class DayPunchPairingEditorLauncher(
             return false;
         }
 
-        // Flexible only, for now. The other types match punches against a
-        // scheduled window rather than by time order, so "which punch goes with
-        // which" isn't the thing that breaks them -- see
-        // AttendanceCalculator.CalculateShift's pairingOverride parameter, which
-        // ignores an override for any other type. Checked here too so the person
-        // gets told why rather than saving something that would be silently
-        // ignored.
-        if (schedule.ScheduleType != ScheduleType.Flexible)
-        {
-            statusBarService.ShowCaution(
-                $"{date:MMM d, yyyy} is a {schedule.ScheduleType.ToText()} day for {employee.DisplayName}. " +
-                "Punch pairing can only be edited on Flexible days.",
-                "Not a Flexible day");
-            return false;
-        }
+        // A hand-edited pairing only changes the computed result for a Flexible day
+        // -- every other type matches punches against a fixed scheduled window
+        // rather than by time order, so AttendanceCalculator.CalculateShift ignores
+        // an override for them, and this launcher never persists one (see the Save
+        // branch below). The dialog still opens on any scheduled day: for a
+        // non-Flexible day that came out Partial/Absent it's a working editor
+        // (adding or correcting a punch there does fix the day -- a manual punch
+        // feeds every calculation path), and for any other non-Flexible day it's a
+        // read-only "View Punches…" viewer. The view model works all this out from
+        // the schedule type and attendanceStatus -- see its constructor,
+        // IsReadOnly, and PairingNote.
+        var pairingAffectsResult = schedule.ScheduleType == ScheduleType.Flexible;
 
         // The day's punch pool, merged exactly the way AttendanceWorkflowService
         // merges it (device rows plus manual entries projected through
@@ -98,7 +103,8 @@ public sealed class DayPunchPairingEditorLauncher(
 
         var dialogResult = dialog.ShowDialog();
 
-        // Adding, correcting, or deleting a manual punch inside the editor writes to
+        // Adding, correcting, or deleting a manual punch inside the editor -- a
+        // Flexible-day capability; the read-only view has none -- writes to
         // ManualAttendanceLogs immediately (see
         // DayPunchPairingEditorViewModel.AddManualPunchAsync for why it can't wait for
         // Save), so those rows are on file whether or not the pairing itself was saved
@@ -112,11 +118,24 @@ public sealed class DayPunchPairingEditorLauncher(
 
         if (dialog.Outcome == DayPunchPairingDialogOutcome.ResetToAutomatic)
         {
+            // Only reachable on a Flexible day now -- the dialog hides "Reset to
+            // Automatic" in the read-only view (see DayPunchPairingDialog) -- so
+            // this always clears a live override rather than a stale one.
             await dayPunchPairingRepository.DeleteAsync(employee.Pin, date, cancellationToken);
             dataVersion.BumpPairings();
             statusBarService.ShowSuccess(
                 $"Punch pairing for {employee.DisplayName} on {date:MMM d, yyyy} reset to automatic.");
             return true;
+        }
+
+        if (!pairingAffectsResult)
+        {
+            // The read-only view: nothing to persist, and nothing was mutated. (The
+            // calculator ignores a pairing row for a non-Flexible type anyway, and
+            // writing one would leave a dead override that could silently take
+            // effect if the day were later switched to Flexible.) ManualPunchesChanged
+            // is always false here -- it stays for symmetry with the paths above.
+            return editor.ManualPunchesChanged;
         }
 
         // EnteredBy has no user/auth system behind it -- the Windows username is

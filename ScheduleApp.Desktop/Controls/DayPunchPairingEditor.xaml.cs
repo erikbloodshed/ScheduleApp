@@ -47,6 +47,12 @@ public partial class DayPunchPairingEditor : UserControl
 
     private void Slot_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // A "View Punches…" open is read-only: no drag, no double-click-to-add.
+        // Bailing here is what stops both -- nothing downstream captures a drag
+        // candidate or dispatches AddManualPunchAsync.
+        if (ViewModel?.IsReadOnly == true)
+            return;
+
         var slot = ResolveSlot(sender);
 
         // Double-clicking an empty slot is the same as picking "Add Manual Punch…"
@@ -105,7 +111,8 @@ public partial class DayPunchPairingEditor : UserControl
     /// why nothing can be done to it -- AttendanceLogs is meant to stay an untouched
     /// record of what the clock reported (see ManualAttendanceLog's own doc comment),
     /// and a menu that simply didn't open would leave someone wondering whether they
-    /// had missed a gesture rather than telling them the rule.
+    /// had missed a gesture rather than telling them the rule. A "View Punches…" open
+    /// is read-only throughout, so the menu is just that one disabled note.
     ///
     /// Built in code-behind rather than declared in XAML for the same reason
     /// MonthCalendarControl.BuildDayContextMenu is: a XAML ContextMenu is a separate
@@ -119,31 +126,45 @@ public partial class DayPunchPairingEditor : UserControl
         if (ResolveSlot(sender) is not { } target) return;
 
         var menu = new ContextMenu();
-        var cell = target.Row[target.Slot];
 
-        if (cell is null)
+        if (ViewModel.IsReadOnly)
         {
-            var add = new MenuItem { Header = "Add Manual Punch…" };
-            add.Click += async (_, _) => await ViewModel.AddManualPunchAsync(target.Row, target.Slot);
-            menu.Items.Add(add);
-        }
-        else if (cell.IsManual)
-        {
-            var edit = new MenuItem { Header = "Edit Time…" };
-            edit.Click += async (_, _) => await ViewModel.EditManualPunchAsync(cell);
-            menu.Items.Add(edit);
-
-            var delete = new MenuItem { Header = "Delete Manual Punch" };
-            delete.Click += async (_, _) => await ViewModel.DeleteManualPunchAsync(cell);
-            menu.Items.Add(delete);
+            // Same "say why rather than open nothing" reasoning as the device-punch
+            // note below -- a punch is changed from the day's own menu, not here.
+            menu.Items.Add(new MenuItem
+            {
+                Header = "Viewing only — use “Add Manual Entry…” on the day to change a punch",
+                IsEnabled = false,
+            });
         }
         else
         {
-            menu.Items.Add(new MenuItem
+            var cell = target.Row[target.Slot];
+
+            if (cell is null)
             {
-                Header = "Device punch — time can't be edited",
-                IsEnabled = false,
-            });
+                var add = new MenuItem { Header = "Add Manual Punch…" };
+                add.Click += async (_, _) => await ViewModel.AddManualPunchAsync(target.Row, target.Slot);
+                menu.Items.Add(add);
+            }
+            else if (cell.IsManual)
+            {
+                var edit = new MenuItem { Header = "Edit Time…" };
+                edit.Click += async (_, _) => await ViewModel.EditManualPunchAsync(cell);
+                menu.Items.Add(edit);
+
+                var delete = new MenuItem { Header = "Delete Manual Punch" };
+                delete.Click += async (_, _) => await ViewModel.DeleteManualPunchAsync(cell);
+                menu.Items.Add(delete);
+            }
+            else
+            {
+                menu.Items.Add(new MenuItem
+                {
+                    Header = "Device punch — time can't be edited",
+                    IsEnabled = false,
+                });
+            }
         }
 
         border.ContextMenu = menu;

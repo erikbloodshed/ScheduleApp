@@ -14,6 +14,27 @@
         <conv:NullToVisibilityConverter x:Key="NullToVisible" />
         <conv:NotNullToVisibilityConverter x:Key="NotNullToVisible" />
         <BooleanToVisibilityConverter x:Key="BoolToVisible" />
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisible" />
+
+        <!-- The "missing punch" placeholder shown in an empty slot: the visible
+             shape of a Partial day. Its tooltip invites the add gesture, so it is
+             dropped in a read-only "View Punches…" open where there is none. The
+             DataContext here is a DayPunchPairingRowViewModel, so IsReadOnly is
+             reached via the editor UserControl. -->
+        <Style x:Key="MissingPunchPlaceholderStyle" TargetType="TextBlock">
+            <Setter Property="Text" Value="missing punch" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+            <Setter Property="FontStyle" Value="Italic" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="ToolTip" Value="Double-click or right-click to add a manual punch." />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.IsReadOnly, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                    <Setter Property="ToolTip" Value="{x:Null}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- One punch card. The whole card is the drag handle; the slot Border
              that hosts it carries the mouse/drop handlers (see code-behind), so
@@ -100,13 +121,7 @@
                         DragLeave="Slot_DragLeave"
                         Drop="Slot_Drop">
                     <Grid>
-                        <TextBlock Text="missing punch"
-                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                                   FontStyle="Italic"
-                                   FontSize="11"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   ToolTip="Double-click or right-click to add a manual punch."
+                        <TextBlock Style="{StaticResource MissingPunchPlaceholderStyle}"
                                    Visibility="{Binding InPunch, Converter={StaticResource NullToVisible}}" />
                         <!-- Collapsed rather than left to render an empty card: a
                              ContentControl still applies its ContentTemplate when Content
@@ -139,13 +154,7 @@
                         DragLeave="Slot_DragLeave"
                         Drop="Slot_Drop">
                     <Grid>
-                        <TextBlock Text="missing punch"
-                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                                   FontStyle="Italic"
-                                   FontSize="11"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   ToolTip="Double-click or right-click to add a manual punch."
+                        <TextBlock Style="{StaticResource MissingPunchPlaceholderStyle}"
                                    Visibility="{Binding OutPunch, Converter={StaticResource NullToVisible}}" />
                         <!-- Collapsed rather than left to render an empty card: a
                              ContentControl still applies its ContentTemplate when Content
@@ -176,10 +185,14 @@
                        FontWeight="Bold" FontSize="13" />
         </Grid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+        <!-- Every button here mutates the grid, so the whole strip is gone in a
+             read-only "View Punches…" open (see DayPunchPairingEditorViewModel.IsReadOnly). -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8"
+                    Visibility="{Binding IsReadOnly, Converter={StaticResource InverseBoolToVisible}}">
             <Button Content="Add Segment" Command="{Binding AddRowCommand}" Padding="10,4" />
-            <Button Content="Remove" Command="{Binding RemoveRowCommand}" Padding="10,4" Margin="8,0,0,0" />
-            <TextBlock Text="Drag to re-pair · double-click to add"
+            <Button Content="Remove Empty" Command="{Binding RemoveEmptySegmentsCommand}" Padding="10,4" Margin="8,0,0,0" />
+            <Button Content="Undo" Command="{Binding UndoCommand}" Padding="10,4" Margin="8,0,0,0" />
+            <TextBlock Text="Drag onto a slot to insert · double-click to add"
                        Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="14,0,0,0" />
         </StackPanel>
 
@@ -188,10 +201,25 @@
                           ItemTemplate="{StaticResource PairingRowTemplate}" />
         </ScrollViewer>
 
-        <!-- Live footer: what the Summary grid will say once this is saved. -->
+        <!-- Live footer: what the Summary grid will say once this is saved. Shown
+             only on a day whose pairing the calculation actually reads back (see
+             DayPunchPairingEditorViewModel.PairingAffectsResult). On any other type
+             these figures would be derived with Flexible rules the day isn't
+             calculated by, so they'd quietly disagree with the Summary grid; those
+             days get the punch count and a line saying why there's no verdict here
+             instead. -->
         <Border Grid.Row="4" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                 CornerRadius="6" Padding="12,9" Margin="0,10,0,0">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+          <Grid>
+            <StackPanel Visibility="{Binding PairingAffectsResult, Converter={StaticResource InverseBoolToVisible}}">
+                <TextBlock Text="{Binding PunchCountText}" FontWeight="SemiBold" FontSize="14" />
+                <TextBlock Text="{Binding PairingNote}"
+                           FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto"
+                  Visibility="{Binding PairingAffectsResult, Converter={StaticResource BoolToVisible}}">
                 <StackPanel Grid.Column="0" Margin="0,0,22,0">
                     <TextBlock Text="Worked" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     <TextBlock Text="{Binding WorkedText}" FontWeight="SemiBold" FontSize="14"
@@ -221,6 +249,7 @@
                                Visibility="{Binding HasUnpairedPunches, Converter={StaticResource BoolToVisible}}" />
                 </StackPanel>
             </Grid>
+          </Grid>
         </Border>
     </Grid>
 </UserControl>

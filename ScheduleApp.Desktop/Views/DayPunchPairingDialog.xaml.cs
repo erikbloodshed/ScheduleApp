@@ -32,10 +32,30 @@ public partial class DayPunchPairingDialog : Wpf.Ui.Controls.FluentWindow
         Editor = editor;
         DataContext = editor;
 
-        Title = $"Edit Punch Pairing — {editor.EmployeeName}, {editor.Date:MMM d, yyyy}";
+        // Named for what it can actually do on this day -- only a Flexible day's
+        // pairing is read back by the calculation (see
+        // DayPunchPairingEditorViewModel.PairingAffectsResult); on every other type
+        // this is a read-only view of the day's punches (IsReadOnly).
+        Title = editor.PairingAffectsResult
+            ? $"Edit Punch Pairing — {editor.EmployeeName}, {editor.Date:MMM d, yyyy}"
+            : $"Punches — {editor.EmployeeName}, {editor.Date:MMM d, yyyy}";
 
-        // Nothing to reset back to on a day that never had an override.
-        ResetButton.Visibility = editor.HasSavedOverride ? Visibility.Visible : Visibility.Collapsed;
+        // Nothing to reset back to on a day that never had an override -- and
+        // nothing at all is changeable from a read-only "View Punches…" open, a
+        // saved override included.
+        ResetButton.Visibility = editor.HasSavedOverride && !editor.IsReadOnly
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        // A read-only day has nothing to save and nothing to discard: the grid can't
+        // be changed and the launcher wouldn't persist a non-Flexible pairing
+        // anyway. So Save goes away and the remaining button just closes the view.
+        if (editor.IsReadOnly)
+        {
+            SaveButton.Visibility = Visibility.Collapsed;
+            CancelButton.Content = "Close";
+            CancelButton.IsDefault = true;
+        }
     }
 
     public DayPunchPairingEditorViewModel Editor { get; }

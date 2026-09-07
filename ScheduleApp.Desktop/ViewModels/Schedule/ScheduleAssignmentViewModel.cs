@@ -928,8 +928,10 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         !_busy.IsRunning && !_manualEntryEditor.IsAttendanceBusy;
 
     /// <summary>Bound to the calendar's right-click "Edit Punch Pairing…" item (see
-    /// MonthCalendarControl.BuildDayContextMenu, which only offers it for a single
-    /// Flexible tile). Delegates the whole load/show/save to the shared
+    /// MonthCalendarControl.BuildDayContextMenu, which offers it for a single tile that
+    /// is either Flexible or came out Partial/Absent on another type -- the launcher
+    /// persists a pairing only for the Flexible case, see DayPunchPairingEditorLauncher).
+    /// Delegates the whole load/show/save to the shared
     /// DayPunchPairingEditorLauncher -- the exact same path the Attendance Summary grid's
     /// identical item uses -- then re-runs Calendar.RefreshCalendarAttendanceStatusesAsync()
     /// so the tile's own completion marker updates immediately, exactly as
