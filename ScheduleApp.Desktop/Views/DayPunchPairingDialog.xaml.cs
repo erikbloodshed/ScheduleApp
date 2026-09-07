@@ -32,25 +32,27 @@ public partial class DayPunchPairingDialog : Wpf.Ui.Controls.FluentWindow
         Editor = editor;
         DataContext = editor;
 
-        // Named for what it can actually do on this day -- only a Flexible day's
-        // pairing is read back by the calculation (see
-        // DayPunchPairingEditorViewModel.PairingAffectsResult); on every other type
-        // this is a read-only view of the day's punches (IsReadOnly).
-        Title = editor.PairingAffectsResult
-            ? $"Edit Punch Pairing — {editor.EmployeeName}, {editor.Date:MMM d, yyyy}"
-            : $"Punches — {editor.EmployeeName}, {editor.Date:MMM d, yyyy}";
+        // Named for what it does here, matching the menu item that opened it (see
+        // MonthCalendarControl.BuildDayContextMenu): "Edit Punch Pairing" for a
+        // Flexible day, "Edit Punches" for an editable non-Flexible one (drag isn't
+        // saved there, but the punch edits are), "Punches" for a read-only view.
+        var titleVerb = editor.IsReadOnly ? "Punches"
+            : editor.PairingAffectsResult ? "Edit Punch Pairing"
+            : "Edit Punches";
+        Title = $"{titleVerb} — {editor.EmployeeName}, {editor.Date:MMM d, yyyy}";
 
-        // Nothing to reset back to on a day that never had an override -- and
-        // nothing at all is changeable from a read-only "View Punches…" open, a
-        // saved override included.
-        ResetButton.Visibility = editor.HasSavedOverride && !editor.IsReadOnly
+        // "Reset to Automatic" clears a *saved* pairing, so it's offered only where
+        // one is actually saved -- a Flexible day. A non-Flexible day persists no
+        // pairing (editable or not), so there's nothing for it to reset.
+        ResetButton.Visibility = editor.HasSavedOverride && editor.PairingAffectsResult
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // A read-only day has nothing to save and nothing to discard: the grid can't
-        // be changed and the launcher wouldn't persist a non-Flexible pairing
-        // anyway. So Save goes away and the remaining button just closes the view.
-        if (editor.IsReadOnly)
+        // Save persists the pairing, which only a Flexible day does. Every other type
+        // -- read-only viewer, or the editable Partial/Absent case where punches save
+        // themselves the moment they're added -- has nothing for Save to do, so it
+        // goes and the remaining button just closes the dialog.
+        if (!editor.PairingAffectsResult)
         {
             SaveButton.Visibility = Visibility.Collapsed;
             CancelButton.Content = "Close";

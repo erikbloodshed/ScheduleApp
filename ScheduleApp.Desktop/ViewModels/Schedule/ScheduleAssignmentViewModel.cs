@@ -927,15 +927,16 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     private bool CanEditPunchPairingForDay(CalendarDayViewModel day) =>
         !_busy.IsRunning && !_manualEntryEditor.IsAttendanceBusy;
 
-    /// <summary>Bound to the calendar's right-click "Edit Punch Pairing…" item (see
-    /// MonthCalendarControl.BuildDayContextMenu, which offers it for a single tile that
-    /// is either Flexible or came out Partial/Absent on another type -- the launcher
-    /// persists a pairing only for the Flexible case, see DayPunchPairingEditorLauncher).
-    /// Delegates the whole load/show/save to the shared
-    /// DayPunchPairingEditorLauncher -- the exact same path the Attendance Summary grid's
-    /// identical item uses -- then re-runs Calendar.RefreshCalendarAttendanceStatusesAsync()
-    /// so the tile's own completion marker updates immediately, exactly as
-    /// AddManualEntryForDayAsync above does.
+    /// <summary>Bound to the calendar's right-click "Edit Punch Pairing…" / "View
+    /// Punches…" item (see MonthCalendarControl.BuildDayContextMenu -- offered for any
+    /// single scheduled tile; editable for a Flexible day or a Partial/Absent day of any
+    /// type, read-only otherwise, with the pairing itself persisted only for the Flexible
+    /// case -- see DayPunchPairingEditorLauncher). day.AttendanceStatus is passed through
+    /// so the launcher/editor can pick that mode. Delegates the whole load/show/save to
+    /// the shared DayPunchPairingEditorLauncher -- the exact same path the Attendance
+    /// Summary grid's identical item uses -- then re-runs
+    /// Calendar.RefreshCalendarAttendanceStatusesAsync() so the tile's own completion
+    /// marker updates immediately, exactly as AddManualEntryForDayAsync above does.
     ///
     /// Unlike that method, the refresh is skipped when nothing was written: OpenAsync
     /// returns whether it actually saved or reset, so a cancelled dialog (or a day the
@@ -963,7 +964,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         bool saved = false;
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
-            saved = await _pairingLauncher.OpenAsync(employee, day.Date, cancellationToken);
+            saved = await _pairingLauncher.OpenAsync(employee, day.Date, day.AttendanceStatus, cancellationToken);
         });
 
         // Same "did the selection move on while the dialog was open" guard as

@@ -225,16 +225,24 @@ public partial class MonthCalendarControl : UserControl
 
         // Sits alongside "Add Manual Entry…" -- the two are the pair of answers to a
         // day whose punches don't add up: add the punch that's missing, or re-pair
-        // the ones already there. Deliberately not gated on ScheduleType or
-        // AttendanceStatus: the dialog behind this is also the only place a single
-        // day's punches are laid out in order, in/out roles and device-vs-manual
-        // badges included, so it's worth opening on any day -- to read the day as
-        // much as to change it. What it can *do* varies, and the dialog says so
-        // itself rather than this menu having to guess: only a Flexible day's pairing
-        // is read back by the calculation (see AttendanceCalculator.CalculateShift's
-        // pairingOverride parameter), so on every other type it drops its Save button
-        // and its footer shows a punch count instead of a verdict -- see
-        // DayPunchPairingEditorViewModel.PairingAffectsResult. Hence the two headers.
+        // the ones already there. Always offered for a single scheduled tile; what it
+        // can *do* is what varies, and the header says which:
+        //
+        //   "Edit Punch Pairing…" -- a Flexible day: drag re-pairs it, Save persists.
+        //
+        //   "Edit Punches…" -- a non-Flexible day that opened Partial/Absent (a
+        //   missing punch to add), or that reads Complete only because a manual punch
+        //   is part of it (that punch may still need correcting or removing). The
+        //   pairing itself isn't read back by the calculation for these types, but
+        //   the punch edits -- which save themselves -- do change the day.
+        //
+        //   "View Punches…" -- read-only, for any other non-Flexible day (Complete on
+        //   device punches alone, Leave, OB): just a look at how the taps line up.
+        //
+        // The dialog reaches the same verdict from the schedule and the punches it
+        // loads (DayPunchPairingEditorViewModel.IsReadOnly); this only picks the
+        // label, from day.AttendanceStatus and day.HasManualPunch (both set by
+        // ScheduleCalendarViewModel.RefreshCalendarAttendanceStatusesAsync).
         //
         // Single-tile only (a pairing is per-day, so there's no bulk case), and
         // day.Entry -- the day's own ScheduleEntry, see CalendarDayViewModel -- must
@@ -246,11 +254,17 @@ public partial class MonthCalendarControl : UserControl
             && day.Entry is not null
             && viewModel.SelectedEmployee is not null)
         {
+            string punchHeader;
+            if (day.Entry.ScheduleType == ScheduleType.Flexible)
+                punchHeader = "Edit Punch Pairing…";
+            else if (day.AttendanceStatus is PunchStatus.Partial or PunchStatus.Absent || day.HasManualPunch)
+                punchHeader = "Edit Punches…";
+            else
+                punchHeader = "View Punches…";
+
             menu.Items.Add(new MenuItem
             {
-                Header = day.Entry.ScheduleType == ScheduleType.Flexible
-                    ? "Edit Punch Pairing…"
-                    : "View Punches…",
+                Header = punchHeader,
                 Command = viewModel.EditPunchPairingForDayCommand,
                 CommandParameter = day
             });

@@ -98,13 +98,14 @@ public sealed class DayPunchPairingEditorLauncher(
         var existing = await dayPunchPairingRepository.GetAsync(employee.Pin, date, cancellationToken);
 
         var editor = new DayPunchPairingEditorViewModel(
-            employee, schedule, dayPunches, _policy, existing, manualAttendanceLogRepository);
+            employee, schedule, dayPunches, _policy, existing, manualAttendanceLogRepository,
+            attendanceStatus);
         var dialog = new DayPunchPairingDialog(editor) { Owner = Application.Current.MainWindow };
 
         var dialogResult = dialog.ShowDialog();
 
-        // Adding, correcting, or deleting a manual punch inside the editor -- a
-        // Flexible-day capability; the read-only view has none -- writes to
+        // Adding, correcting, or deleting a manual punch inside the editor -- which
+        // every mode except the read-only viewer allows -- writes to
         // ManualAttendanceLogs immediately (see
         // DayPunchPairingEditorViewModel.AddManualPunchAsync for why it can't wait for
         // Save), so those rows are on file whether or not the pairing itself was saved
@@ -118,9 +119,10 @@ public sealed class DayPunchPairingEditorLauncher(
 
         if (dialog.Outcome == DayPunchPairingDialogOutcome.ResetToAutomatic)
         {
-            // Only reachable on a Flexible day now -- the dialog hides "Reset to
-            // Automatic" in the read-only view (see DayPunchPairingDialog) -- so
-            // this always clears a live override rather than a stale one.
+            // Only reachable on a Flexible day -- the dialog shows "Reset to
+            // Automatic" only when a pairing is actually read back (see
+            // DayPunchPairingDialog) -- so this always clears a live override
+            // rather than a stale one.
             await dayPunchPairingRepository.DeleteAsync(employee.Pin, date, cancellationToken);
             dataVersion.BumpPairings();
             statusBarService.ShowSuccess(
@@ -130,11 +132,11 @@ public sealed class DayPunchPairingEditorLauncher(
 
         if (!pairingAffectsResult)
         {
-            // The read-only view: nothing to persist, and nothing was mutated. (The
-            // calculator ignores a pairing row for a non-Flexible type anyway, and
-            // writing one would leave a dead override that could silently take
-            // effect if the day were later switched to Flexible.) ManualPunchesChanged
-            // is always false here -- it stays for symmetry with the paths above.
+            // Non-Flexible: no pairing to persist. The calculator ignores a pairing
+            // row for these types, and a stored one could silently reactivate if the
+            // day ever became Flexible. The editable (Partial/Absent) variant may
+            // still have had a manual punch added or corrected -- that's already
+            // written, and ManualPunchesChanged tells the caller to refresh.
             return editor.ManualPunchesChanged;
         }
 

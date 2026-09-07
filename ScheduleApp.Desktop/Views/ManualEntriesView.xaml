@@ -15,32 +15,25 @@
     </UserControl.Resources>
 
     <Grid Margin="10"
-          RowDefinitions="Auto,Auto,Auto,*">
-        <!-- Global "something's running" indicator + Cancel - see PunchRecordsView.xaml's
-             own comment on this same strip for why each of the three pages shows its own
-             copy rather than one shared, page-external one. -->
-        <Border Grid.Row="0"
-                Padding="10,8"
-                Margin="0,0,0,8"
-                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="4"
-                Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Right"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <Button Content="Cancel"
-                            Command="{Binding CancelCommand}"
-                            ToolTip="Stop whatever's currently running (Load, Import, an Import/Fetch started from Punch Records, or a manual entry save/delete)." />
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,10">
+          RowDefinitions="Auto,Auto,*">
+        <DockPanel Grid.Row="0"
+                   LastChildFill="False"
+                   Margin="0,0,0,10">
+            <!-- Cancel pinned to the right of the toolbar row, shown only while something's
+                 running (Load/Import/Export/Fetch, or a manual entry save-delete - any of
+                 which may have been started from another Attendance page; see
+                 PunchRecordsView.xaml's own copy of this strip for the "one Cancel per page"
+                 reasoning). Inline here, not in its own card, so it appearing doesn't push
+                 the whole grid down - and docked right of the left-docked toolbar so it
+                 doesn't nudge the period picker or buttons either. -->
+            <Button DockPanel.Dock="Right"
+                    Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    Padding="8,3"
+                    Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}"
+                    ToolTip="Stop whatever's currently running (Load, Import, an Import/Fetch started from Punch Records, or a manual entry save/delete)." />
+            <StackPanel DockPanel.Dock="Left"
+                        Orientation="Horizontal">
             <TextBlock Text="Start"
                        Width="40"
                        VerticalAlignment="Center" />
@@ -123,9 +116,10 @@
                     Padding="8,3"
                     Margin="12,0,0,0"
                     ToolTip="Choose an Excel workbook and bulk-add every row in it as a manual entry -- for a whole batch of forgotten punches at once instead of Add Manual Entry one at a time. Expects the same columns Export… writes (Id, Date, Time, Punch Type, Reason, Entered By), so exporting first and reusing that file as a template is the easiest way to build one. The whole file is validated before anything is added -- if any row has a problem, none of them are." />
-        </StackPanel>
+            </StackPanel>
+        </DockPanel>
 
-        <TextBlock Grid.Row="2"
+        <TextBlock Grid.Row="1"
                    Margin="0,0,0,6"
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource BoolToVisibility}}">
@@ -134,7 +128,7 @@
             <Run Text="manual entry(ies) found in range." />
         </TextBlock>
 
-        <DataGrid Grid.Row="3"
+        <DataGrid Grid.Row="2"
                   ItemsSource="{Binding ManualEntries}"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
@@ -195,7 +189,7 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="2"
                    Text="No manual entries in range -- use Add Manual Entry… above, or on Punch Records' Punches toolbar, or widen the date range."
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    HorizontalAlignment="Center"

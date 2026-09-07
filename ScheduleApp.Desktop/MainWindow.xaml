@@ -54,8 +54,38 @@
              direct MenuItem clicks - so showing one would be new, unused chrome. -->
         <ui:NavigationView x:Name="RootNavigationView" Grid.Row="0"
                 PaneDisplayMode="Left"
+                OpenPaneLength="170"
+                CompactPaneLength="40"
                 IsPaneOpen="False"
-                IsBackButtonVisible="Collapsed">
+                IsBackButtonVisible="Collapsed"
+                Loaded="RootNavigationView_Loaded"
+                PaneClosed="RootNavigationView_PaneClosed"
+                Navigated="RootNavigationView_Navigated"
+                MouseMove="RootNavigationView_MouseMove"
+                MouseLeave="RootNavigationView_MouseLeave">
+            <!-- Pin toggle for the drawer. WPF-UI renders PaneHeader in the pane's top
+                 area just under the hamburger toggle (its Compact template stacks them,
+                 rows 1 and 2 - there's no built-in slot literally right of the toggle
+                 without retemplating the whole control). Shown in both the compact rail
+                 and the open pane, so the drawer can be pinned open with one click from
+                 either. Unpinned, the pane sits compact: hovering the hamburger (resolved
+                 from the template on Loaded) expands it, and it collapses again on
+                 Navigated (picking a page) or once the pointer moves off the pane
+                 (MouseMove/MouseLeave, after a short grace). Pinned, it stays open
+                 and the hamburger is hidden. Click handler, hover logic, the "stay open"
+                 guard (PaneClosed above), and startup application all live in
+                 MainWindow.xaml.cs; the pinned state persists via
+                 NavigationDrawerStateStore. -->
+            <ui:NavigationView.PaneHeader>
+                <ui:Button x:Name="PinPaneButton"
+                        Appearance="Transparent"
+                        Padding="8,6"
+                        Margin="4,0,0,0"
+                        HorizontalAlignment="Left"
+                        Icon="{ui:SymbolIcon Pin24}"
+                        ToolTip="Pin the navigation pane open"
+                        Click="PinPaneButton_Click" />
+            </ui:NavigationView.PaneHeader>
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Employees" Icon="{ui:SymbolIcon People24}" TargetPageType="{x:Type views:EmployeesPage}" />
                 <ui:NavigationViewItem Content="Schedule" Icon="{ui:SymbolIcon CalendarLtr24}" TargetPageType="{x:Type views:SchedulePage}" />

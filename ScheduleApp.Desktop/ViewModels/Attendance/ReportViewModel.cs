@@ -438,10 +438,12 @@ public partial class ReportViewModel : ObservableObject
         return _manualEntryEditor.AddManualEntryForDayAsync(employee, DateOnly.FromDateTime(row.ShiftDate));
     }
 
-    /// <summary>Backs the Summary grid's right-click "Edit Punch Pairing…", offered only
-    /// on a Flexible row (see AttendanceSummaryView.xaml.cs) -- opens that day's punches
-    /// in the Day Punch Pairing editor so an orphaned punch can be re-paired by hand
-    /// instead of only being worked around with a manual entry.
+    /// <summary>Backs the Summary grid's right-click "Edit Punch Pairing…" / "View
+    /// Punches…" (see AttendanceSummaryView.xaml.cs) -- opens that day's punches in the
+    /// Day Punch Pairing editor. Editable for a Flexible row (re-pair by hand, saved) or
+    /// a Partial/Absent row of any type (add or correct the missing punch, which saves
+    /// itself); read-only for any other non-Flexible row. row.Status is passed through so
+    /// the launcher/editor can tell those apart.
     ///
     /// Resolves the Employee from _lastResult the same fail-soft way
     /// AddManualEntryForRowAsync above does, and for the same reason (AttendanceSummaryRow
@@ -472,7 +474,7 @@ public partial class ReportViewModel : ObservableObject
         }
 
         await _busy.RunAsync(visibly: false,
-            ct => _pairingLauncher.OpenAsync(employee, DateOnly.FromDateTime(row.ShiftDate), ct),
+            ct => _pairingLauncher.OpenAsync(employee, DateOnly.FromDateTime(row.ShiftDate), row.Status, ct),
             onError: ex => _statusBarService.ShowError(ex.Message));
     }
 

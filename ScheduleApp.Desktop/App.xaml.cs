@@ -356,6 +356,7 @@ public partial class App : Application
         services.AddSingleton<IStatusBarService, StatusBarService>();
         services.AddSingleton<ViewStateStore>();
         services.AddSingleton<RememberedSignInStore>();
+        services.AddSingleton<NavigationDrawerStateStore>();
         services.AddSingleton<AppShutdownSignal>();
         services.AddSingleton<SharedConfigWriter>();
         services.AddSingleton<DatabaseBackupService>();

@@ -26,13 +26,16 @@ public partial class AttendanceSummaryView : UserControl
     /// AttendanceSummaryView.xaml, so it fires for every row, not just ones the person
     /// happens to have selected first.
     ///
-    /// Only ever offers "Add Manual Entry…" for a row whose Status is Partial or
-    /// Absent -- same restriction, and same reasoning (nothing else has a missing
-    /// punch worth filling in), as the calendar's identical item. Unlike
-    /// BuildDayContextMenu, there's no "Set Schedule As"/"Remove Schedule" section this
-    /// item sits alongside -- the Summary grid is read-only, a report result rather
-    /// than something to edit directly -- so a row outside that status pair simply
-    /// gets no context menu at all, rather than one with nothing useful in it.</summary>
+    /// Offers "Add Manual Entry…" only for a Partial/Absent row -- same restriction,
+    /// and same reasoning (nothing else has a missing punch worth filling in), as the
+    /// calendar's identical item -- plus a punch view/editor on every row: "Edit Punch
+    /// Pairing…" for a Flexible row (re-pair by hand, saved); "Edit Punches…" for a
+    /// non-Flexible row that's Partial/Absent, or Complete with a hand-entered punch in
+    /// it (row.HasManualClockPunch) that may still need fixing; "View Punches…"
+    /// (read-only) for anything else. Mirrors MonthCalendarControl.BuildDayContextMenu;
+    /// see DayPunchPairingEditorViewModel.IsReadOnly for how the dialog decides its
+    /// mode. TypeText, not a ScheduleType field -- AttendanceSummaryRow is a
+    /// display-only projection and carries the label, not the enum.</summary>
     private void SummaryRow_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not DataGridRow { DataContext: AttendanceSummaryRow row } gridRow) return;
@@ -52,26 +55,23 @@ public partial class AttendanceSummaryView : UserControl
             });
         }
 
-        // Flexible only -- that's the type whose pairing is purely time-order and
-        // therefore the one a missed or duplicated tap actually breaks (see
-        // AttendanceCalculator.CalculateShift's pairingOverride parameter, which ignores
-        // an override for any other type). Offered at any status, not just Partial: a day
-        // that already reads Complete can still be paired wrongly (two taps merged into
-        // one interval that should have been two), and re-pairing is also how someone
-        // undoes an earlier edit. TypeText, not a ScheduleType field -- AttendanceSummaryRow
-        // is a display-only projection and carries the label, not the enum (see that class).
+        string punchHeader;
         if (row.TypeText == ScheduleType.Flexible.ToText())
-        {
-            menu.Items.Add(new MenuItem
-            {
-                Header = "Edit Punch Pairing…",
-                Command = viewModel.EditPunchPairingForRowCommand,
-                CommandParameter = row,
-            });
-        }
+            punchHeader = "Edit Punch Pairing…";
+        else if (row.Status is PunchStatus.Partial or PunchStatus.Absent || row.HasManualClockPunch)
+            punchHeader = "Edit Punches…";
+        else
+            punchHeader = "View Punches…";
 
-        // A row with nothing to offer gets no menu at all, rather than an empty one --
-        // the Summary grid is a report result, not something to edit directly.
+        menu.Items.Add(new MenuItem
+        {
+            Header = punchHeader,
+            Command = viewModel.EditPunchPairingForRowCommand,
+            CommandParameter = row,
+        });
+
+        // The punch item is always added, so this never fires now -- kept as a guard
+        // in case a future gate removes it.
         if (menu.Items.Count == 0) return;
 
         gridRow.ContextMenu = menu;

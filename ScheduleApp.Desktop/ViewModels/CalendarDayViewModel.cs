@@ -55,6 +55,18 @@ public partial class CalendarDayViewModel : ObservableObject
     [ObservableProperty]
     private PunchStatus? attendanceStatus;
 
+    /// <summary>True when this day's computed clock-in or clock-out is a hand-entered
+    /// (manual) punch rather than a device tap -- set alongside
+    /// <see cref="AttendanceStatus"/> by
+    /// ScheduleCalendarViewModel.RefreshCalendarAttendanceStatusesAsync. Nothing draws
+    /// from it; it exists so the tile's right-click punch menu stays editable ("Edit
+    /// Punches…") on an otherwise-Complete non-Flexible day whose completion rests on a
+    /// manual punch that might still need correcting or removing -- see
+    /// MonthCalendarControl.BuildDayContextMenu. Plain settable (not
+    /// <c>[ObservableProperty]</c>) since it has no binding, only that one code-behind
+    /// reader, refreshed on every menu build.</summary>
+    public bool HasManualPunch { get; set; }
+
     public int DayNumber => Date.Day;
 
     public string DisplayText => Entry?.DisplayText ?? string.Empty;

@@ -62,6 +62,13 @@ public class AttendanceSummaryRow
 
     public required string StatusText { get; init; }
 
+    /// <summary>True when the shown ClockIn or ClockOut is a manually-entered time
+    /// (the " *" suffix on ClockInText/ClockOutText). Read by the Summary grid's row
+    /// menu to keep its punch item editable ("Edit Punches…") on an otherwise-Complete
+    /// day whose completion rests on a hand-entered punch -- see
+    /// AttendanceSummaryView.SummaryRow_MouseRightButtonDown.</summary>
+    public bool HasManualClockPunch { get; init; }
+
     public static AttendanceSummaryRow FromSummary(AttendanceSummary s)
     {
         // Leave skips punch matching entirely and never has a scheduled window,
@@ -121,6 +128,7 @@ public class AttendanceSummaryRow
 
             Status = s.Status,
             StatusText = s.Status.ToText(),
+            HasManualClockPunch = s.ClockInIsManual || s.ClockOutIsManual,
         };
     }
 

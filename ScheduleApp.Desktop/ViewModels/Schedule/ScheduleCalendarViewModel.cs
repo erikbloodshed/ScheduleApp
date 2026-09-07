@@ -756,7 +756,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// this is also exactly what a CachedAttendanceStatus stores -- a cache hit is then a
     /// straight dictionary lookup into CalendarDayViewModel.AttendanceStatus with none of
     /// this method's own business logic to re-run.</summary>
-    private static Dictionary<DateOnly, PunchStatus> ComputeAttendanceStatusByDate(AttendanceRunResult result)
+    private static Dictionary<DateOnly, DayMarker> ComputeAttendanceStatusByDate(AttendanceRunResult result)
     {
         // A Flexible day with several segments produces one AttendanceSummary per segment
         // (see FlexibleShiftCalculationStrategy), so a date can map to more than one status
@@ -774,7 +774,13 @@ public partial class ScheduleCalendarViewModel : ObservableObject
             .GroupBy(s => s.ShiftDate)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(s => s.Status).OrderBy(s => Array.IndexOf(worstFirst, s)).First());
+                g => new DayMarker(
+                    g.Select(s => s.Status).OrderBy(s => Array.IndexOf(worstFirst, s)).First(),
+                    // Any segment/summary that day whose picked clock-in or clock-out is a
+                    // manual entry -- see AttendanceSummary.ClockInIsManual. Keeps the
+                    // tile's punch menu editable so that hand-entered punch can still be
+                    // corrected or removed even once the day reads Complete.
+                    g.Any(s => s.ClockInIsManual || s.ClockOutIsManual)));
 
         // RestDayShiftCalculationStrategy's own Status is always
         // PunchStatus.RestDay, whether or not a duty was actually recognized
@@ -797,9 +803,10 @@ public partial class ScheduleCalendarViewModel : ObservableObject
             .Select(s => s.ShiftDate)
             .ToHashSet();
 
-        var resolved = new Dictionary<DateOnly, PunchStatus>();
-        foreach (var (date, status) in statusByDate)
+        var resolved = new Dictionary<DateOnly, DayMarker>();
+        foreach (var (date, marker) in statusByDate)
         {
+            var status = marker.Status;
             // Leave keeps the cell's own background color (see CalendarDayToBrushConverter)
             // instead of also getting a marker here -- a second "this was Leave" indicator
             // on top of that would just be noise, so it's dropped from the resolved set
@@ -814,11 +821,19 @@ public partial class ScheduleCalendarViewModel : ObservableObject
             // as plain PunchStatus.RestDay (no marker).
             if (status is PunchStatus.Leave) continue;
 
-            resolved[date] = restDayDutyFulfilledDates.Contains(date) ? PunchStatus.Complete : status;
+            var resolvedStatus = restDayDutyFulfilledDates.Contains(date) ? PunchStatus.Complete : status;
+            resolved[date] = marker with { Status = resolvedStatus };
         }
 
         return resolved;
     }
+
+    /// <summary>One day's resolved calendar marker: the completion status shown as the
+    /// bottom-left glyph, plus whether a hand-entered punch is part of what produced it
+    /// (<see cref="CalendarDayViewModel.HasManualPunch"/> -- keeps the tile's punch menu
+    /// editable on an otherwise-Complete non-Flexible day). Cached per employee/month in
+    /// <see cref="CachedAttendanceStatus"/> so both flags survive a cache hit.</summary>
+    private sealed record DayMarker(PunchStatus Status, bool HasManualPunch);
 
     /// <summary>The marker-assignment half of what RefreshCalendarAttendanceStatusesAsync
     /// used to do inline -- writes an already-resolved per-day marker set (see
@@ -830,10 +845,21 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// resolving Leave/Rest-Day handling ahead of time in ComputeAttendanceStatusByDate
     /// rather than here is that a cache hit has no AttendanceRunResult left to re-derive
     /// that from, only the already-resolved dictionary.</summary>
-    private void ApplyAttendanceStatusByDate(IReadOnlyDictionary<DateOnly, PunchStatus> statusByDate)
+    private void ApplyAttendanceStatusByDate(IReadOnlyDictionary<DateOnly, DayMarker> markersByDate)
     {
         foreach (var day in CalendarDays)
-            day.AttendanceStatus = statusByDate.TryGetValue(day.Date, out var status) ? status : null;
+        {
+            if (markersByDate.TryGetValue(day.Date, out var marker))
+            {
+                day.AttendanceStatus = marker.Status;
+                day.HasManualPunch = marker.HasManualPunch;
+            }
+            else
+            {
+                day.AttendanceStatus = null;
+                day.HasManualPunch = false;
+            }
+        }
     }
 
     private void OnCalendarDaySelectionChanged(object? sender, PropertyChangedEventArgs e)
@@ -974,7 +1000,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// class comparing against a single shared "last loaded" tuple.</summary>
     private sealed record CachedAttendanceStatus(
         int DeviceLogsVersion, int ManualLogsVersion, int ScheduleVersion,
-        IReadOnlyDictionary<DateOnly, PunchStatus> StatusByDate)
+        IReadOnlyDictionary<DateOnly, DayMarker> StatusByDate)
     {
         public bool IsCurrentFor(AttendanceDataVersion dataVersion) =>
             DeviceLogsVersion == dataVersion.DeviceLogsVersion

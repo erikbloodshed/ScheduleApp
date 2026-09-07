@@ -114,14 +114,18 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         //    count; DayPunchPairingEditorLauncher skips the write when it's false.
         //
         //  * IsReadOnly -- whether the grid can be touched at all. A Flexible day is
-        //    always editable. A *non*-Flexible day is editable only when it opened
-        //    Partial or Absent: dragging, adding, or correcting a punch is then a
-        //    legitimate way to work it toward Complete (a manual punch feeds every
-        //    calculation path; the re-pairing itself still isn't saved). A
-        //    non-Flexible day that's already Complete/Leave/OB is a pure viewer.
+        //    always editable. A *non*-Flexible day is editable when there's something
+        //    to work on: it opened Partial or Absent (a missing punch to add), or a
+        //    hand-entered punch is in its pool (one that might still need correcting
+        //    or removing, even once the day reads Complete because of it). Dragging,
+        //    adding, or correcting a punch is then legitimate -- a manual punch feeds
+        //    every calculation path; the re-pairing itself still isn't saved. A
+        //    non-Flexible day that's Complete on device punches alone, or Leave/OB
+        //    with nothing hand-entered, is a pure viewer.
         PairingAffectsResult = schedule.ScheduleType == ScheduleType.Flexible;
         var dayNeedsWork = attendanceStatus is PunchStatus.Partial or PunchStatus.Absent;
-        IsReadOnly = !PairingAffectsResult && !dayNeedsWork;
+        var hasManualPunch = _dayPunches.Any(p => p.Source == AttendanceLogSource.Manual);
+        IsReadOnly = !PairingAffectsResult && !dayNeedsWork && !hasManualPunch;
 
         ScheduleTypeText = schedule.ScheduleType.ToText();
         PairingNote = IsReadOnly
@@ -129,7 +133,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
               "pairing. This is a read-only view -- use \"Add Manual Entry…\" on the day to " +
               "add or correct a punch."
             : $"A {ScheduleTypeText} day is matched against its scheduled window, so re-pairing " +
-              "here isn't saved. Adding or correcting a punch does fix the day.";
+              "here isn't saved. Adding, correcting, or removing a punch does fix the day.";
 
         SeedRows(existingPairing);
         Recompute();
