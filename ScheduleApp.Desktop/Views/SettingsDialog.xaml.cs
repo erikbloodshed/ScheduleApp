@@ -24,10 +24,9 @@ namespace ScheduleApp.Desktop.Views;
 /// Covers seven config groups, laid out across five tabs -- Database (the connection
 /// string), Device (the Attendance page's device defaults), Attendance (the default
 /// work-time-hours seeded into new schedule entries, plus the Attendance Policy
-/// buffers/flags), Payroll (the company name every generated payslip prints, plus the Net
-/// Pay rounding multiple -- the one PayrollPolicy field exposed here; see
-/// PayrollPolicy.NetPayRoundingMultiple's own doc comment for why it alone, and not the
-/// rest of PayrollPolicy, has a dialog field), and Sign-in (the sign-in page's logo).
+/// buffers/flags), Payroll (the company name every generated payslip prints, plus every
+/// PayrollPolicy value -- the premium rate table and the Net Pay rounding multiple), and
+/// Sign-in (the sign-in page's logo).
 /// None of it except the connection string affects Push Listener (it never reads
 /// Attendance:DefaultWorkTimeHours, Attendance:Policy, Payroll:Policy,
 /// Payroll:CompanyName, or SignIn:LogoPath) but it all lives in the same dialog/file for
@@ -91,11 +90,14 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     public AttendancePolicy? ChangedPolicy { get; private set; }
 
     /// <summary>Null if the Net Pay rounding multiple field wasn't changed from what
-    /// the dialog was opened with -- the only PayrollPolicy field this dialog edits
-    /// (see PayrollPolicy.NetPayRoundingMultiple's own doc comment). Carries every
-    /// other PayrollPolicy field through unchanged from _originalPayrollPolicy, the
-    /// same "full replace, since there's no other unmanaged key under this section"
-    /// reasoning ChangedPolicy/SharedConfigWriter.Save already follow for
+    /// the dialog was opened with. This dialog now edits every PayrollPolicy field, so
+    /// there's nothing left to carry through -- but it's still built by cloning
+    /// _originalPayrollPolicy and assigning over it rather than by listing fields in
+    /// an object initializer, so that a field added to PayrollPolicy later can't
+    /// silently revert to its C# default here (which is exactly what happened to the
+    /// two rest-day rates before they got fields of their own). Same "full replace,
+    /// since there's no other unmanaged key under this section" reasoning
+    /// ChangedPolicy/SharedConfigWriter.Save already follow for
     /// Attendance:Policy.</summary>
     public PayrollPolicy? ChangedPayrollPolicy { get; private set; }
 
@@ -181,6 +183,15 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
         CapEarlyClockInCheckBox.IsChecked = policy.CapEarlyClockIn;
         StrictOvertimeCheckBox.IsChecked = policy.StrictOvertimeFromShiftEnd;
         UseExcelFormulaCheckBox.IsChecked = policy.UseExcelFormula;
+        StandardHoursPerDayBox.Text = payrollPolicy.StandardHoursPerDay.ToString(CultureInfo.CurrentCulture);
+        // .Value, not .Text -- these five are PercentTextBox now, not TextBox. No
+        // ToString() needed either: Value takes the raw decimal fraction directly and
+        // the control does its own x100-plus-"%" formatting for display.
+        OvertimeRatePercentageBox.Value = payrollPolicy.OvertimeRatePercentage;
+        NightDiffRatePercentageBox.Value = payrollPolicy.NightDiffRatePercentage;
+        RestDayPremiumPercentageBox.Value = payrollPolicy.RestDayPremiumPercentage;
+        RestDayOvertimeRatePercentageBox.Value = payrollPolicy.RestDayOvertimeRatePercentage;
+        HolidayPremiumPercentageBox.Value = payrollPolicy.HolidayPremiumPercentage;
         NetPayRoundingMultipleBox.Text = payrollPolicy.NetPayRoundingMultiple.ToString(CultureInfo.CurrentCulture);
 
         CompanyNameBox.Text = _originalCompanyName;
@@ -392,6 +403,33 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
             return;
         }
 
+        if (!decimal.TryParse(StandardHoursPerDayBox.Text, out var standardHoursPerDay) ||
+            standardHoursPerDay <= 0)
+        {
+            ShowFieldError(StandardHoursPerDayBox,
+                "Standard hours per day must be a number greater than 0 -- it divides into the " +
+                "daily rate to get the hourly rate every premium is computed from.",
+                "Invalid value");
+            return;
+        }
+
+        // No TryParse/range check needed for these five -- unlike StandardHoursPerDayBox/
+        // NetPayRoundingMultipleBox above and below, they're PercentTextBox now, which
+        // wraps a NumericTextBox that already guarantees a valid, in-range Value on its
+        // own (keystrokes that wouldn't leave a number are rejected outright; an
+        // out-of-range commit is clamped to Minimum/Maximum -- see each field's own
+        // Maximum="5" in the XAML, the same 500% ceiling TryParsePremiumPercentage used to
+        // enforce by hand). The only state left to handle here is Value itself being null
+        // -- the box was cleared to blank and has no PlaceholderValue to fall back to,
+        // since a company-wide policy default has nothing above it to inherit from -- so
+        // that falls back to whatever this policy already held rather than silently
+        // adopting 0%.
+        var overtimeRatePercentage = OvertimeRatePercentageBox.Value ?? _originalPayrollPolicy.OvertimeRatePercentage;
+        var nightDiffRatePercentage = NightDiffRatePercentageBox.Value ?? _originalPayrollPolicy.NightDiffRatePercentage;
+        var restDayPremiumPercentage = RestDayPremiumPercentageBox.Value ?? _originalPayrollPolicy.RestDayPremiumPercentage;
+        var restDayOvertimeRatePercentage = RestDayOvertimeRatePercentageBox.Value ?? _originalPayrollPolicy.RestDayOvertimeRatePercentage;
+        var holidayPremiumPercentage = HolidayPremiumPercentageBox.Value ?? _originalPayrollPolicy.HolidayPremiumPercentage;
+
         if (!decimal.TryParse(NetPayRoundingMultipleBox.Text, out var netPayRoundingMultiple) ||
             netPayRoundingMultiple <= 0)
         {
@@ -449,35 +487,57 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
             capEarlyClockIn != _originalPolicy.CapEarlyClockIn ||
             strictOvertime != _originalPolicy.StrictOvertimeFromShiftEnd ||
             useExcelFormula != _originalPolicy.UseExcelFormula;
-        ChangedPolicy = policyChanged
-            ? new AttendancePolicy
-            {
-                ClockInBufferBefore = clockInBefore,
-                ClockInBufferAfter = clockInAfter,
-                ClockOutBufferBefore = clockOutBefore,
-                ClockOutBufferAfter = clockOutAfter,
-                FlexibleSegmentClockInBuffer = flexIn,
-                FlexibleSegmentClockOutBuffer = flexOut,
-                FlexibleMinimumBreakGap = flexMinBreakGap,
-                ClockOutGracePeriod = grace,
-                LateInEarlyOutGraceMinutes = lateEarlyGrace,
-                NightDiffStart = nightDiffStart,
-                NightDiffEnd = nightDiffEnd,
-                CapEarlyClockIn = capEarlyClockIn,
-                StrictOvertimeFromShiftEnd = strictOvertime,
-                UseExcelFormula = useExcelFormula
-            }
-            : null;
+        // Both policies are built by cloning what the dialog was opened with and
+        // assigning only the fields this dialog actually edits -- never by listing
+        // fields in an object initializer. An initializer silently resets whatever
+        // it forgets, and it forgets by default: a field added to either policy
+        // class later isn't a compile error here, just a value that quietly reverts
+        // to its C# default the next time someone saves Settings. That already
+        // happened once, to PayrollPolicy's two rest-day rates. See
+        // AttendancePolicy.Clone/PayrollPolicy.Clone.
+        AttendancePolicy? changedPolicy = null;
+        if (policyChanged)
+        {
+            changedPolicy = _originalPolicy.Clone();
+            changedPolicy.ClockInBufferBefore = clockInBefore;
+            changedPolicy.ClockInBufferAfter = clockInAfter;
+            changedPolicy.ClockOutBufferBefore = clockOutBefore;
+            changedPolicy.ClockOutBufferAfter = clockOutAfter;
+            changedPolicy.FlexibleSegmentClockInBuffer = flexIn;
+            changedPolicy.FlexibleSegmentClockOutBuffer = flexOut;
+            changedPolicy.FlexibleMinimumBreakGap = flexMinBreakGap;
+            changedPolicy.ClockOutGracePeriod = grace;
+            changedPolicy.LateInEarlyOutGraceMinutes = lateEarlyGrace;
+            changedPolicy.NightDiffStart = nightDiffStart;
+            changedPolicy.NightDiffEnd = nightDiffEnd;
+            changedPolicy.CapEarlyClockIn = capEarlyClockIn;
+            changedPolicy.StrictOvertimeFromShiftEnd = strictOvertime;
+            changedPolicy.UseExcelFormula = useExcelFormula;
+        }
+        ChangedPolicy = changedPolicy;
 
-        ChangedPayrollPolicy = netPayRoundingMultiple != _originalPayrollPolicy.NetPayRoundingMultiple
-            ? new PayrollPolicy
-            {
-                StandardHoursPerDay = _originalPayrollPolicy.StandardHoursPerDay,
-                OvertimeRatePercentage = _originalPayrollPolicy.OvertimeRatePercentage,
-                NightDiffRatePercentage = _originalPayrollPolicy.NightDiffRatePercentage,
-                NetPayRoundingMultiple = netPayRoundingMultiple
-            }
-            : null;
+        var payrollPolicyChanged =
+            standardHoursPerDay != _originalPayrollPolicy.StandardHoursPerDay ||
+            overtimeRatePercentage != _originalPayrollPolicy.OvertimeRatePercentage ||
+            nightDiffRatePercentage != _originalPayrollPolicy.NightDiffRatePercentage ||
+            restDayPremiumPercentage != _originalPayrollPolicy.RestDayPremiumPercentage ||
+            restDayOvertimeRatePercentage != _originalPayrollPolicy.RestDayOvertimeRatePercentage ||
+            holidayPremiumPercentage != _originalPayrollPolicy.HolidayPremiumPercentage ||
+            netPayRoundingMultiple != _originalPayrollPolicy.NetPayRoundingMultiple;
+
+        PayrollPolicy? changedPayrollPolicy = null;
+        if (payrollPolicyChanged)
+        {
+            changedPayrollPolicy = _originalPayrollPolicy.Clone();
+            changedPayrollPolicy.StandardHoursPerDay = standardHoursPerDay;
+            changedPayrollPolicy.OvertimeRatePercentage = overtimeRatePercentage;
+            changedPayrollPolicy.NightDiffRatePercentage = nightDiffRatePercentage;
+            changedPayrollPolicy.RestDayPremiumPercentage = restDayPremiumPercentage;
+            changedPayrollPolicy.RestDayOvertimeRatePercentage = restDayOvertimeRatePercentage;
+            changedPayrollPolicy.HolidayPremiumPercentage = holidayPremiumPercentage;
+            changedPayrollPolicy.NetPayRoundingMultiple = netPayRoundingMultiple;
+        }
+        ChangedPayrollPolicy = changedPayrollPolicy;
 
         // Empty string is the "reset to default" sentinel SharedConfigWriter.Save reads
         // (see ChangedLogoPath's own doc comment) -- only meaningful if there's actually

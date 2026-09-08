@@ -22,21 +22,35 @@
              one of these - WPF-UI removes the native title bar entirely otherwise. -->
         <ui:TitleBar Grid.Row="0"
                 Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
+                ShowMinimize="False"
                 ShowMaximize="False"
                 CanMaximize="False" />
 
     <!-- DockPanel instead of a bare Grid so OK/Cancel (docked Bottom) stay
          visible and reachable no matter how tall the form above them gets.
          A fixed Height on the Window (above) keeps the window itself at a
-         size that fits comfortably even on a 768px-tall laptop screen, and
-         the ScrollViewer below picks up whatever doesn't fit, e.g. this
-         dialog's own 25 rows now that the Clock-in/Clock-out Buffer Defaults
-         section added two more on top of Rest Day Pay/Premium Pay Eligibility's
-         own two, same reasoning as ApplyScheduleDialog. Previously the root
-         was a single Grid with no scroll fallback and no window size cap, so
-         a short screen (or a future field added below the fold) could in
-         principle push OK/Cancel below the visible screen area with nothing
-         to scroll them back into view. -->
+         size that fits comfortably even on a 768px-tall laptop screen.
+
+         The form itself is a TabControl (Info / Attendance / Payroll) rather
+         than one long scrolling column - this dialog had grown to 26 rows in
+         a single Grid before the split, past the point a person could see
+         the fields they cared about without scrolling past everything else.
+         Same plain, unstyled TabControl/TabItem SettingsDialog already
+         established (WPF-UI's app-wide merged ControlsDictionary supplies
+         the Fluent chrome automatically), each tab wrapping its own
+         ScrollViewer so a short screen still has a scroll fallback per tab
+         instead of a hard cutoff. A plain TabControl selects its first
+         TabItem the instant its visual tree is built - safe here exactly
+         like it is in SettingsDialog, since every field on every tab is
+         filled synchronously from the constructor's arguments before the
+         window is ever shown, so first-tab selection has no async load to
+         race. Fields keep every x:Name they had before the split -
+         code-behind looks them up by name and doesn't care which tab
+         contains them - and QualifiesForRestDayPayCheck/
+         RestDayWorkPremiumPercentageBox stay together, as do
+         QualifiesForPremiumPayCheck/HolidayPremiumPercentageBox/
+         PremiumPayFieldPanel, since each pair's Checked/Unchecked handler
+         toggles the other's Visibility. -->
     <DockPanel Grid.Row="1" Margin="16">
         <StackPanel DockPanel.Dock="Bottom"
                     Orientation="Horizontal"
@@ -52,306 +66,294 @@
                     IsCancel="True" />
         </StackPanel>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="0,0,4,0">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        <TabControl x:Name="EmployeeTabs">
 
-        <TextBlock Text="Employee ID"
-                   Grid.Row="0"
-                   Grid.Column="0"
-                   Margin="0,0,0,4" />
-        <TextBox x:Name="EmployeeIdBox"
-                 Grid.Row="1"
-                 Grid.Column="0"
-                 Margin="0,0,0,12" />
+            <TabItem Header="Info">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12,12,16,12">
 
-        <TextBlock Text="Last name"
-                   Grid.Row="2"
-                   Grid.Column="0"
-                   Margin="0,0,8,4" />
-        <TextBlock Text="First name"
-                   Grid.Row="2"
-                   Grid.Column="1"
-                   Margin="8,0,0,4" />
-        <TextBox x:Name="LastNameBox"
-                 Grid.Row="3"
-                 Grid.Column="0"
-                 Margin="0,0,8,12" />
-        <TextBox x:Name="FirstNameBox"
-                 Grid.Row="3"
-                 Grid.Column="1"
-                 Margin="8,0,0,12" />
+                        <TextBlock Text="Employee ID"
+                                   Margin="0,0,0,4" />
+                        <TextBox x:Name="EmployeeIdBox"
+                                 Margin="0,0,0,12" />
 
-        <TextBlock Text="Department"
-                   Grid.Row="4"
-                   Grid.Column="0"
-                   Margin="0,0,8,4" />
-        <ComboBox x:Name="DepartmentCombo"
-                  Grid.Row="5"
-                  Grid.Column="0"
-                  VerticalAlignment="Top"
-                  DisplayMemberPath="Name"
-                  Margin="0,0,8,12" />
-        <CheckBox Grid.Row="5"
-                  Grid.Column="1"
-                  VerticalAlignment="Center"
-                  Margin="8,0,0,12"
-                  x:Name="UnassignedCheck"
-                  Checked="UnassignedCheck_CheckedChanged"
-                  Unchecked="UnassignedCheck_CheckedChanged">
-            <TextBlock Text="Unassigned"
-                       TextWrapping="Wrap" />
-        </CheckBox>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Last name"
+                                       Grid.Row="0"
+                                       Grid.Column="0"
+                                       Margin="0,0,8,4" />
+                            <TextBlock Text="First name"
+                                       Grid.Row="0"
+                                       Grid.Column="1"
+                                       Margin="8,0,0,4" />
+                            <TextBox x:Name="LastNameBox"
+                                     Grid.Row="1"
+                                     Grid.Column="0"
+                                     Margin="0,0,8,12" />
+                            <TextBox x:Name="FirstNameBox"
+                                     Grid.Row="1"
+                                     Grid.Column="1"
+                                     Margin="8,0,0,12" />
+                        </Grid>
 
-        <CheckBox x:Name="QualifiesForOvertimeCheck"
-                  Grid.Row="6"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Content="Overtime Eligibility"
-                  IsChecked="True"
-                  Margin="0,0,0,8" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Department"
+                                       Grid.Row="0"
+                                       Grid.Column="0"
+                                       Margin="0,0,8,4" />
+                            <ComboBox x:Name="DepartmentCombo"
+                                      Grid.Row="1"
+                                      Grid.Column="0"
+                                      VerticalAlignment="Top"
+                                      DisplayMemberPath="Name"
+                                      Margin="0,0,8,0" />
+                            <CheckBox Grid.Row="1"
+                                      Grid.Column="1"
+                                      VerticalAlignment="Center"
+                                      Margin="8,0,0,0"
+                                      x:Name="UnassignedCheck"
+                                      Checked="UnassignedCheck_CheckedChanged"
+                                      Unchecked="UnassignedCheck_CheckedChanged">
+                                <TextBlock Text="Unassigned"
+                                           TextWrapping="Wrap" />
+                            </CheckBox>
+                        </Grid>
 
-        <CheckBox x:Name="ApplyOvertimeRatePercentageByDefaultCheck"
-                  Grid.Row="7"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  IsChecked="True"
-                  Margin="0,0,0,8"
-                  ToolTip="When on (the usual, labor-law-compliant case), overtime hours are paid hourly rate x (1 + the overtime rate percentage). When off, overtime hours are paid straight hourly rate with no premium -- e.g. during a temporary company policy transitioning toward the premium. Independent of eligibility above: still applies only when this employee is eligible for overtime at all. Can also be overridden per day when scheduling.">
-            <TextBlock Text="Overtime Premium"
-                       TextWrapping="Wrap" />
-        </CheckBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-        <CheckBox x:Name="QualifiesForNightDiffCheck"
-                  Grid.Row="8"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Content="Night Differential Pay Eligibility"
-                  IsChecked="True"
-                  Margin="0,0,0,12" />
+            <TabItem Header="Attendance">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12,12,16,12">
 
-        <!-- Optional per-employee defaults for the same four search-window
-             buffers AttendancePolicy exposes app-wide (see Settings' own
-             Clock-in/Clock-out buffer fields), sitting between a specific
-             ScheduleEntry's own per-day override and the policy default in
-             priority (see NormalBufferResolver). Left blank (the common
-             case), this employee just keeps inheriting the policy default
-             exactly as before this section existed. Set here, this becomes
-             the starting value ApplyScheduleDialog shows, grayed out and
-             still overridable for just one day there, whenever a Normal (or
-             Rest Day duty) day is scheduled for this employee. -->
-        <TextBlock x:Name="BufferDefaultsLabel"
-                   Text="Clock-in / clock-out buffer defaults (optional)"
-                   Grid.Row="9"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4"
-                   TextWrapping="Wrap"
-                   ToolTip="This employee's own default search-window buffers, in hours -- how far from a scheduled clock-in/clock-out time a punch still counts as clocking in/out for a Normal shift (or a Rest Day scheduled as duty). Leave any of these blank to keep inheriting the app-wide policy default from Settings instead. Whatever's in effect here is what the Set Schedule dialog shows as the starting value for this employee -- still overridable for just one day there, without changing this default." />
-        <StackPanel Grid.Row="10"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="2"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,12">
-            <StackPanel Margin="0,0,10,0">
-                <TextBlock Text="In before (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
-                <TextBox x:Name="ClockInBufferBeforeHoursBox" Width="58" HorizontalAlignment="Left"
-                         ToolTip="Blank inherits the policy default." />
-            </StackPanel>
-            <StackPanel Margin="0,0,10,0">
-                <TextBlock Text="In after (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
-                <TextBox x:Name="ClockInBufferAfterHoursBox" Width="58" HorizontalAlignment="Left"
-                         ToolTip="Blank inherits the policy default." />
-            </StackPanel>
-            <StackPanel Margin="0,0,10,0">
-                <TextBlock Text="Out before (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
-                <TextBox x:Name="ClockOutBufferBeforeHoursBox" Width="58" HorizontalAlignment="Left"
-                         ToolTip="Blank inherits the policy default." />
-            </StackPanel>
-            <StackPanel>
-                <TextBlock Text="Out after (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
-                <TextBox x:Name="ClockOutBufferAfterHoursBox" Width="58" HorizontalAlignment="Left"
-                         ToolTip="Blank inherits the policy default." />
-            </StackPanel>
-        </StackPanel>
+                        <!-- Optional per-employee starting suggestion for ApplyScheduleDialog's
+                             Work Time field - unlike the buffer defaults below, this isn't a
+                             genuine runtime resolution tier (ScheduleEntry.WorkTimeHours is a
+                             required, concrete value once a day is saved), it just pre-fills
+                             what a brand-new entry starts showing, in place of Settings' own
+                             company-wide default, whenever every employee selected for that
+                             entry shares this same value. See Employee.DefaultWorkTimeHours. -->
+                        <TextBlock Text="Default work time (hours)"
+                                   Margin="0,0,0,4"
+                                   ToolTip="Pre-fills ApplyScheduleDialog's Work Time field with this number instead of the company default whenever this employee is scheduled. Leave blank to keep using the company default. Meant for an employee whose normal day is genuinely shorter or longer than most -- see Exempt from Undertime Deduction below for someone whose pay doesn't depend on reaching it." />
+                        <controls:NumericTextBox x:Name="DefaultWorkTimeHoursBox"
+                                                 Style="{StaticResource {x:Type TextBox}}"
+                                                 Width="80"
+                                                 HorizontalAlignment="Left"
+                                                 Margin="0,0,0,12"
+                                                 ToolTip="Blank inherits the company default." />
 
-        <CheckBox x:Name="QualifiesForRestDayPayCheck"
-                  Grid.Row="11"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Content="Rest Day Pay Eligibility"
-                  Margin="0,0,0,8"
-                  Checked="QualifiesForRestDayPayCheck_CheckedChanged"
-                  Unchecked="QualifiesForRestDayPayCheck_CheckedChanged"
-                  ToolTip="Unchecked (default): this employee can't be marked 'Scheduled duty' for a Rest Day in the Apply Schedule dialog, and no Rest Day Pay line ever appears for them on the Payroll Summary or payslip. Checked: opts them in to both. New employees start unchecked -- this is an opt-in benefit, not assumed." />
+                        <!-- Optional per-employee defaults for the same four search-window
+                             buffers AttendancePolicy exposes app-wide (see Settings' own
+                             Clock-in/Clock-out buffer fields), sitting between a specific
+                             ScheduleEntry's own per-day override and the policy default in
+                             priority (see NormalBufferResolver). Left blank (the common
+                             case), this employee just keeps inheriting the policy default
+                             exactly as before this section existed. Set here, this becomes
+                             the starting value ApplyScheduleDialog shows, grayed out and
+                             still overridable for just one day there, whenever a Normal (or
+                             Rest Day duty) day is scheduled for this employee. -->
+                        <TextBlock x:Name="BufferDefaultsLabel"
+                                   Text="Clock-in / clock-out buffer defaults (optional)"
+                                   Margin="0,0,0,4"
+                                   TextWrapping="Wrap"
+                                   ToolTip="This employee's own default search-window buffers, in hours -- how far from a scheduled clock-in/clock-out time a punch still counts as clocking in/out for a Normal shift (or a Rest Day scheduled as duty). Leave any of these blank to keep inheriting the app-wide policy default from Settings instead. Whatever's in effect here is what the Set Schedule dialog shows as the starting value for this employee -- still overridable for just one day there, without changing this default." />
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,12">
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="In before (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox x:Name="ClockInBufferBeforeHoursBox" Width="58" HorizontalAlignment="Left"
+                                         ToolTip="Blank inherits the policy default." />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="In after (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox x:Name="ClockInBufferAfterHoursBox" Width="58" HorizontalAlignment="Left"
+                                         ToolTip="Blank inherits the policy default." />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Out before (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox x:Name="ClockOutBufferBeforeHoursBox" Width="58" HorizontalAlignment="Left"
+                                         ToolTip="Blank inherits the policy default." />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Out after (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBox x:Name="ClockOutBufferAfterHoursBox" Width="58" HorizontalAlignment="Left"
+                                         ToolTip="Blank inherits the policy default." />
+                            </StackPanel>
+                        </StackPanel>
 
-        <CheckBox x:Name="QualifiesForPremiumPayCheck"
-                  Grid.Row="12"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Content="Premium Pay Eligibility"
-                  Margin="0,0,0,12"
-                  Checked="QualifiesForPremiumPayCheck_CheckedChanged"
-                  Unchecked="QualifiesForPremiumPayCheck_CheckedChanged"
-                  ToolTip="Unchecked (default): no Premium Pay adjustment is seeded for this employee each period, and no Premium Pay card ever appears for them on the Payroll Summary or payslip. Checked: opts them in to both. New employees start unchecked -- this is an opt-in benefit, not assumed." />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-        <TextBlock Text="Pay Type"
-                   Grid.Row="13"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4" />
-        <StackPanel Grid.Row="14"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="2"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,12">
-            <RadioButton x:Name="PayTypeDailyRadio"
-                         GroupName="PayType"
-                         Content="Daily"
-                         Margin="0,0,16,0"
-                         Checked="PayTypeRadio_CheckedChanged"
-                         ToolTip="Paid per completed/credited day, the same way every employee is paid today." />
-            <RadioButton x:Name="PayTypeMonthlyRadio"
-                         GroupName="PayType"
-                         Content="Monthly"
-                         Checked="PayTypeRadio_CheckedChanged"
-                         ToolTip="Paid a semi-monthly share of Monthly rate every period regardless of how many days fall in it, with uncredited (Absent/Partial) days deducted from that share rather than paid per completed day." />
-        </StackPanel>
+            <TabItem Header="Payroll">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12,12,16,12">
 
-        <TextBlock x:Name="RateLabel"
-                   Text="Daily rate"
-                   Grid.Row="15"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4" />
-        <controls:NumericTextBox x:Name="DailyRateBox"
-                                 Style="{StaticResource {x:Type TextBox}}"
-                                 Grid.Row="16"
-                                 Grid.Column="0"
-                                 Margin="0,0,0,12"
-                                 Width="120"
-                                 HorizontalAlignment="Left"
-                                 ToolTip="Used for payroll's Basic Pay/Overtime/Night Diff/Undertime, and to pay a paid Leave day outright -- leave at 0.00 until you're ready to set it, it never blocks saving." />
-        <controls:NumericTextBox x:Name="MonthlyRateBox"
-                                 Style="{StaticResource {x:Type TextBox}}"
-                                 Grid.Row="16"
-                                 Grid.Column="0"
-                                 Margin="0,0,0,12"
-                                 Width="120"
-                                 HorizontalAlignment="Left"
-                                 Visibility="Collapsed"
-                                 ToolTip="Used for payroll's semi-monthly Basic Pay share -- the nominal-15-day divisor (minus any Rest Days in the period) divides this into a per-day rate, then uncredited days are deducted from the period's Basic Pay. Leave at 0.00 until you're ready to set it, it never blocks saving." />
+                        <CheckBox x:Name="QualifiesForOvertimeCheck"
+                                  Content="Overtime Eligibility"
+                                  IsChecked="True"
+                                  Margin="0,0,0,8" />
 
-        <TextBlock x:Name="RestDayWorkPremiumPercentageLabel"
-                   Text="Rest Day Work Premium %"
-                   Grid.Row="17"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4" />
-        <controls:NumericTextBox x:Name="RestDayWorkPremiumPercentageBox"
-                                 Style="{StaticResource {x:Type TextBox}}"
-                                 Grid.Row="18"
-                                 Grid.Column="0"
-                                 Margin="0,0,0,12"
-                                 Width="120"
-                                 HorizontalAlignment="Left"
-                                 ToolTip="The premium paid on top of straight pay when this employee actually works their Rest Day, as a decimal (e.g. 0.30 for 30%). Applies to both Pay Types -- a Daily-rated employee can be called in on a Rest Day too. Leave blank or 0.00 for straight pay with no premium, it never blocks saving." />
+                        <CheckBox x:Name="ApplyOvertimeRatePercentageByDefaultCheck"
+                                  IsChecked="True"
+                                  Margin="0,0,0,8"
+                                  ToolTip="When on (the usual, labor-law-compliant case), overtime hours are paid hourly rate x (1 + the overtime rate percentage). When off, overtime hours are paid straight hourly rate with no premium -- e.g. during a temporary company policy transitioning toward the premium. Independent of eligibility above: still applies only when this employee is eligible for overtime at all. Can also be overridden per day when scheduling.">
+                            <TextBlock Text="Overtime Premium"
+                                       TextWrapping="Wrap" />
+                        </CheckBox>
 
-        <TextBlock Text="Statutory contributions (per payroll period)"
-                   Grid.Row="19"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4"
-                   ToolTip="This employee's usual per-period contribution amounts. The first time a payroll period is opened for this employee on the Payroll tab, each one that's above 0.00 pre-fills that period's SSS/PhilHealth/Pag-IBIG box automatically -- still editable or clearable per period there afterward, same as any other payroll line. Leave at 0.00 for a type you'd rather keep entering by hand each period." />
-        <StackPanel Grid.Row="20"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="2"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,12">
-            <StackPanel Margin="0,0,12,0">
-                <TextBlock Text="SSS" Margin="0,0,0,4" />
-                <controls:NumericTextBox x:Name="DefaultSssBox" Width="100" HorizontalAlignment="Left"
-                                         Style="{StaticResource {x:Type TextBox}}" />
-            </StackPanel>
-            <StackPanel Margin="0,0,12,0">
-                <TextBlock Text="PhilHealth" Margin="0,0,0,4" />
-                <controls:NumericTextBox x:Name="DefaultPhilHealthBox" Width="100" HorizontalAlignment="Left"
-                                         Style="{StaticResource {x:Type TextBox}}" />
-            </StackPanel>
-            <StackPanel>
-                <TextBlock Text="Pag-IBIG" Margin="0,0,0,4" />
-                <controls:NumericTextBox x:Name="DefaultPagIbigBox" Width="100" HorizontalAlignment="Left"
-                                         Style="{StaticResource {x:Type TextBox}}" />
-            </StackPanel>
-        </StackPanel>
+                        <CheckBox x:Name="QualifiesForNightDiffCheck"
+                                  Content="Night Differential Pay Eligibility"
+                                  IsChecked="True"
+                                  Margin="0,0,0,8" />
 
-        <TextBlock Text="Pay adjustments (per payroll period)"
-                   Grid.Row="21"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="2"
-                   Margin="0,0,0,4"
-                   ToolTip="This employee's usual per-period amounts. The first time a payroll period is opened for this employee on the Payroll tab, each one that's above 0.00 pre-fills that period's Premium Pay/Allowance/Cash Advance box automatically -- still editable or clearable per period there afterward, same as any other payroll line. Leave at 0.00 for a type you'd rather keep entering by hand each period." />
-        <StackPanel Grid.Row="22"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="2"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,12">
-            <StackPanel x:Name="PremiumPayFieldPanel" Margin="0,0,12,0">
-                <TextBlock Text="Premium Pay" Margin="0,0,0,4" />
-                <controls:NumericTextBox x:Name="DefaultPremiumPayBox" Width="100" HorizontalAlignment="Left"
-                                         Style="{StaticResource {x:Type TextBox}}" />
-            </StackPanel>
-            <StackPanel Margin="0,0,12,0">
-                <TextBlock Text="Allowance" Margin="0,0,0,4" />
-                <controls:NumericTextBox x:Name="DefaultAllowanceBox" Width="100" HorizontalAlignment="Left"
-                                         Style="{StaticResource {x:Type TextBox}}" />
-            </StackPanel>
-            <StackPanel>
-                <TextBlock Text="Cash Advance" Margin="0,0,0,4" />
-                <controls:NumericTextBox x:Name="DefaultCashAdvanceBox" Width="100" HorizontalAlignment="Left"
-                                         Style="{StaticResource {x:Type TextBox}}" />
-            </StackPanel>
-        </StackPanel>
+                        <CheckBox x:Name="ExemptFromUndertimeDeductionCheck"
+                                  Margin="0,0,0,12"
+                                  ToolTip="When checked, this employee's Undertime deduction never reduces Total Deductions/Net Pay, no matter how far short of the day's scheduled Work Time they ran -- they're always paid their full DailyRate for a credited day. The Undertime figure itself still shows on the payslip for reference, just never subtracted. Hours worked beyond the scheduled Work Time are still Overtime, same as any other employee. Unchecked (default): Undertime deducts normally.">
+                            <TextBlock Text="Exempt from Undertime Deduction"
+                                       TextWrapping="Wrap" />
+                        </CheckBox>
 
-        <CheckBox x:Name="DefaultLeaveIsPaidCheck"
-                  Grid.Row="23"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Content="Leave with pay by default"
-                  Margin="0,0,0,12"
-                  ToolTip="Pre-selected in the Paid/Unpaid choice when scheduling a Leave day for this employee -- still changeable per day there. Also what payroll falls back to for an older Leave day saved before that per-day choice existed. Unchecked (Unpaid) unless explicitly turned on." />
+                        <CheckBox x:Name="QualifiesForRestDayPayCheck"
+                                  Content="Rest Day Pay Eligibility"
+                                  Margin="0,0,0,8"
+                                  Checked="QualifiesForRestDayPayCheck_CheckedChanged"
+                                  Unchecked="QualifiesForRestDayPayCheck_CheckedChanged"
+                                  ToolTip="Unchecked (default): this employee can't be marked 'Scheduled duty' for a Rest Day in the Apply Schedule dialog, and no Rest Day Pay line ever appears for them on the Payroll Summary or payslip. Checked: opts them in to both. New employees start unchecked -- this is an opt-in benefit, not assumed." />
 
-        </Grid>
-        </ScrollViewer>
+                        <CheckBox x:Name="QualifiesForPremiumPayCheck"
+                                  Content="Premium Pay Eligibility"
+                                  Margin="0,0,0,12"
+                                  Checked="QualifiesForPremiumPayCheck_CheckedChanged"
+                                  Unchecked="QualifiesForPremiumPayCheck_CheckedChanged"
+                                  ToolTip="Unchecked (default): no Premium Pay adjustment is seeded for this employee each period, and no Premium Pay card ever appears for them on the Payroll Summary or payslip. Checked: opts them in to both. New employees start unchecked -- this is an opt-in benefit, not assumed." />
+
+                        <CheckBox x:Name="DefaultLeaveIsPaidCheck"
+                                  Content="Leave with pay by default"
+                                  Margin="0,0,0,12"
+                                  ToolTip="Pre-selected in the Paid/Unpaid choice when scheduling a Leave day for this employee -- still changeable per day there. Also what payroll falls back to for an older Leave day saved before that per-day choice existed. Unchecked (Unpaid) unless explicitly turned on." />
+
+                        <TextBlock Text="Pay Type"
+                                   Margin="0,0,0,4" />
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,12">
+                            <RadioButton x:Name="PayTypeDailyRadio"
+                                         GroupName="PayType"
+                                         Content="Daily"
+                                         Margin="0,0,16,0"
+                                         Checked="PayTypeRadio_CheckedChanged"
+                                         ToolTip="Paid per completed/credited day, the same way every employee is paid today." />
+                            <RadioButton x:Name="PayTypeMonthlyRadio"
+                                         GroupName="PayType"
+                                         Content="Monthly"
+                                         Checked="PayTypeRadio_CheckedChanged"
+                                         ToolTip="Paid a semi-monthly share of Monthly rate every period regardless of how many days fall in it, with uncredited (Absent/Partial) days deducted from that share rather than paid per completed day." />
+                        </StackPanel>
+
+                        <TextBlock x:Name="RateLabel"
+                                   Text="Daily rate"
+                                   Margin="0,0,0,4" />
+                        <controls:NumericTextBox x:Name="DailyRateBox"
+                                                 Style="{StaticResource {x:Type TextBox}}"
+                                                 Margin="0,0,0,12"
+                                                 Width="120"
+                                                 HorizontalAlignment="Left"
+                                                 ToolTip="Used for payroll's Basic Pay/Overtime/Night Diff/Undertime, and to pay a paid Leave day outright -- leave at 0.00 until you're ready to set it, it never blocks saving." />
+                        <controls:NumericTextBox x:Name="MonthlyRateBox"
+                                                 Style="{StaticResource {x:Type TextBox}}"
+                                                 Margin="0,0,0,12"
+                                                 Width="120"
+                                                 HorizontalAlignment="Left"
+                                                 Visibility="Collapsed"
+                                                 ToolTip="Used for payroll's semi-monthly Basic Pay share -- the nominal-15-day divisor (minus any Rest Days in the period) divides this into a per-day rate, then Basic Pay is that rate times however many of those days are actually credited. Leave at 0.00 until you're ready to set it, it never blocks saving." />
+
+                        <TextBlock x:Name="RestDayWorkPremiumPercentageLabel"
+                                   Text="Rest Day Work Premium (blank = company default)"
+                                   Margin="0,0,0,4" />
+                        <controls:PercentTextBox x:Name="RestDayWorkPremiumPercentageBox"
+                                                 Margin="0,0,0,12"
+                                                 Width="120"
+                                                 HorizontalAlignment="Left"
+                                                 Maximum="5"
+                                                 ToolTip="Overrides the company's Rest Day premium for this employee only, covering the first 8 hours of a worked Rest Day -- hours past that earn a further 30% on top of it. Applies to both Pay Types: a Daily-rated employee can be called in on a Rest Day too. Leave blank to use the company default (30%); typing 0% here means straight pay with no premium at all, which is rarely what you want." />
+
+                        <TextBlock x:Name="HolidayPremiumPercentageLabel"
+                                   Text="Holiday Premium (blank = company default)"
+                                   Margin="0,0,0,4" />
+                        <controls:PercentTextBox x:Name="HolidayPremiumPercentageBox"
+                                                 Margin="0,0,0,12"
+                                                 Width="120"
+                                                 HorizontalAlignment="Left"
+                                                 Maximum="5"
+                                                 ToolTip="Overrides the company's Holiday premium for this employee only -- 100% is one extra day's pay, 200% total on a worked regular holiday, since Basic Pay already covers the first 100%. Only takes effect while Premium Pay Eligibility above is checked. Leave blank to use the company default (100%)." />
+
+                        <TextBlock Text="Statutory contributions (per payroll period)"
+                                   Margin="0,0,0,4"
+                                   ToolTip="This employee's usual per-period contribution amounts. The first time a payroll period is opened for this employee on the Payroll tab, each one that's above 0.00 pre-fills that period's SSS/PhilHealth/Pag-IBIG box automatically -- still editable or clearable per period there afterward, same as any other payroll line. Leave at 0.00 for a type you'd rather keep entering by hand each period." />
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,12">
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="SSS" Margin="0,0,0,4" />
+                                <controls:NumericTextBox x:Name="DefaultSssBox" Width="100" HorizontalAlignment="Left"
+                                                         Style="{StaticResource {x:Type TextBox}}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="PhilHealth" Margin="0,0,0,4" />
+                                <controls:NumericTextBox x:Name="DefaultPhilHealthBox" Width="100" HorizontalAlignment="Left"
+                                                         Style="{StaticResource {x:Type TextBox}}" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Pag-IBIG" Margin="0,0,0,4" />
+                                <controls:NumericTextBox x:Name="DefaultPagIbigBox" Width="100" HorizontalAlignment="Left"
+                                                         Style="{StaticResource {x:Type TextBox}}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Text="Pay adjustments (per payroll period)"
+                                   Margin="0,0,0,4"
+                                   ToolTip="This employee's usual per-period amounts. The first time a payroll period is opened for this employee on the Payroll tab, each one that's above 0.00 pre-fills that period's Premium Pay/Allowance/Cash Advance box automatically -- still editable or clearable per period there afterward, same as any other payroll line. Leave at 0.00 for a type you'd rather keep entering by hand each period." />
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,12">
+                            <StackPanel x:Name="PremiumPayFieldPanel" Margin="0,0,12,0">
+                                <TextBlock Text="Premium Pay" Margin="0,0,0,4" />
+                                <controls:NumericTextBox x:Name="DefaultPremiumPayBox" Width="100" HorizontalAlignment="Left"
+                                                         Style="{StaticResource {x:Type TextBox}}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Allowance" Margin="0,0,0,4" />
+                                <controls:NumericTextBox x:Name="DefaultAllowanceBox" Width="100" HorizontalAlignment="Left"
+                                                         Style="{StaticResource {x:Type TextBox}}" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Cash Advance" Margin="0,0,0,4" />
+                                <controls:NumericTextBox x:Name="DefaultCashAdvanceBox" Width="100" HorizontalAlignment="Left"
+                                                         Style="{StaticResource {x:Type TextBox}}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
     </DockPanel>
 </Grid>
 </ui:FluentWindow>

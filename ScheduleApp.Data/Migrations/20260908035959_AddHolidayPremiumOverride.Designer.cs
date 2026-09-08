@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ScheduleApp.Data;
 
@@ -11,9 +12,11 @@ using ScheduleApp.Data;
 namespace ScheduleApp.Data.Migrations
 {
     [DbContext(typeof(ScheduleDbContext))]
-    partial class ScheduleDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908035959_AddHolidayPremiumOverride")]
+    partial class AddHolidayPremiumOverride
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -249,9 +252,6 @@ namespace ScheduleApp.Data.Migrations
                         .HasColumnType("decimal(10,2)")
                         .HasDefaultValue(0m);
 
-                    b.Property<decimal?>("DefaultWorkTimeHours")
-                        .HasColumnType("decimal(5,2)");
-
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("int");
 
@@ -259,11 +259,6 @@ namespace ScheduleApp.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(0);
-
-                    b.Property<bool>("ExemptFromUndertimeDeduction")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
 
                     b.Property<string>("FirstName")
                         .IsRequired()

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace ScheduleApp.Desktop.Controls;
 
@@ -32,6 +33,10 @@ namespace ScheduleApp.Desktop.Controls;
 ///     not on every keystroke, and not at all when the box is left holding what it started
 ///     with. That's the event to hook for "save this amount", instead of a LostFocus +
 ///     KeyDown pair that both have to guard against committing the same edit twice.
+///   - Shows <see cref="PlaceholderValue"/>, grayed out, whenever Value is null -- e.g. an
+///     employee-level override box reading "1.00" until someone actually types one, rather
+///     than sitting empty with nothing to say what it currently inherits. Opt-in per box
+///     (null, the default, means no placeholder); see that property's own doc comment.
 ///
 /// Styling note: WPF looks up an implicit style by the element's exact type, so the app-wide
 /// implicit TextBox style (WPF-UI's, merged by App.xaml) does NOT reach a derived class on
@@ -58,6 +63,16 @@ public class NumericTextBox : TextBox
     /// <see cref="ValueCommitted"/> compares against (so tabbing through a box without
     /// touching it commits nothing) and what Escape restores.</summary>
     private decimal? _valueOnFocus;
+
+    /// <summary>True whenever Text currently holds <see cref="PlaceholderValue"/>'s own
+    /// formatted text rather than something the person actually typed or a real committed
+    /// Value -- set by <see cref="UpdateTextFromValue"/> whenever it decides to show the
+    /// placeholder, cleared the instant any genuine text change happens (see
+    /// OnTextChanged). What <see cref="CommitValue"/> checks before parsing Text at all:
+    /// without it, tabbing through an untouched placeholder box would parse the grayed-out
+    /// "1.00" sitting in Text as if the person had typed it, silently turning a placeholder
+    /// into a real override nobody asked for.</summary>
+    private bool _isShowingPlaceholder;
 
     public NumericTextBox()
     {
@@ -87,6 +102,38 @@ public class NumericTextBox : TextBox
     {
         get => (decimal?)GetValue(ValueProperty);
         set => SetValue(ValueProperty, value);
+    }
+
+    public static readonly DependencyProperty PlaceholderValueProperty = DependencyProperty.Register(
+        nameof(PlaceholderValue),
+        typeof(decimal?),
+        typeof(NumericTextBox),
+        new PropertyMetadata(null, OnPlaceholderValueChanged));
+
+    /// <summary>Shown, formatted and grayed out, whenever Value is null -- e.g. an
+    /// employee-level override box that reads "1.00" until someone actually sets one,
+    /// rather than sitting empty with nothing to say what it's currently inheriting. Value
+    /// itself stays null the whole time this is showing -- it's genuinely a placeholder,
+    /// not a starting value, so a caller reading Value still correctly sees "no override
+    /// set" rather than mistaking the displayed number for something the person typed.
+    /// Typing anything at all -- including retyping the exact same number -- commits a
+    /// real, non-null Value and the text reverts to the box's ordinary foreground.
+    ///
+    /// Tracks live: changing this while the box is still showing it (Value null) updates
+    /// the displayed text immediately, the same "keep tracking the default even if it
+    /// changes later" behavior ApplyScheduleDialog's own grayed-out rate/buffer boxes
+    /// already have (see that dialog's InitializeBufferBox/ShowBufferDefault) -- this is
+    /// that same idea built into the control itself instead, since NumericTextBox's own
+    /// Text/Value sync machinery (_syncingTextFromValue etc.) makes wiring the same
+    /// behavior from outside the control fragile.
+    ///
+    /// Null (the default) means no placeholder at all -- an empty box just stays visually
+    /// empty, the pre-existing behavior every other NumericTextBox in the app already has;
+    /// this is opt-in per box, not a change to the ones that don't set it.</summary>
+    public decimal? PlaceholderValue
+    {
+        get => (decimal?)GetValue(PlaceholderValueProperty);
+        set => SetValue(PlaceholderValueProperty, value);
     }
 
     public static readonly DependencyProperty MinimumProperty = DependencyProperty.Register(
@@ -242,9 +289,15 @@ public class NumericTextBox : TextBox
     /// button can force a commit on a box that still has focus.</summary>
     public void CommitValue()
     {
-        decimal? committed = TryParseText(Text, out var parsed)
-            ? ClampAndRound(parsed)
-            : AllowNull ? null : ClampAndRound(0m);
+        // An untouched placeholder commits as null outright -- Text holds the
+        // placeholder's own formatted number ("1.00"), not anything the person typed,
+        // so parsing it here the way real input gets parsed would silently manufacture
+        // an override nobody asked for the moment the box merely lost focus.
+        decimal? committed = _isShowingPlaceholder
+            ? null
+            : TryParseText(Text, out var parsed)
+                ? ClampAndRound(parsed)
+                : AllowNull ? null : ClampAndRound(0m);
 
         SetCurrentValue(ValueProperty, committed);
 
@@ -380,6 +433,13 @@ public class NumericTextBox : TextBox
 
         if (_syncingTextFromValue) return;
 
+        // Any genuine text change -- typing, pasting, Ctrl+A-and-delete -- means Text no
+        // longer holds just the placeholder, even if what's left happens to parse back to
+        // null (an empty box) or, in principle, back to the exact same number: the person
+        // touched it, so it's no longer "untouched" the way CommitValue above needs to
+        // know.
+        _isShowingPlaceholder = false;
+
         _syncingValueFromText = true;
         try
         {
@@ -474,17 +534,53 @@ public class NumericTextBox : TextBox
     private decimal ClampAndRound(decimal value) =>
         Math.Clamp(Math.Round(value, DecimalDigits, MidpointRounding.AwayFromZero), Minimum, Maximum);
 
-    /// <summary>Arrow-key step. Starts from 0 rather than refusing to move when the box is
-    /// empty, so Up on a blank box is a quick way to the first value.</summary>
+    /// <summary>Arrow-key step. Starts from PlaceholderValue when the box is empty and
+    /// showing one -- stepping away from the grayed-out "1.00" someone can see should move
+    /// relative to that number, not silently ignore it and start from 0 as if the box were
+    /// genuinely blank. Falls back to plain 0 when there's no placeholder either, same as
+    /// before.</summary>
     private void Step(decimal delta)
     {
-        SetCurrentValue(ValueProperty, ClampAndRound((Value ?? 0m) + delta));
+        var basis = Value ?? PlaceholderValue ?? 0m;
+        SetCurrentValue(ValueProperty, ClampAndRound(basis + delta));
         UpdateTextFromValue();
         SelectAll();
     }
 
     private void UpdateTextFromValue()
     {
+        // No real Value, but a placeholder to show in its place -- render it exactly like
+        // a real committed number (same DisplayFormat), grayed out, and remember that
+        // Text is only ever the placeholder right now (see _isShowingPlaceholder's own
+        // doc comment). Takes priority over the plain "empty" branch below, and re-runs
+        // on every call (not just when Value first goes null) so a live PlaceholderValue
+        // change is picked up immediately -- see OnPlaceholderValueChanged.
+        if (Value is null && PlaceholderValue is { } placeholder)
+        {
+            var placeholderText = placeholder.ToString(DisplayFormat, CultureInfo.CurrentCulture);
+
+            if (!string.Equals(Text, placeholderText, StringComparison.Ordinal))
+            {
+                _syncingTextFromValue = true;
+                try
+                {
+                    SetCurrentValue(TextProperty, placeholderText);
+                    CaretIndex = placeholderText.Length;
+                }
+                finally
+                {
+                    _syncingTextFromValue = false;
+                }
+            }
+
+            _isShowingPlaceholder = true;
+            Foreground = Brushes.Gray;
+            return;
+        }
+
+        _isShowingPlaceholder = false;
+        ClearValue(ForegroundProperty);
+
         var formatted = Value is { } value
             ? value.ToString(DisplayFormat, CultureInfo.CurrentCulture)
             : string.Empty;
@@ -524,6 +620,17 @@ public class NumericTextBox : TextBox
         if (box._syncingValueFromText || baseValue is not decimal value) return baseValue;
 
         return box.ClampAndRound(value);
+    }
+
+    /// <summary>Only matters while there's no real Value to show instead -- a caller
+    /// changing PlaceholderValue on a box that already holds a real override has nothing
+    /// to redisplay here, since UpdateTextFromValue's own placeholder branch only ever
+    /// fires when Value is null in the first place.</summary>
+    private static void OnPlaceholderValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var box = (NumericTextBox)d;
+
+        if (box.Value is null) box.UpdateTextFromValue();
     }
 
     private static void OnRangeOrFormatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

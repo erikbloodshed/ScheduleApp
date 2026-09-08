@@ -38,6 +38,7 @@
              one of these - WPF-UI removes the native title bar entirely otherwise. -->
         <ui:TitleBar Grid.Row="0"
                 Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
+                ShowMinimize="False"
                 ShowMaximize="True"
                 CanMaximize="True" />
 

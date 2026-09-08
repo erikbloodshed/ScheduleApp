@@ -172,15 +172,20 @@ public class PayrollResult
     /// case for there being exactly one.</summary>
     public required IReadOnlyList<PayrollLineItem> ComputedDeductions { get; init; }
 
-    /// <summary>Count of days credited as paid this period -- for Daily-rated,
-    /// this is what BasicPayForDay credited (Complete, Official Business, or
-    /// paid Leave), matching the day count shown inline in
-    /// ComputedGrossPay[0].Label (e.g. "Basic Pay (5D)"); for Monthly-rated,
-    /// divisor minus uncreditedDays (ComputedGrossPay[0].Label shows
-    /// "Semi-Monthly" instead of this count -- see PayrollCalculator's
-    /// basicPayLabel). Exposed here as its own property so a caller such as
-    /// PayrollExcelExporter can read a plain int column instead of parsing
-    /// label text.</summary>
+    /// <summary>Count of days credited as paid this period, matching the day
+    /// count shown inline in ComputedGrossPay[0].Label for both employee
+    /// types (e.g. "Basic Pay (5D)") -- Basic Pay itself is exactly this
+    /// count times the employee's day rate (DailyRate for Daily-rated,
+    /// effectiveDailyRate for Monthly-rated). For Daily-rated this is a
+    /// literal count of days BasicPayForDay credited (Complete, Official
+    /// Business, or paid Leave). For Monthly-rated it's the nominal-15-day
+    /// divisor adjusted for uncredited/excess days (see PayrollCalculator.
+    /// Calculate's own comments on that adjustment) rather than a literal
+    /// count of AttendanceSummary rows -- a period genuinely shorter than 15
+    /// real days (e.g. a 13-day February half) is still meant to price as a
+    /// fully-paid nominal period, not a prorated-down one. Exposed here as
+    /// its own property so a caller such as PayrollExcelExporter can read a
+    /// plain int column instead of parsing label text.</summary>
     public required int WorkDays { get; init; }
 
     /// <summary>Count of calendar days in [PeriodStart, PeriodEnd] with no

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
+using ScheduleApp.Core.Payroll;
 using ScheduleApp.Desktop.Controls;
 
 namespace ScheduleApp.Desktop.Views;
@@ -40,6 +41,11 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
     /// reads it. Same unchecked-by-default convention as QualifiesForRestDayPay above.</summary>
     public bool QualifiesForPremiumPay => QualifiesForPremiumPayCheck.IsChecked == true;
 
+    /// <summary>See Employee.ExemptFromUndertimeDeduction for what this feeds into and
+    /// who reads it. Same unchecked-by-default convention as QualifiesForRestDayPay
+    /// above -- an employee has to be explicitly opted into this.</summary>
+    public bool ExemptFromUndertimeDeduction => ExemptFromUndertimeDeductionCheck.IsChecked == true;
+
     /// <summary>See Employee.ApplyOvertimeRatePercentageByDefault for what this feeds
     /// into and who reads it -- the separate "does the overtime premium actually apply,
     /// once eligible" toggle, independent of QualifiesForOvertime above.</summary>
@@ -68,9 +74,36 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
     /// <summary>Set by OkButton_Click once RestDayWorkPremiumPercentageBox's text has
     /// passed validation -- see Employee.RestDayWorkPremiumPercentage for what this feeds
     /// into and the expected format (a decimal like 0.30 for 30%, not the full multiplier).
-    /// Same blank-is-0, never-blocking convention as DailyRate above; applies to both Pay
-    /// Types, so it's read regardless of which PayType radio is checked.</summary>
-    public decimal RestDayWorkPremiumPercentage { get; private set; }
+    /// Applies to both Pay Types, so it's read regardless of which PayType radio is checked.
+    ///
+    /// Blank stays null here, NOT 0 -- deliberately the opposite of DailyRate and the other
+    /// money fields above, and the same rule the four buffer boxes below already follow:
+    /// null is the meaningful "no employee-level override, inherit
+    /// PayrollPolicy.RestDayPremiumPercentage" state, so folding it to 0 would silently
+    /// pay straight time for a worked Rest Day instead of the company's 130%.</summary>
+    public decimal? RestDayWorkPremiumPercentage { get; private set; }
+
+    /// <summary>Set by OkButton_Click once HolidayPremiumPercentageBox's text has passed
+    /// validation -- see Employee.HolidayPremiumPercentage for what this feeds into and
+    /// the expected format (a decimal like 1.00 for one extra day's pay, not the full
+    /// 2.00 multiplier). Applies to both Pay Types, same as RestDayWorkPremiumPercentage
+    /// above -- Holiday Pay's own day component prices a Daily-rated employee's DailyRate
+    /// or a Monthly-rated employee's effectiveDailyRate equally.
+    ///
+    /// Blank stays null here, NOT 0, same nullable-means-inherit reasoning as
+    /// RestDayWorkPremiumPercentage above: null means "no employee-level override,
+    /// inherit PayrollPolicy.HolidayPremiumPercentage" -- folding it to 0 would silently
+    /// pay zero extra for a worked holiday instead of the company's default one-day
+    /// bonus.</summary>
+    public decimal? HolidayPremiumPercentage { get; private set; }
+
+    /// <summary>Set by OkButton_Click straight off DefaultWorkTimeHoursBox.Value -- see
+    /// Employee.DefaultWorkTimeHours for what this feeds into. Blank stays null here,
+    /// NOT 0 -- same nullable-means-inherit reasoning as RestDayWorkPremiumPercentage
+    /// above: null means "no employee-level suggestion, start from
+    /// AttendanceSettings.DefaultWorkTimeHours instead," so folding it to 0 would
+    /// silently suggest a zero-length shift instead of the company's own default.</summary>
+    public decimal? DefaultWorkTimeHours { get; private set; }
 
     /// <summary>Set by OkButton_Click once DefaultSssBox's text has passed validation --
     /// see Employee.DefaultSss for what this feeds into and how it's used. Blank is
@@ -117,17 +150,34 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
 
     /// <param name="departments">Real departments to offer in the picker.</param>
     /// <param name="preselectedDepartmentId">Department to preselect when adding a new employee.</param>
+    /// <param name="payrollPolicy">The company's current Payroll settings -- read only for
+    /// RestDayPremiumPercentage/HolidayPremiumPercentage, shown as each override box's own
+    /// grayed-out placeholder (see NumericTextBox.PlaceholderValue) so a box left blank
+    /// visibly shows what it's actually inheriting rather than sitting empty with nothing to
+    /// say so.</param>
+    /// <param name="defaultWorkTimeHours">AttendanceSettings.DefaultWorkTimeHours -- the
+    /// company's current work-time default, shown as DefaultWorkTimeHoursBox's own
+    /// grayed-out placeholder, same reasoning as payrollPolicy above.</param>
     /// <param name="existing">Pass an existing employee to edit it instead of adding a new one.</param>
     /// <param name="takenEmployeeIds">Employee IDs already used by OTHER employees -- i.e. excluding
     /// <paramref name="existing"/>'s own ID when editing. Typing one of these blocks OK, same as the
     /// existing required-field checks below, so nothing is lost and the user can just pick another ID.</param>
     public EmployeeDialog(IEnumerable<Department> departments, int? preselectedDepartmentId,
+        PayrollPolicy payrollPolicy, double defaultWorkTimeHours,
         Employee? existing = null, IReadOnlySet<int>? takenEmployeeIds = null)
     {
         InitializeComponent();
 
         _takenEmployeeIds = takenEmployeeIds ?? new HashSet<int>();
         _existing = existing;
+
+        // Placeholders only -- never read back as a real value (see PlaceholderValue's
+        // own doc comment). Set unconditionally, before the existing/new-employee branch
+        // below, since both cases want the same "show what blank currently inherits"
+        // behavior regardless of whether this employee already has an override on file.
+        RestDayWorkPremiumPercentageBox.PlaceholderValue = payrollPolicy.RestDayPremiumPercentage;
+        HolidayPremiumPercentageBox.PlaceholderValue = payrollPolicy.HolidayPremiumPercentage;
+        DefaultWorkTimeHoursBox.PlaceholderValue = (decimal)defaultWorkTimeHours;
 
         // Deliberately set here, after InitializeComponent, rather than as a XAML
         // IsChecked="True" default on PayTypeDailyRadio -- see that radio's XAML
@@ -151,6 +201,7 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
             QualifiesForRestDayPayCheck.IsChecked = existing.QualifiesForRestDayPay;
             QualifiesForPremiumPayCheck.IsChecked = existing.QualifiesForPremiumPay;
             ApplyOvertimeRatePercentageByDefaultCheck.IsChecked = existing.ApplyOvertimeRatePercentageByDefault;
+            ExemptFromUndertimeDeductionCheck.IsChecked = existing.ExemptFromUndertimeDeduction;
 
             // Setting IsChecked on the selected radio fires PayTypeRadio_CheckedChanged,
             // which is what actually flips RateLabel/DailyRateBox/MonthlyRateBox's
@@ -161,6 +212,8 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
             DailyRateBox.Value = existing.DailyRate;
             MonthlyRateBox.Value = existing.MonthlyRate;
             RestDayWorkPremiumPercentageBox.Value = existing.RestDayWorkPremiumPercentage;
+            HolidayPremiumPercentageBox.Value = existing.HolidayPremiumPercentage;
+            DefaultWorkTimeHoursBox.Value = existing.DefaultWorkTimeHours;
             DefaultSssBox.Value = existing.DefaultSss;
             DefaultPhilHealthBox.Value = existing.DefaultPhilHealth;
             DefaultPagIbigBox.Value = existing.DefaultPagIbig;
@@ -196,7 +249,19 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
                 : departmentList.FirstOrDefault();
             DailyRateBox.Value = 0m;
             MonthlyRateBox.Value = 0m;
-            RestDayWorkPremiumPercentageBox.Value = 0m;
+            // Left null, not 0 -- a brand-new employee inherits the company's Rest
+            // Day premium until someone deliberately types an override (see the
+            // RestDayWorkPremiumPercentage property above). Shows as that company
+            // default, grayed out, rather than sitting empty -- see
+            // PlaceholderValue's own doc comment.
+            RestDayWorkPremiumPercentageBox.Value = null;
+            // Same reasoning, for Holiday Pay's own premium (see the
+            // HolidayPremiumPercentage property above).
+            HolidayPremiumPercentageBox.Value = null;
+            // Same reasoning again -- a brand-new employee starts out suggesting the
+            // company's own default work time (shown grayed out) rather than any
+            // particular number (see DefaultWorkTimeHours property above).
+            DefaultWorkTimeHoursBox.Value = null;
             DefaultSssBox.Value = 0m;
             DefaultPhilHealthBox.Value = 0m;
             DefaultPagIbigBox.Value = 0m;
@@ -238,13 +303,19 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
     /// <summary>Same idea as QualifiesForRestDayPayCheck_CheckedChanged above, for the
     /// "Premium Pay" field in the pay-adjustments row (PremiumPayFieldPanel wraps just
     /// that field's own label+box, leaving the Allowance/Cash Advance fields alongside
-    /// it untouched).</summary>
+    /// it untouched) and for HolidayPremiumPercentageBox -- both gated by the same
+    /// checkbox, since both only matter once this employee can actually earn Holiday
+    /// Pay at all: the per-period adjustment amount and the rate a worked holiday's
+    /// day component is priced at.</summary>
     private void QualifiesForPremiumPayCheck_CheckedChanged(object sender, RoutedEventArgs e)
         => UpdatePremiumPayFieldVisibility();
 
-    private void UpdatePremiumPayFieldVisibility() =>
-        PremiumPayFieldPanel.Visibility =
-            QualifiesForPremiumPayCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    private void UpdatePremiumPayFieldVisibility()
+    {
+        var visibility = QualifiesForPremiumPayCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        PremiumPayFieldPanel.Visibility = visibility;
+        HolidayPremiumPercentageLabel.Visibility = HolidayPremiumPercentageBox.Visibility = visibility;
+    }
 
     /// <summary>Shared Checked handler for both PayTypeDailyRadio and
     /// PayTypeMonthlyRadio -- reads current state off EmployeeType rather than off
@@ -300,13 +371,18 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
         EmployeeId = employeeId;
 
         // Blank is treated as 0 -- same "never blocks saving" convention as
-        // Employee.DailyRate's own default. All nine money/rate fields (DailyRate,
-        // MonthlyRate, RestDayWorkPremiumPercentage, the three statutory contribution
-        // defaults, and the three pay-adjustment defaults) are NumericTextBoxes, so there's
+        // Employee.DailyRate's own default. All eight of those money fields (DailyRate,
+        // MonthlyRate, the three statutory contribution defaults, and the three
+        // pay-adjustment defaults) are NumericTextBoxes, so there's
         // nothing left to validate here: that control refuses a non-number or a negative at
         // the keystroke, so the old TryParseMoneyField check -- parse, then warn on what
         // came back bad -- has no case left to catch, and MoneyValue below is just "what's
         // in the box, or 0 if it's empty".
+        //
+        // RestDayWorkPremiumPercentageBox and HolidayPremiumPercentageBox are the two
+        // NumericTextBoxes here that do NOT take that rule -- blank stays null for
+        // both, since null is a meaningful "inherit the company default" rather than
+        // an unset amount. See each property's own doc comment.
         //
         // Only the active Pay Type's rate box is read here -- DailyRateBox when
         // Daily is selected, MonthlyRateBox when Monthly is (see PayTypeRadio_CheckedChanged
@@ -330,8 +406,23 @@ public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
 
         // Not gated behind Pay Type -- always read regardless of which radio is checked,
         // since a Daily-rated employee can be called in on a Rest Day too (see
-        // Employee.RestDayWorkPremiumPercentage).
-        RestDayWorkPremiumPercentage = MoneyValue(RestDayWorkPremiumPercentageBox);
+        // Employee.RestDayWorkPremiumPercentage). Read straight off Value rather than
+        // through MoneyValue: that helper's blank-is-0 rule is exactly wrong for an
+        // override column -- see the property's own doc comment.
+        RestDayWorkPremiumPercentage = RestDayWorkPremiumPercentageBox.Value;
+
+        // Same reasoning as RestDayWorkPremiumPercentage above -- read regardless of
+        // whether QualifiesForPremiumPayCheck is currently checked, so a value typed in
+        // before the checkbox was unchecked survives the round trip instead of being
+        // silently discarded (same "hidden fields still save" rule this dialog follows
+        // everywhere else).
+        HolidayPremiumPercentage = HolidayPremiumPercentageBox.Value;
+
+        // Same reasoning as RestDayWorkPremiumPercentage/HolidayPremiumPercentage
+        // above -- null is itself the meaningful "no employee-level suggestion" state,
+        // not an unset amount, so it's read straight off Value rather than through
+        // MoneyValue's blank-is-0 rule.
+        DefaultWorkTimeHours = DefaultWorkTimeHoursBox.Value;
 
         DefaultSss = MoneyValue(DefaultSssBox);
         DefaultPhilHealth = MoneyValue(DefaultPhilHealthBox);

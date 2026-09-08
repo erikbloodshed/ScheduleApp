@@ -180,10 +180,12 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
         decimal defaultSss = 0m, decimal defaultPhilHealth = 0m, decimal defaultPagIbig = 0m,
         decimal defaultPremiumPay = 0m, decimal defaultAllowance = 0m, decimal defaultCashAdvance = 0m,
         EmployeeType employeeType = EmployeeType.Daily, decimal monthlyRate = 0m,
-        decimal restDayWorkPremiumPercentage = 0m,
+        decimal? restDayWorkPremiumPercentage = null,
         bool qualifiesForRestDayPay = false, bool qualifiesForPremiumPay = false,
         double? clockInBufferBeforeHours = null, double? clockInBufferAfterHours = null,
         double? clockOutBufferBeforeHours = null, double? clockOutBufferAfterHours = null,
+        decimal? holidayPremiumPercentage = null,
+        decimal? defaultWorkTimeHours = null, bool exemptFromUndertimeDeduction = false,
         CancellationToken cancellationToken = default)
     {
         if (await db.Employees.AnyAsync(e => e.Pin == pin, cancellationToken))
@@ -214,7 +216,10 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
             ClockInBufferBeforeHours = clockInBufferBeforeHours,
             ClockInBufferAfterHours = clockInBufferAfterHours,
             ClockOutBufferBeforeHours = clockOutBufferBeforeHours,
-            ClockOutBufferAfterHours = clockOutBufferAfterHours
+            ClockOutBufferAfterHours = clockOutBufferAfterHours,
+            HolidayPremiumPercentage = holidayPremiumPercentage,
+            DefaultWorkTimeHours = defaultWorkTimeHours,
+            ExemptFromUndertimeDeduction = exemptFromUndertimeDeduction
         };
         db.Employees.Add(employee);
 
@@ -251,10 +256,12 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
         decimal defaultSss = 0m, decimal defaultPhilHealth = 0m, decimal defaultPagIbig = 0m,
         decimal defaultPremiumPay = 0m, decimal defaultAllowance = 0m, decimal defaultCashAdvance = 0m,
         EmployeeType employeeType = EmployeeType.Daily, decimal monthlyRate = 0m,
-        decimal restDayWorkPremiumPercentage = 0m,
+        decimal? restDayWorkPremiumPercentage = null,
         bool qualifiesForRestDayPay = false, bool qualifiesForPremiumPay = false,
         double? clockInBufferBeforeHours = null, double? clockInBufferAfterHours = null,
         double? clockOutBufferBeforeHours = null, double? clockOutBufferAfterHours = null,
+        decimal? holidayPremiumPercentage = null,
+        decimal? defaultWorkTimeHours = null, bool exemptFromUndertimeDeduction = false,
         CancellationToken cancellationToken = default)
     {
         var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
@@ -287,6 +294,9 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
         employee.ClockInBufferAfterHours = clockInBufferAfterHours;
         employee.ClockOutBufferBeforeHours = clockOutBufferBeforeHours;
         employee.ClockOutBufferAfterHours = clockOutBufferAfterHours;
+        employee.HolidayPremiumPercentage = holidayPremiumPercentage;
+        employee.DefaultWorkTimeHours = defaultWorkTimeHours;
+        employee.ExemptFromUndertimeDeduction = exemptFromUndertimeDeduction;
 
         try
         {

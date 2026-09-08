@@ -192,7 +192,7 @@
             <Button Content="Add Segment" Command="{Binding AddRowCommand}" Padding="10,4" />
             <Button Content="Remove Empty" Command="{Binding RemoveEmptySegmentsCommand}" Padding="10,4" Margin="8,0,0,0" />
             <Button Content="Undo" Command="{Binding UndoCommand}" Padding="10,4" Margin="8,0,0,0" />
-            <TextBlock Text="Drag onto a slot to insert · double-click to add"
+            <TextBlock Text="Drag onto a slot to insert · double-click an empty slot to add, or a manual punch to edit"
                        Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="14,0,0,0" />
         </StackPanel>
 

@@ -79,6 +79,25 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
             : "(varies)";
     }
 
+    /// <summary>What WorkTimeBox should start showing for a brand-new (non-prefill)
+    /// entry -- unlike DescribeBufferDefault above, this isn't gray placeholder text
+    /// describing a genuine runtime resolution tier (WorkTimeHours has none; it's a
+    /// required, concrete value once a day is saved), it's the actual starting number
+    /// the box is set to, same as <paramref name="policyDefaultHours"/> always was
+    /// before Employee.DefaultWorkTimeHours existed. Single employee: that employee's
+    /// own resolved value (their own default, or the policy default if they don't have
+    /// one). Several employees: only if every one of them resolves to the same value --
+    /// otherwise falls back to the plain policy default, since there's no placeholder
+    /// convention here to fall back to the way DescribeBufferDefault's "(varies)" text
+    /// does, and WorkTimeBox must always hold a real, positive number for OK to accept
+    /// (see the WorkTimeBox validation in OkButton_Click).</summary>
+    private static double ResolveWorkTimeDefault(IReadOnlyList<Employee> employees, double policyDefaultHours)
+    {
+        double Resolve(Employee e) => (double?)e.DefaultWorkTimeHours ?? policyDefaultHours;
+        var first = Resolve(employees[0]);
+        return employees.All(e => Resolve(e) == first) ? first : policyDefaultHours;
+    }
+
     /// <summary>Backs the three tri-state ComboBoxes for the Overtime/Night Diff
     /// per-day override section -- SelectedIndex 0 always means "no override, use
     /// the employee-level default" (null), 1/2 mean the two explicit states.
@@ -386,7 +405,8 @@ public partial class ApplyScheduleDialog : Wpf.Ui.Controls.FluentWindow
         else
         {
             TypeCombo.SelectedItem = initialType ?? ScheduleType.Normal;
-            WorkTimeBox.Text = _defaultWorkTimeHours.ToString("0.##", CultureInfo.InvariantCulture);
+            WorkTimeBox.Text = ResolveWorkTimeDefault(employees, _defaultWorkTimeHours)
+                .ToString("0.##", CultureInfo.InvariantCulture);
             TimeInPicker.SelectedTime = new TimeOnly(5, 0);
 
             // Same starting values as TimeInPicker's own default above, and the

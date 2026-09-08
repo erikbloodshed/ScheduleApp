@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ScheduleApp.Data;
 
@@ -11,9 +12,11 @@ using ScheduleApp.Data;
 namespace ScheduleApp.Data.Migrations
 {
     [DbContext(typeof(ScheduleDbContext))]
-    partial class ScheduleDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908084521_AddEmployeeWorkTimeAndUndertimeExemption")]
+    partial class AddEmployeeWorkTimeAndUndertimeExemption
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

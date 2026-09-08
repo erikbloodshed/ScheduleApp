@@ -43,12 +43,14 @@ public class PayrollCalculatorShortPeriodTests
 
         // divisor = 15 - 1 = 14 (the shorter real period never inflates or
         // shrinks the nominal-15 assumption -- see nominalPeriodEnd's own
-        // comment in PayrollCalculator). No uncredited days, so Basic Pay is
-        // the flat semiMonthlyRate, same "fully attended period" shape the
-        // Aug 16-31 present-case test asserts, just with WorkDays(14) now
-        // exceeding the real 13-day span instead of falling short of it.
+        // comment in PayrollCalculator). No uncredited days, so basicPayDays
+        // stays exactly divisor (14) and Basic Pay is effectiveDailyRate * 14
+        // = the flat semiMonthlyRate -- same "fully attended period" shape
+        // the Aug 16-31 present-case test asserts, just with the label's day
+        // count (14) now exceeding the real 13-day span instead of falling
+        // short of it.
         Assert.Equal(15000.00m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (14D)", result.ComputedGrossPay[0].Label);
         Assert.Equal(14, result.WorkDays); // divisor(14) - uncreditedDays(0)
         Assert.Equal(0, result.UnscheduledDayCount);
     }
@@ -64,8 +66,9 @@ public class PayrollCalculatorShortPeriodTests
 
         var result = PayrollCalculator.Calculate(employee, Policy, summaries, [], Start, End);
 
+        // basicPayDays = divisor(14) - uncreditedDays(1) = 13.
         // effectiveDailyRate = 15,000/14 = 1,071.428571...; basicPay =
-        // 15,000 - 1,071.428571... = 13,928.571428... -> 13,928.57 (rounded
+        // 1,071.428571... * 13 = 13,928.571428... -> 13,928.57 (rounded
         // once, away-from-zero, same convention as every other Amount).
         // Same effectiveDailyRate a longer period would use for the same
         // divisor -- nothing about the 13-real-day span changes the rate a
@@ -73,7 +76,7 @@ public class PayrollCalculatorShortPeriodTests
         // policy point (already asserted for the Aug 31-absent direction;
         // this is the Feb-short-period side of the same claim).
         Assert.Equal(13928.57m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly, 1D deducted)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (13D)", result.ComputedGrossPay[0].Label);
         Assert.Equal(13, result.WorkDays); // divisor(14) - uncreditedDays(1)
         Assert.Equal(0, result.UnscheduledDayCount);
     }

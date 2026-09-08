@@ -40,10 +40,11 @@ public class PayrollCalculatorRestDayWorkedExampleTests
 
         var result = PayrollCalculator.Calculate(employee, Policy, summaries, [], Start, End);
 
-        // divisor = 15 - 2 = 13; effectiveDailyRate = 15,000/13 = 1,153.8462;
-        // uncreditedDays = 1 (Aug 7); basicPay = 15,000 - 1,153.8462 = 13,846.15.
+        // divisor = 15 - 2 = 13; uncreditedDays = 1 (Aug 7), so basicPayDays =
+        // 13 - 1 = 12; effectiveDailyRate = 15,000/13 = 1,153.8462; basicPay =
+        // 1,153.8462 * 12 = 13,846.15.
         Assert.Equal(13846.15m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly, 1D deducted)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (12D)", result.ComputedGrossPay[0].Label);
         Assert.Equal(12, result.WorkDays); // divisor(13) - uncreditedDays(1)
         Assert.Equal(0.00m, result.RestDayHours);
         Assert.Equal(0.00m, result.ComputedGrossPay[3].Amount); // Rest Day Pay, both unworked
@@ -113,17 +114,21 @@ public class PayrollCalculatorRestDayWorkedExampleTests
 
         var result = PayrollCalculator.Calculate(employee, Policy, summaries, [], Start, End);
 
-        // §7 item 3: nightDiffPay = hourlyRate * 2.00 * 0.10 = 144.2307... * 0.20 = 28.85
-        // (rounded) -- a fourth line, on top of Basic Pay/Rest Day Pay, that
-        // neither reduces nor is reduced by the 1,500.00 Rest Day Pay above.
+        // Night Diff is taken against the rate in force on the day, so on a Rest Day
+        // that's the 130% Rest Day rate, not the base hourly rate:
+        // 144.230769... * 1.30 * 2.00 * 0.10 = 37.50 exactly. (Was 28.85 -- the same
+        // sum off the base rate -- until the rest-day tier work; see
+        // PayrollCalculator's ndBaseRate. §7 item 3's 28.85 figure is superseded.)
+        // Still a separate line on top of Basic Pay/Rest Day Pay, neither reducing
+        // nor reduced by the 1,500.00 Rest Day Pay below.
         Assert.Equal(2.00m, result.NightDiffHours);
-        Assert.Equal(28.85m, result.ComputedGrossPay[2].Amount);
+        Assert.Equal(37.50m, result.ComputedGrossPay[2].Amount);
         Assert.Equal(8.00m, result.RestDayHours);
         Assert.Equal(1500.00m, result.ComputedGrossPay[3].Amount);
     }
 
     [Fact]
-    public void RestDayWithScheduledWindow_PremiumCoversFullHoursPastTheSchedule()
+    public void RestDayWorkedPastEightHours_PaysTheOvertimeTierOnTheExcess()
     {
         var employee = MonthlyEmployee(restDayWorkPremiumPercentage: 0.30m);
 
@@ -131,16 +136,31 @@ public class PayrollCalculatorRestDayWorkedExampleTests
             (new DateOnly(2026, 8, 2), s => MakeRestDay(s)),
             // Scheduled 8:00 AM-4:00 PM (8h); both a clock-in and a clock-out
             // were found (8:00 AM-7:00 PM), so this is a duty (§5's windowed
-            // mode) and the premium applies to the entire 11 hours actually
-            // worked, not just the scheduled 8.
+            // mode) and all 11 hours actually worked are priced, not just the
+            // scheduled 8 -- but they're priced in two tiers, not one.
             (new DateOnly(2026, 8, 9), s => MakeRestDay(s, workedHours: 11)),
             (new DateOnly(2026, 8, 7), MakeAbsent));
 
         var result = PayrollCalculator.Calculate(employee, Policy, summaries, [], Start, End);
 
-        // §11: at full precision, (15,000/13/8) * 11.00 * 1.30 = 2,062.50 exactly.
+        // PH labor law splits at the standard 8-hour workday. At full precision,
+        // hourlyRate = 15,000/13/8 = 144.230769...:
+        //   first 8h : 144.230769... * 1.30        * 8.00 = 1,500.00
+        //   next  3h : 144.230769... * 1.30 * 1.30 * 3.00 =   731.25
+        //                                                   ---------
+        //                                                    2,231.25
+        // The boundary is PayrollPolicy.StandardHoursPerDay, deliberately not the
+        // day's own 8-hour scheduled Span -- they coincide here, and a test that
+        // varied the schedule length would show they aren't the same rule.
+        //
+        // (Was a flat 2,062.50 -- all 11 hours at 1.30 -- before the rest-day tier
+        // work; §11's worked example predates the second tier existing.)
         Assert.Equal(11.00m, result.RestDayHours);
-        Assert.Equal(2062.50m, result.ComputedGrossPay[3].Amount);
+        Assert.Equal(2231.25m, result.ComputedGrossPay[3].Amount);
+
+        // The label carries the split so the two tiers can be multiplied back out
+        // by hand from what's printed on the payslip.
+        Assert.Equal("Rest Day Pay (8.00H + 3.00H OT)", result.ComputedGrossPay[3].Label);
     }
 
     [Fact]
@@ -162,11 +182,11 @@ public class PayrollCalculatorRestDayWorkedExampleTests
         // the divisor still assumes a nominal 15 days -- only the 2 Sundays
         // inside the first 15 of those 16 days count toward it -- but Aug 31,
         // being a real calendar day beyond that nominal window that was
-        // actually worked, now adds one effectiveDailyRate (15,000/13 =
-        // 1,153.846154) on top of the flat semiMonthlyRate: 15,000 +
-        // 1,153.846154 = 16,153.846154 -> 16,153.85.
+        // actually worked, adds one to basicPayDays: 13 - 0 + 1 = 14. Basic
+        // Pay is that count times effectiveDailyRate (15,000/13 =
+        // 1,153.846154): 1,153.846154 * 14 = 16,153.846154 -> 16,153.85.
         Assert.Equal(16153.85m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly, 1D excess)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (14D)", result.ComputedGrossPay[0].Label);
         Assert.Equal(14, result.WorkDays); // divisor(13) - uncreditedDays(0) + excessCreditedDays(1)
     }
 
@@ -185,14 +205,15 @@ public class PayrollCalculatorRestDayWorkedExampleTests
         var result = PayrollCalculator.Calculate(employee, Policy, summaries, [], start, end);
 
         // Confirmed policy: an excess day (beyond the nominal 15-day window)
-        // that's Absent instead of worked is neutral -- it simply doesn't
-        // earn the bonus the present-and-credited version of this test earns
-        // above, but it does NOT additionally deduct from the flat
-        // semiMonthlyRate the way an absence *within* the nominal window
-        // would. So this period, despite Aug 31 being Absent, still pays the
-        // same flat 15,000.00 a fully-attended nominal-15-day period would.
+        // that's Absent instead of worked is neutral -- it simply doesn't add
+        // to basicPayDays the way the present-and-credited version of this
+        // test does above, but it does NOT additionally subtract from it the
+        // way an absence *within* the nominal window would. So basicPayDays
+        // stays exactly divisor (13), and this period -- despite Aug 31 being
+        // Absent -- still pays the same flat 15,000.00 a fully-attended
+        // nominal-15-day period would.
         Assert.Equal(15000.00m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (13D)", result.ComputedGrossPay[0].Label);
         Assert.Equal(13, result.WorkDays); // divisor(13) - uncreditedDays(0) + excessCreditedDays(0)
     }
 
@@ -227,7 +248,7 @@ public class PayrollCalculatorRestDayWorkedExampleTests
         // its own bonus, not a further deduction. Nothing about the day also
         // being a listed Holiday feeds back into Basic Pay's own math.
         Assert.Equal(15000.00m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (13D)", result.ComputedGrossPay[0].Label);
 
         // Holiday Pay: Monthly + unworked (Absent, not a credited day) still
         // earns the flat day component (this file's sibling
@@ -262,13 +283,14 @@ public class PayrollCalculatorRestDayWorkedExampleTests
 
         var result = PayrollCalculator.Calculate(employee, Policy, summaries, [], start, end);
 
-        // effectiveDailyRate = 15,000/13 = 1,153.846154. basicPay = 15,000 -
-        // (2 * 1,153.846154) + (1 * 1,153.846154) = 15,000 - 1,153.846154 =
-        // 13,846.153846 -> 13,846.15. Both mechanisms -- the nominal-window
-        // deduction and the excess-window bonus -- apply independently in
-        // the same period and both show up in the label.
+        // basicPayDays = divisor(13) - uncreditedDays(2) + excessCreditedDays(1)
+        // = 12. effectiveDailyRate = 15,000/13 = 1,153.846154; basicPay =
+        // 1,153.846154 * 12 = 13,846.153846 -> 13,846.15. Both mechanisms --
+        // the nominal-window deduction and the excess-window bonus -- apply
+        // independently in the same period and both net into the one day
+        // count the label shows.
         Assert.Equal(13846.15m, result.ComputedGrossPay[0].Amount);
-        Assert.Equal("Basic Pay (Semi-Monthly, 2D deducted, 1D excess)", result.ComputedGrossPay[0].Label);
+        Assert.Equal("Basic Pay (12D)", result.ComputedGrossPay[0].Label);
         Assert.Equal(12, result.WorkDays); // divisor(13) - uncreditedDays(2) + excessCreditedDays(1)
     }
 }

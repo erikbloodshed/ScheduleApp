@@ -42,8 +42,18 @@
 
         <!-- The value half. Fixed width because every field using it holds a short
              number or time; the two genuinely long free-text fields (connection string,
-             company name) deliberately don't use this row shape at all. -->
-        <Style x:Key="FieldValueBoxStyle" TargetType="TextBox">
+             company name) deliberately don't use this row shape at all.
+
+             BasedOn is load-bearing, not decoration. Setting Style on a control REPLACES
+             the implicit theme style for its type rather than extending it, so without
+             this every box here silently dropped WPF-UI's Fluent TextBox template and
+             fell back to stock WPF chrome - a flat 1px rectangle sitting next to the
+             properly-themed company name box, TimeInputs and checkboxes on the same
+             screen. Same reason EmployeeDialog spells out Style="{StaticResource
+             {x:Type TextBox}}" on its NumericTextBoxes. Any style added here for a
+             themed control needs the same treatment. -->
+        <Style x:Key="FieldValueBoxStyle" TargetType="TextBox"
+               BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="DockPanel.Dock" Value="Right" />
             <Setter Property="Width" Value="120" />
         </Style>
@@ -58,6 +68,7 @@
              a tall monitor, a maximize button on a settings dialog isn't. -->
         <ui:TitleBar Grid.Row="0"
                 Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
+                ShowMinimize="False"
                 ShowMaximize="False"
                 CanMaximize="False" />
 
@@ -268,14 +279,58 @@
                             <TextBox x:Name="CompanyNameBox" Margin="0,0,0,16"
                                      ToolTip="Printed centered at the top of every payslip, above the PAYSLIP heading. Required." />
 
-                            <!-- Was buried at the bottom of the Attendance policy block,
-                                 which put the one PayrollPolicy field on this dialog in
-                                 among fourteen AttendancePolicy ones. Purely a visual
-                                 move: SaveButton_Click still reads this box by name, so
-                                 ChangedPayrollPolicy is wired exactly as it was. -->
-                            <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Net pay" />
+                            <!-- Premium rates were appsettings.json-only until the rest-day
+                                 tier work added two more of them and made that hard to
+                                 justify - a rate nobody can see is a rate nobody checks.
+                                 Every PayrollPolicy value now has a field here. Each field
+                                 below is a PercentTextBox, not a plain TextBox - it shows
+                                 and edits the premium as a whole percent (30%), while the
+                                 PayrollPolicy property it's bound to still holds the same
+                                 decimal fraction (0.30) it always did; see that control's
+                                 own doc comment for the x100/div-100 scaling this involves. -->
+                            <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Premium rates" />
                             <TextBlock Style="{StaticResource SectionCaptionTextStyle}"
-                                       Text="The one Payroll Policy value editable here -- see PayrollPolicy's own doc comment for why the rest (standard hours, overtime and night-diff rates) aren't." />
+                                       Text="Company-wide, applied to every employee -- 30% means a rest day pays 130%. Individual days and employees can override some of these; see PAYROLL-POLICY.md for which, and for what each one is worth under Philippine labor law." />
+
+                            <DockPanel Style="{StaticResource FieldRowStyle}">
+                                <TextBox x:Name="StandardHoursPerDayBox" Style="{StaticResource FieldValueBoxStyle}"
+                                         ToolTip="The length of a standard workday, in hours. Divides into the daily rate to produce the hourly rate that every premium below is computed from, and is also the boundary where rest day work crosses from the first tier to the overtime tier. Must be greater than 0. Default 8." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Standard hours per day" />
+                            </DockPanel>
+
+                            <DockPanel Style="{StaticResource FieldRowStyle}">
+                                <controls:PercentTextBox x:Name="OvertimeRatePercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
+                                         ToolTip="Added on top of straight time for overtime hours on an ordinary workday -- 25% means overtime pays 125%. Overridable per day from the Set/Edit Schedule dialog, and skipped entirely for a day whose apply-rate-% toggle is off. Default 25%." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Overtime premium" />
+                            </DockPanel>
+
+                            <DockPanel Style="{StaticResource FieldRowStyle}">
+                                <controls:PercentTextBox x:Name="NightDiffRatePercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
+                                         ToolTip="Paid for each hour falling inside the night differential window set on the Attendance tab -- 10% means those hours earn an extra 10%. Taken against whatever rate is in force that day, so night hours on a rest day earn 10% of the rest day rate, not of straight time. Overridable per day. Default 10%." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Night differential premium" />
+                            </DockPanel>
+
+                            <DockPanel Style="{StaticResource FieldRowStyle}">
+                                <controls:PercentTextBox x:Name="RestDayPremiumPercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
+                                         ToolTip="Added on top of straight time for the first 8 hours of a rest day that is actually worked -- 30% means those hours pay 130%, the Philippine statutory rate. Overridable per employee from the Add/Edit Employee dialog, where leaving the box blank inherits this value. Default 30%." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Rest day premium" />
+                            </DockPanel>
+
+                            <DockPanel Style="{StaticResource FieldRowStyle}">
+                                <controls:PercentTextBox x:Name="RestDayOvertimeRatePercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
+                                         ToolTip="Added on top of the REST DAY rate for hours beyond the standard workday -- it compounds rather than adding to the rest day premium, so 30% on top of a 30% rest day premium pays 130% x 130% = 169%, not 160%. No per-employee or per-day override: a rest day never produces ordinary overtime hours for one to attach to. Default 30%." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Rest day overtime premium" />
+                            </DockPanel>
+
+                            <!-- Last row before the next section header, so it carries the
+                                 0,0,0,16 separator the Attendance tab uses in the same spot. -->
+                            <DockPanel Style="{StaticResource FieldRowStyle}" Margin="0,0,0,16">
+                                <controls:PercentTextBox x:Name="HolidayPremiumPercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
+                                         ToolTip="Added on top of Basic Pay's own 100% for a worked holiday's day component -- 100% means one full extra day, 200% total, the Philippine statutory rate for a worked regular holiday. Also what a Monthly-rated employee earns for a listed holiday they didn't work at all. Overridable per employee from the Add/Edit Employee dialog, where leaving the box blank inherits this value. Default 100%." />
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Holiday premium" />
+                            </DockPanel>
+
+                            <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Net pay" />
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="NetPayRoundingMultipleBox" Style="{StaticResource FieldValueBoxStyle}"

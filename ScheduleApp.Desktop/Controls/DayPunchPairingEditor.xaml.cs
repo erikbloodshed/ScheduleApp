@@ -55,23 +55,37 @@ public partial class DayPunchPairingEditor : UserControl
 
         var slot = ResolveSlot(sender);
 
-        // Double-clicking an empty slot is the same as picking "Add Manual Punch…"
-        // from its menu -- the placeholder already reads as an invitation to fill it
-        // in, so the obvious gesture should work. Only on an empty slot: a
-        // double-click on an occupied one would otherwise be an easy way to open an
-        // edit dialog for a device punch, whose time can't be edited anyway.
+        // Double-click mirrors the two enabled items on this slot's own right-click
+        // menu (see Slot_MouseRightButtonUp): empty -> "Add Manual Punch…", occupied
+        // by a manual entry -> "Edit Time…". A device punch's time can't be edited
+        // (same rule the menu enforces with its disabled note), so double-clicking
+        // one is left alone -- it just falls through to the drag-candidate tracking
+        // below, same as it always has.
         //
         // Handled here rather than via MouseDoubleClick because that event is
         // declared on Control, and a Border is a Decorator. Dispatched rather than
         // awaited inline so this handler stays synchronous: it's also the start of
         // the drag gesture, and an async void in that path would let a drag begin
         // against a slot the dialog is concurrently filling.
-        if (e.ClickCount == 2 && ViewModel is not null && slot is { } target && target.Row[target.Slot] is null)
+        if (e.ClickCount == 2 && ViewModel is not null && slot is { } target)
         {
-            _dragCandidate = null;
-            e.Handled = true;
-            _ = Dispatcher.InvokeAsync(() => ViewModel.AddManualPunchAsync(target.Row, target.Slot));
-            return;
+            var cell = target.Row[target.Slot];
+
+            if (cell is null)
+            {
+                _dragCandidate = null;
+                e.Handled = true;
+                _ = Dispatcher.InvokeAsync(() => ViewModel.AddManualPunchAsync(target.Row, target.Slot));
+                return;
+            }
+
+            if (cell.IsManual)
+            {
+                _dragCandidate = null;
+                e.Handled = true;
+                _ = Dispatcher.InvokeAsync(() => ViewModel.EditManualPunchAsync(cell));
+                return;
+            }
         }
 
         // Remember what's under the pointer, but don't start a drag yet -- a plain

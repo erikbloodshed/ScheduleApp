@@ -115,4 +115,16 @@ public class AttendancePolicy
     /// this only affects what AttendanceExcelExporter writes.
     /// </summary>
     public bool UseExcelFormula { get; set; } = true;
+
+    /// <summary>
+    /// A complete copy, for a caller changing some fields and carrying the rest
+    /// through untouched -- see PayrollPolicy.Clone's own doc comment for the full
+    /// reasoning; this is the same helper for the same reason, on the class with
+    /// the longer hand-copied field list of the two.
+    ///
+    /// MemberwiseClone is a full copy here rather than a shallow one that aliases
+    /// something, since every property on this class is a value type (double, bool,
+    /// TimeOnly). Keep it that way, or this needs revisiting.
+    /// </summary>
+    public AttendancePolicy Clone() => (AttendancePolicy)MemberwiseClone();
 }

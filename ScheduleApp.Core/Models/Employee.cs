@@ -168,23 +168,82 @@ public class Employee
     public double? ClockOutBufferAfterHours { get; set; }
 
     /// <summary>
-    /// The premium percentage paid on top of straight pay when this employee
-    /// actually works their Rest Day (ScheduleType.RestDay with a completed
-    /// punch/schedule, as opposed to an unworked Rest Day, which pays nothing
-    /// extra) -- read by ScheduleApp.Payroll.PayrollCalculator the same way
-    /// PayrollPolicy.OvertimeRatePercentage/NightDiffRatePercentage are: this
-    /// field holds only the *premium* (e.g. 0.30 for a 30% Rest Day premium),
-    /// never the full multiplier, with PayrollCalculator adding the "+1" at the
-    /// point it applies it. Applies to both EmployeeType values -- unlike
-    /// DailyRate/MonthlyRate above, Rest Day work premium isn't gated behind
-    /// Pay Type, since a Daily-rated employee can just as legitimately be asked
-    /// to work a Rest Day as a Monthly-rated one. Defaults to 0, same
-    /// "safe, never-blocking" spirit as every other rate field on this class --
-    /// a Rest Day worked with this still at 0 just pays straight time with no
-    /// premium, rather than erroring, until someone sets a value via the
-    /// Add/Edit Employee dialog.
+    /// This employee's own default shift length, in hours -- pre-filled into
+    /// ApplyScheduleDialog's Work Time field (ScheduleEntry.WorkTimeHours) for a
+    /// brand-new entry, in place of AttendanceSettings.DefaultWorkTimeHours, whenever
+    /// every employee selected for that entry shares the same resolved value. Unlike
+    /// ClockInBufferBeforeHours/etc. above, this is a one-time starting suggestion,
+    /// not a genuine three-tier runtime resolution -- ScheduleEntry.WorkTimeHours is
+    /// a required, concrete value once a day is saved (TimeOut is derived from
+    /// TimeIn + WorkTimeHours), so there's no per-day "blank, inheriting" state for
+    /// this to sit above the way the buffers do; it only ever shapes what a person
+    /// sees before they've typed anything of their own.
+    ///
+    /// Null (the default) means "no employee-level suggestion, start from
+    /// AttendanceSettings.DefaultWorkTimeHours instead," same nullable-means-inherit
+    /// convention as the buffer fields. Meant for an employee whose normal day is
+    /// genuinely shorter (or longer) than the company's own default -- e.g. paired
+    /// with <see cref="ExemptFromUndertimeDeduction"/> below for someone whose pay
+    /// doesn't depend on reaching it, so scheduling them doesn't mean re-typing a
+    /// shorter number by hand every time.
     /// </summary>
-    public decimal RestDayWorkPremiumPercentage { get; set; }
+    public decimal? DefaultWorkTimeHours { get; set; }
+
+    /// <summary>
+    /// When true, this employee's Undertime deduction (hourlyRate * shortfall hours,
+    /// see ScheduleApp.Payroll.PayrollCalculator) never reduces Total Deductions/Net
+    /// Pay, no matter how far short of the day's scheduled Work Time they ran --
+    /// they're always paid their full DailyRate/effectiveDailyRate for a credited
+    /// day. The Undertime figure itself still shows on the Payroll Summary/payslip
+    /// for reference (same as a manually "disregarded" period -- see
+    /// PayrollLineItem.Waived), it's just never subtracted, and PayrollSummaryView's
+    /// own per-period Exclude/Include toggle is hidden for this employee's Undertime
+    /// line rather than offered as a no-op (see PayrollLineItem.SupportsWaiver).
+    ///
+    /// Hours worked *beyond* the day's scheduled Work Time are unaffected -- still
+    /// Overtime, exactly as for any other employee (see OvertimeHours in
+    /// PayrollCalculator.Calculate, which already prices off however many hours a
+    /// day was actually scheduled for, independent of this flag). This is for the
+    /// employees whose day doesn't need to be *completed* to earn a full day's pay,
+    /// only exceeded to earn extra -- see <see cref="DefaultWorkTimeHours"/> above
+    /// for giving such an employee a shorter starting shift length to schedule
+    /// against. Defaults to false: an employee has to be explicitly opted into this,
+    /// the same opt-in-benefit default QualifiesForRestDayPay/QualifiesForPremiumPay
+    /// above use, rather than every employee silently losing their Undertime
+    /// deduction the moment this field existed.
+    /// </summary>
+    public bool ExemptFromUndertimeDeduction { get; set; }
+
+    /// <summary>
+    /// This employee's own override of the premium paid on top of straight pay for
+    /// the first PayrollPolicy.StandardHoursPerDay hours of an actually-worked Rest
+    /// Day (ScheduleType.RestDay with a completed punch/schedule, as opposed to an
+    /// unworked Rest Day, which pays nothing extra) -- read by
+    /// ScheduleApp.Payroll.PayrollCalculator the same way
+    /// PayrollPolicy.OvertimeRatePercentage/NightDiffRatePercentage are: this field
+    /// holds only the *premium* (e.g. 0.30 for a 30% Rest Day premium), never the
+    /// full multiplier, with PayrollCalculator adding the "+1" at the point it
+    /// applies it. Hours beyond that eighth are priced separately, and this premium
+    /// compounds into that figure too -- see
+    /// PayrollPolicy.RestDayOvertimeRatePercentage.
+    ///
+    /// Null -- the normal state -- means "inherit PayrollPolicy.RestDayPremiumPercentage"
+    /// (0.30 by default, PH labor law's 130% rest day rate), the same
+    /// nullable-means-inherit shape ClockInBufferBeforeHours and friends above
+    /// already use for the buffer defaults, and the same tier
+    /// ScheduleEntry.OvertimeRatePercentageOverride sits at one layer further down.
+    /// It was a non-nullable decimal defaulting to 0 before the rest-day tier work:
+    /// that meant a Rest Day worked by an employee nobody had configured silently
+    /// paid straight time, which is why the migration that made this nullable also
+    /// rewrote every stored 0 to null (see AddRestDayPremiumOverride) -- a 0 there
+    /// meant "never configured", not "deliberately zero".
+    ///
+    /// Applies to both EmployeeType values -- unlike DailyRate/MonthlyRate above,
+    /// Rest Day work premium isn't gated behind Pay Type, since a Daily-rated
+    /// employee can just as legitimately be asked to work a Rest Day as a
+    /// Monthly-rated one.
+    /// </summary>
+    public decimal? RestDayWorkPremiumPercentage { get; set; }
 
     /// <summary>
     /// Whether this employee can ever earn Rest Day Pay -- i.e. whether
@@ -245,6 +304,31 @@ public class Employee
 
     /// <summary>Same purpose and read path as DefaultSss above, for Pag-IBIG.</summary>
     public decimal DefaultPagIbig { get; set; }
+
+    /// <summary>
+    /// This employee's own override of the premium a worked Holiday's day component pays
+    /// on top of Basic Pay's own 100% -- read by ScheduleApp.Payroll.PayrollCalculator's
+    /// CalculateHolidayPay the same way PayrollPolicy.OvertimeRatePercentage/
+    /// NightDiffRatePercentage are: this field holds only the *premium* (e.g. 1.00 for one
+    /// full extra day, 200% total when worked, PH labor law's worked-regular-holiday
+    /// rate), not the full multiplier. Same shape applies to the Monthly-rated-only
+    /// "unworked but still paid" case -- both add dayRate * this premium, not just dayRate.
+    ///
+    /// Null -- the normal state -- means "inherit PayrollPolicy.HolidayPremiumPercentage"
+    /// (1.00 by default), the same nullable-means-inherit shape RestDayWorkPremiumPercentage
+    /// above already uses. Unlike that field's own history, this one was never a
+    /// non-nullable 0-defaulting column to begin with -- it's new alongside the policy
+    /// default it inherits from, so there's no pre-existing "0 means never configured"
+    /// data to migrate around.
+    ///
+    /// Only takes effect while QualifiesForPremiumPay below is true -- same "eligibility
+    /// flag gates whether the rate matters at all" relationship QualifiesForRestDayPay has
+    /// with RestDayWorkPremiumPercentage. Applies to both EmployeeType values, same
+    /// reasoning as that field too: a Daily-rated employee's worked holiday is priced off
+    /// DailyRate, a Monthly-rated one's off effectiveDailyRate, but the premium multiplies
+    /// either the same way.
+    /// </summary>
+    public decimal? HolidayPremiumPercentage { get; set; }
 
     /// <summary>
     /// Whether this employee can ever be paid the Premium Pay adjustment line below --

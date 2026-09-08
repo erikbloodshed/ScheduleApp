@@ -76,11 +76,19 @@ internal static class PayrollCalculatorTestFixtures
     /// line conditional on this flag, defaulting false for a plain `new Employee`; left
     /// unset here, those same asserts would now throw (index 3 out of range on a 3-line
     /// list) instead of checking the figure they were written to check. True keeps every
-    /// existing caller's intent intact; nothing in either test file needs it false.</summary>
+    /// existing caller's intent intact; nothing in either test file needs it false.
+    ///
+    /// restDayWorkPremiumPercentage defaults to null, not 0m -- null is the override
+    /// column's "inherit PayrollPolicy.RestDayPremiumPercentage" state (see
+    /// Employee.RestDayWorkPremiumPercentage), i.e. the state every real employee is
+    /// in unless someone deliberately typed a different figure for them, so it's what
+    /// a fixture that doesn't care about the premium should be exercising. Passing an
+    /// explicit 0m is still possible and now means something genuinely different:
+    /// "this employee is deliberately paid straight time for rest day work."</summary>
     public static Employee MonthlyEmployee(
         int pin = 1001,
         decimal monthlyRate = 30_000.00m,
-        decimal restDayWorkPremiumPercentage = 0m) => new()
+        decimal? restDayWorkPremiumPercentage = null) => new()
     {
         Pin = pin,
         LastName = "Cruz",

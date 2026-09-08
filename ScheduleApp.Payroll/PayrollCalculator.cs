@@ -51,9 +51,12 @@ public static class PayrollCalculator
     /// this employee/period's Undertime (see IPayrollUndertimeWaiverRepository) --
     /// the Undertime line is still computed and shown exactly the same either way
     /// (see PayrollLineItem.Waived's own doc comment), this only flows through to
-    /// that flag so PayrollResult.TotalDeductions knows whether to count it.
-    /// Defaults to false so every existing caller/test that predates waiving
-    /// doesn't need to change.</param>
+    /// that flag so PayrollResult.TotalDeductions knows whether to count it. ORed
+    /// with employee.ExemptFromUndertimeDeduction internally (see that field's own
+    /// doc comment) rather than replaced by it -- a person can still waive one
+    /// period's Undertime by hand for an otherwise-ordinary employee regardless of
+    /// this parameter. Defaults to false so every existing caller/test that
+    /// predates waiving doesn't need to change.</param>
     /// <param name="holidayDates">Every date on file in the Holidays table (see
     /// Holiday/IHolidayRepository) -- not pre-filtered to this period, the same
     /// "hand the whole thing through, this method does its own filtering"
@@ -161,8 +164,24 @@ public static class PayrollCalculator
         // does, so nothing downstream of this needs its own Monthly-specific
         // code path (confirmed assumption 7). Guarded against divisor <= 0
         // (every day in the period somehow marked Rest Day) the same way
-        // StandardHoursPerDay <= 0 is guarded above.
-        var (hourlyRate, semiMonthlyRate, effectiveDailyRate) = ResolveRates(employee, policy, divisor);
+        // StandardHoursPerDay <= 0 is guarded above. SemiMonthlyRate itself
+        // (the tuple's middle element) is discarded here -- Basic Pay is now
+        // priced entirely off effectiveDailyRate * basicPayDays below, so
+        // nothing in this method reads the flat semi-monthly figure directly
+        // any more (CalculateHolidayPay still resolves and uses its own copy
+        // independently -- see that method's own ResolveRates call).
+        var (hourlyRate, _, effectiveDailyRate) = ResolveRates(employee, policy, divisor);
+
+        // The Rest Day rate for the first StandardHoursPerDay hours of a worked Rest
+        // Day -- PH labor law's 130% at the defaults. Resolved once here rather than
+        // per day because, unlike Overtime/Night Diff, there's no per-day override
+        // tier for it (see PayrollPolicy.RestDayOvertimeRatePercentage's own doc
+        // comment for why): the only two tiers are this employee's own override and
+        // the company default it falls back to. Also used as the base the day's Night
+        // Diff premium is taken against -- see the Night Diff block in the per-day
+        // loop below.
+        decimal restDayPremium = employee.RestDayWorkPremiumPercentage ?? policy.RestDayPremiumPercentage;
+        decimal restDayRate = hourlyRate * (1 + restDayPremium);
 
         decimal basicPay = 0m;
         decimal overtimePay = 0m;
@@ -175,6 +194,13 @@ public static class PayrollCalculator
         decimal overtimeHours = 0m;
         decimal nightDiffHours = 0m;
         decimal restDayHours = 0m;
+
+        // The subset of restDayHours that fell beyond StandardHoursPerDay on their
+        // own day and so priced at the Rest Day overtime tier. Local rather than a
+        // PayrollResult field -- nothing outside this method needs the split; it
+        // only feeds the "(8.00H + 3.00H OT)" half of the Rest Day Pay line's label
+        // below, so that a payslip showing two tiers says which hours were which.
+        decimal restDayOvertimeHours = 0m;
 
         // Overtime/Night Diff pay used to be "sum every day's hours, multiply
         // once at the end by a single period-wide rate" -- valid only because
@@ -325,10 +351,23 @@ public static class PayrollCalculator
                     overtimePay += pay;
                 }
 
+                // Night Diff is a percentage of the rate actually in force that day,
+                // not always of the plain hourly rate -- so night hours worked on a
+                // Rest Day are taken against the Rest Day rate (130% at the
+                // defaults), matching how PH payroll computes night shift
+                // differential off the applicable day rate rather than off base.
+                //
+                // Deliberately the *first-eight-hours* Rest Day rate, never the
+                // higher overtime tier, even on a day that ran past eight hours:
+                // AttendanceSummary carries only a total NightDiffHours with no
+                // indication of which of those hours fell past the eighth, so there
+                // is nothing here to allocate against. One flat rule that never
+                // over-pays beats a guess.
                 if (dayNightDiffHours > 0)
                 {
                     decimal ndRatePercentage = day.NightDiffRatePercentageOverride ?? policy.NightDiffRatePercentage;
-                    nightDiffPay += hourlyRate * dayNightDiffHours * ndRatePercentage;
+                    decimal ndBaseRate = day.ScheduleType == ScheduleType.RestDay ? restDayRate : hourlyRate;
+                    nightDiffPay += ndBaseRate * dayNightDiffHours * ndRatePercentage;
                 }
 
                 // Rest Day Pay: only when the day resolves to an unambiguous
@@ -341,33 +380,68 @@ public static class PayrollCalculator
                 // premium in one multiplication, the same shape Overtime
                 // already uses, since unlike Overtime/Night Diff hours, Rest
                 // Day hours aren't otherwise covered by Basic Pay at all (the
-                // day isn't a scheduled workday to begin with). At the default
-                // 0% RestDayWorkPremiumPercentage this still pays straight
-                // time -- only the premium portion is zero.
+                // day isn't a scheduled workday to begin with).
+                //
+                // Two tiers, per PH labor law: the first StandardHoursPerDay
+                // hours at the Rest Day rate (130% at the defaults), everything
+                // past that at a further RestDayOvertimeRatePercentage on top of
+                // *that* rate -- 1.30 * 1.30 = 1.69, not 1.60. The boundary is
+                // the policy's standard workday, deliberately not the day's own
+                // scheduled Span: the law counts from eight hours regardless of
+                // how long the Rest Day duty happened to be scheduled for.
+                //
+                // Splitting per row rather than per day-group is safe only
+                // because a Rest Day always produces exactly one AttendanceSummary
+                // (RestDayShiftCalculationStrategy returns a single-item
+                // Summaries), and never shares a date with another ScheduleType
+                // -- if that ever stops holding, this cap has to move up to the
+                // dayGroup loop or a long split shift would get two separate
+                // eight-hour allowances.
+                //
+                // No guard for StandardHoursPerDay <= 0 (a misconfigured policy):
+                // ResolveRates already lands hourlyRate on 0 in that case, so
+                // every branch here sums to 0.00 either way.
                 if (dayRestDayHours > 0)
                 {
                     restDayHours += dayRestDayHours;
-                    restDayPay += hourlyRate * dayRestDayHours * (1 + employee.RestDayWorkPremiumPercentage);
+
+                    decimal firstEight = Math.Min(dayRestDayHours, policy.StandardHoursPerDay);
+                    decimal beyondEight = dayRestDayHours - firstEight;
+
+                    restDayOvertimeHours += beyondEight;
+                    restDayPay += restDayRate * firstEight;
+                    restDayPay += restDayRate * (1 + policy.RestDayOvertimeRatePercentage) * beyondEight;
                 }
             }
         }
 
         // Monthly-rated Basic Pay/WorkDays: computed once here, after the
-        // loop, rather than accumulated per day above -- SemiMonthlyRate paid
-        // in full by default, minus effectiveDailyRate for each uncredited
-        // day within the nominal window, plus effectiveDailyRate for each
-        // credited day beyond it (see the per-day loop's comment above for
-        // why the excess side is additive rather than folded into the same
-        // deduction). WorkDays here keeps the same "days credited as paid"
-        // meaning Daily-rated's basicPayDays already carries above -- divisor
-        // minus however many of the nominal 15 weren't credited, plus
-        // however many excess days beyond it were.
+        // loop, rather than accumulated per day above (the loop only tallies
+        // uncreditedDays/excessCreditedDays for Monthly -- see its own
+        // comment). basicPayDays is how many of the period's (nominal,
+        // prorated) days this employee is being paid for: the divisor's full
+        // nominal-15 count, minus a day for each uncredited day within it,
+        // plus a day for each credited day beyond it (see the per-day loop's
+        // comment for why the excess side is additive rather than folded
+        // into the same subtraction).
+        //
+        // Basic Pay itself is then just that day count times the day rate --
+        // effectiveDailyRate * basicPayDays, the same "rate times days
+        // present" shape Daily-rated's own DailyRate * basicPayDays already
+        // is -- rather than the previous "SemiMonthlyRate, adjusted by a
+        // delta" framing (semiMonthlyRate - deduction + addition). The two
+        // are algebraically identical for every period, not just
+        // coincidentally equal in the cases this file's tests happen to
+        // cover: effectiveDailyRate * divisor == semiMonthlyRate by
+        // construction (see ResolveRates), so distributing that
+        // multiplication across (divisor - uncreditedDays + excessCreditedDays)
+        // reproduces the old subtract/add formula term for term. No existing
+        // period's Basic Pay changes by a centavo from this -- only the
+        // shape of the arithmetic and the label below do.
         if (employee.EmployeeType == EmployeeType.Monthly)
         {
-            basicPay = semiMonthlyRate
-                - (effectiveDailyRate * uncreditedDays)
-                + (effectiveDailyRate * excessCreditedDays);
             basicPayDays = divisor - uncreditedDays + excessCreditedDays;
+            basicPay = effectiveDailyRate * basicPayDays;
         }
 
         decimal basicPayAmount = Round(basicPay);
@@ -375,6 +449,16 @@ public static class PayrollCalculator
         decimal nightDiffPayAmount = Round(nightDiffPay);
         decimal restDayPayAmount = Round(restDayPay);
         decimal undertimePayAmount = Round(hourlyRate * undertimeHours);
+
+        // OR, not a replacement for undertimeWaived: a person can still waive one
+        // period's Undertime by hand for an ordinary employee (see
+        // IPayrollUndertimeWaiverRepository) regardless of this flag, and an exempt
+        // employee's deduction stays excluded even on a period nobody has touched
+        // that per-period toggle for -- see Employee.ExemptFromUndertimeDeduction's
+        // own doc comment. Undertime hours/Amount themselves are computed identically
+        // either way, same as a manual waiver -- only whether the total counts it
+        // changes.
+        bool undertimeExcluded = undertimeWaived || employee.ExemptFromUndertimeDeduction;
 
         // Holiday Pay (Holiday Pay plan, Phase 2): delegates to
         // CalculateHolidayPay rather than folding its own day loop in here --
@@ -422,39 +506,24 @@ public static class PayrollCalculator
         // -- so there's nothing to derive here; the rate is just hourlyRate,
         // hours or no hours.
 
-        // Basic Pay line label: Monthly-rated's Basic Pay isn't built
-        // additively per day the way Daily-rated's "(XD)" count is, so
-        // reusing that count would read oddly -- shows "Semi-Monthly"
-        // instead, with the uncredited-day and excess-day counts each folded
-        // in only when something actually happened this period (either or
-        // both can apply at once, e.g. a 16-real-day period with both an
-        // absence in the nominal window and a credited excess day). Flagged
-        // as a first proposal, not final -- easy to revisit once it's next
-        // to the other lines in the UI (Phase 4).
-        string basicPayLabel;
-        if (employee.EmployeeType == EmployeeType.Monthly)
-        {
-            var labelParts = new List<string>();
-            if (uncreditedDays > 0) labelParts.Add($"{uncreditedDays}D deducted");
-            if (excessCreditedDays > 0) labelParts.Add($"{excessCreditedDays}D excess");
-
-            basicPayLabel = labelParts.Count > 0
-                ? $"Basic Pay (Semi-Monthly, {string.Join(", ", labelParts)})"
-                : "Basic Pay (Semi-Monthly)";
-        }
-        else
-        {
-            basicPayLabel = $"Basic Pay ({basicPayDays}D)";
-        }
+        // Basic Pay line label: the same "(ND)" shape for both employee
+        // types now, matching Basic Pay's own "rate times days present"
+        // formula above. Used to read "Basic Pay (Semi-Monthly[, XD
+        // deducted][, YD excess])" for Monthly-rated instead -- spelling out
+        // the old subtract/add mechanics rather than just stating the day
+        // count they netted out to. basicPayDays already carries that same
+        // net count for Monthly (computed just above), so there's nothing
+        // Monthly-specific left to do here.
+        string basicPayLabel = $"Basic Pay ({basicPayDays}D)";
 
         var computedGrossPay = new List<PayrollLineItem>
         {
             // "0.00" hours formatting matches AttendanceSummaryRow.FormatHours'
             // own convention (same reasoning as the Undertime line below); day
-            // count has no decimal since BasicPayForDay only ever credits a day
-            // as a whole one, never a fraction -- true of Daily-rated's "(XD)"
-            // label; Monthly-rated's label above is a different shape entirely
-            // (see basicPayLabel). The "x <rate>" suffix on each line -- Basic
+            // count has no decimal since a day is only ever credited as a
+            // whole one, never a fraction -- true of both employee types'
+            // "(XD)" label now (see basicPayLabel above). The "x <rate>" suffix
+            // on each line -- Basic
             // Pay's own flat DailyRate, Overtime/Night Diff's derived effective
             // rate above -- is what actually multiplies out to Amount, so a
             // Payroll Summary card or printed payslip can be hand-verified line
@@ -480,7 +549,17 @@ public static class PayrollCalculator
         // ineligible employee is credited nothing.
         if (employee.QualifiesForRestDayPay)
         {
-            computedGrossPay.Add(new() { Label = $"Rest Day Pay ({restDayHours:0.00}H)", Amount = restDayPayAmount });
+            // Two hours figures rather than one whenever a Rest Day ran past the
+            // standard workday, since the two tiers price differently and a single
+            // combined "11.00H" next to one peso amount can't be multiplied back out
+            // by hand -- the same reasoning behind the "x <rate>" suffixes above.
+            // Still one line, not two: several callers/tests read the Rest Day Pay
+            // line positionally as ComputedGrossPay[3].
+            string restDayLabel = restDayOvertimeHours > 0
+                ? $"Rest Day Pay ({restDayHours - restDayOvertimeHours:0.00}H + {restDayOvertimeHours:0.00}H OT)"
+                : $"Rest Day Pay ({restDayHours:0.00}H)";
+
+            computedGrossPay.Add(new() { Label = restDayLabel, Amount = restDayPayAmount });
         }
 
         var computedDeductions = new List<PayrollLineItem>
@@ -505,10 +584,16 @@ public static class PayrollCalculator
                 // "0.00##" (up to 4 dp, trimmed) formatting as those -- see the comment
                 // above overtimeRate/nightDiffRate for why 2 dp isn't enough here.
                 Label = $"Undertime ({undertimeHours:0.00}H)" +
-                        (undertimeWaived ? ", Excluded" : string.Empty),
+                        (undertimeExcluded ? ", Excluded" : string.Empty),
                 Amount = undertimePayAmount,
-                Waived = undertimeWaived,
-                SupportsWaiver = true,
+                Waived = undertimeExcluded,
+
+                // False for an exempt employee: the per-period toggle would be a
+                // no-op for them (Waived above is already permanently true
+                // regardless of what it's set to -- see undertimeExcluded), so it's
+                // hidden entirely rather than offered as a button that does nothing
+                // when clicked. True (the toggle works normally) for everyone else.
+                SupportsWaiver = !employee.ExemptFromUndertimeDeduction,
             },
         };
 
@@ -636,13 +721,14 @@ public static class PayrollCalculator
     /// needs it.
     ///
     /// No Regular-vs-Special distinction (see Holiday's own doc comment) -- every
-    /// listed date is treated identically, at a flat "one extra day's pay" premium
-    /// (dayRate once more, not a configurable percentage the way
-    /// Employee.RestDayWorkPremiumPercentage is for Rest Day Pay): PH labor law's
-    /// worked-regular-holiday rate is 200% of the daily wage, i.e. Basic Pay's own
-    /// 100% plus exactly one more 100% here, so this simplification lines up with
-    /// the one case this feature currently models even though it isn't
-    /// parameterized to say so explicitly.
+    /// listed date is treated identically, at dayRate times
+    /// PayrollPolicy.HolidayPremiumPercentage/Employee.HolidayPremiumPercentage (same
+    /// employee-override-then-policy-default cascade RestDayPremiumPercentage/
+    /// RestDayWorkPremiumPercentage use for Rest Day Pay). Default 1.00 -- one full
+    /// extra day, PH labor law's worked-regular-holiday rate of 200% of the daily
+    /// wage, i.e. Basic Pay's own 100% plus exactly one more 100% here -- so this
+    /// simplification lines up with the one case this feature currently models even
+    /// though the model itself doesn't distinguish Regular from Special.
     ///
     /// Nonzero for a day that resolves to <see cref="PunchStatus.Complete"/> or an
     /// actually-worked <see cref="PunchStatus.RestDay"/> (WorkedHours > 0 -- see
@@ -716,6 +802,13 @@ public static class PayrollCalculator
         var (hourlyRate, _, effectiveDailyRate) = ResolveRates(employee, policy, divisor);
         decimal dayRate = employee.EmployeeType == EmployeeType.Monthly ? effectiveDailyRate : employee.DailyRate;
 
+        // Resolved once, same employee-override-then-policy-default cascade
+        // RestDayPremiumPercentage/RestDayWorkPremiumPercentage already use. At the
+        // 1.00 default this reproduces exactly what used to be a hardcoded "+1 day"
+        // below (dayRate * 1.00 == dayRate), so an unconfigured company/employee sees
+        // no change from before this field existed.
+        decimal holidayPremium = employee.HolidayPremiumPercentage ?? policy.HolidayPremiumPercentage;
+
         decimal holidayPay = 0m;
         int holidayWorkedDays = 0;
 
@@ -767,7 +860,7 @@ public static class PayrollCalculator
 
             if (!worked && !unworkedButStillPaid) continue;
 
-            holidayPay += dayRate;
+            holidayPay += dayRate * holidayPremium;
             holidayWorkedDays++;
 
             // OT/ND "copies" only apply to an actually-worked day -- there's no
@@ -786,6 +879,15 @@ public static class PayrollCalculator
             // the same way, so a day with a per-day rate override earns the same
             // override rate twice rather than the plain default rate the second
             // time.
+            //
+            // KNOWN GAP, deliberately left for the holiday-classification work:
+            // both copies below are taken against the plain hourlyRate even when
+            // the Holiday landed on a worked Rest Day, so they don't pick up the
+            // Rest Day rate that Calculate's own Night Diff line now does (see
+            // its ndBaseRate). Fixing that in isolation would move
+            // Holiday-on-Rest-Day figures without the Regular-vs-Special
+            // distinction that decides what they should actually be -- the two
+            // belong in the same change, not this one.
             foreach (var day in dayRows)
             {
                 decimal dayOvertimeHours = RoundHours(day.OvertimeHours);

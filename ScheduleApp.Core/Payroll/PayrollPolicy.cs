@@ -5,14 +5,14 @@
 /// the Payroll equivalent of AttendancePolicy's role for punch matching.
 /// Loaded from ScheduleApp.Desktop/appsettings.json ("Payroll:Policy") with
 /// these values as defaults, the same way AttendancePolicy is loaded from
-/// "Attendance:Policy" -- see PayrollSettings. StandardHoursPerDay/
-/// OvertimeRatePercentage/NightDiffRatePercentage are not yet editable from
-/// the Settings dialog (AttendancePolicy's own dialog section came well after
-/// AttendancePolicy itself did); until a fuller section exists for those, a
-/// person who needs different values for them edits appsettings.json
-/// directly. NetPayRoundingMultiple below is the one exception -- it does
-/// have a Settings dialog field (a global, machine-wide setting, same as
-/// AttendancePolicy's own fields) -- see SettingsDialog/SharedConfigWriter.
+/// "Attendance:Policy" -- see PayrollSettings. Every field here is global and
+/// machine-wide (same as AttendancePolicy's own fields) and every one of them is
+/// editable from the Settings dialog's Payroll tab, which writes them to the
+/// shared config file -- see SettingsDialog/SharedConfigWriter. That wasn't
+/// always true: NetPayRoundingMultiple below had the only dialog field for a
+/// long stretch, and the rest were appsettings.json-only, until the rest-day
+/// tier work added two more rates and made an invisible rate table hard to
+/// justify.
 /// </summary>
 public class PayrollPolicy
 {
@@ -53,6 +53,55 @@ public class PayrollPolicy
     public decimal NightDiffRatePercentage { get; set; } = 0.10m;
 
     /// <summary>
+    /// The company-wide default premium paid on top of straight time for the first
+    /// StandardHoursPerDay hours of an actually-worked Rest Day -- PH labor law's
+    /// 130% rest day rate, expressed the same premium-only way
+    /// OvertimeRatePercentage/NightDiffRatePercentage above are (0.30 here means a
+    /// 1.30 multiplier; PayrollCalculator adds the "+1" where it applies it).
+    ///
+    /// Overridable per employee: Employee.RestDayWorkPremiumPercentage wins whenever
+    /// it's non-null, and null -- the normal state -- means "inherit this". That
+    /// nullable-means-inherit shape is why this default can be a real 0.30 rather
+    /// than the 0 the per-employee field used to sit at: a rest day worked by an
+    /// employee nobody has configured now pays the statutory 130% instead of
+    /// straight time.
+    /// </summary>
+    public decimal RestDayPremiumPercentage { get; set; } = 0.30m;
+
+    /// <summary>
+    /// The additional premium for Rest Day hours beyond StandardHoursPerDay, applied
+    /// **multiplicatively on top of the rest day rate**, not additively on the base
+    /// hourly rate -- i.e. hourlyRate * (1 + RestDayPremiumPercentage) * (1 + this).
+    /// At both defaults that's 1.30 * 1.30 = 1.69, PH labor law's 169% rest day
+    /// overtime rate. Adding the two premiums instead would give 160%, which is the
+    /// easiest way to get this wrong, so it's worth reading that formula twice.
+    ///
+    /// Global only -- no per-employee or per-day override, unlike
+    /// RestDayPremiumPercentage above and OvertimeRatePercentage before it. Ordinary
+    /// Overtime's own per-day overrides deliberately don't apply here either: a Rest
+    /// Day never populates AttendanceSummary.OvertimeHours in the first place (see
+    /// RestDayShiftCalculationStrategy), so its "overtime" is a split of WorkedHours
+    /// made here in Payroll, not something the Attendance layer ever labelled as
+    /// overtime for a per-day override to attach to.
+    /// </summary>
+    public decimal RestDayOvertimeRatePercentage { get; set; } = 0.30m;
+
+    /// <summary>
+    /// The company-wide default premium a worked Holiday's day component pays on top
+    /// of Basic Pay's own 100% -- see PayrollCalculator.CalculateHolidayPay. 1.00
+    /// means one full extra day (200% total when worked), PH labor law's
+    /// worked-regular-holiday rate -- this was a hardcoded "+1 day" before this field
+    /// existed, so 1.00 reproduces that exact behavior for anyone who doesn't
+    /// deliberately change it. Same shape as RestDayPremiumPercentage above: a plain
+    /// premium (not the full multiplier), and also applies to the Monthly-rated-only
+    /// "unworked Holiday, still paid" case, not just the worked one.
+    ///
+    /// Overridable per employee: Employee.HolidayPremiumPercentage wins whenever it's
+    /// non-null, and null -- the normal state -- means "inherit this".
+    /// </summary>
+    public decimal HolidayPremiumPercentage { get; set; } = 1.00m;
+
+    /// <summary>
     /// Rounds each employee's PayrollResult.NetPay to the nearest multiple of this
     /// value, the same way Excel's MROUND(number, multiple) works -- e.g. 1 rounds
     /// Net Pay to the nearest whole unit, 5 to the nearest 5, 0.25 to the nearest
@@ -77,4 +126,24 @@ public class PayrollPolicy
     /// per-employee or per-period.
     /// </summary>
     public decimal NetPayRoundingMultiple { get; set; } = 0.01m;
+
+    /// <summary>
+    /// A complete copy, for a caller that needs to change one or two fields and
+    /// carry the rest through untouched -- SettingsDialog.SaveButton_Click being
+    /// the one that matters (it edits only what its own boxes cover, and every
+    /// other field has to survive the round trip to the shared config file).
+    ///
+    /// Exists because that caller used to rebuild this class with an object
+    /// initializer listing each field by hand, which silently dropped any field
+    /// added to this class afterwards back to its default -- the bug that shipped
+    /// with RestDayPremiumPercentage/RestDayOvertimeRatePercentage and went
+    /// unnoticed precisely because their defaults matched what the initializer
+    /// left behind. Cloning can't develop that gap: a field added below is copied
+    /// whether or not anyone remembers this method exists.
+    ///
+    /// MemberwiseClone is a full copy here rather than a shallow one that aliases
+    /// something, since every property on this class is a value type (decimal). Keep
+    /// it that way, or this needs revisiting.
+    /// </summary>
+    public PayrollPolicy Clone() => (PayrollPolicy)MemberwiseClone();
 }

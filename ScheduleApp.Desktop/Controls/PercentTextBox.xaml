@@ -1,0 +1,105 @@
+<UserControl x:Class="ScheduleApp.Desktop.Controls.PercentTextBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
+             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+             x:Name="Root"
+             Focusable="False"
+             HorizontalAlignment="Left"
+             VerticalAlignment="Center">
+  <!-- Focusable="False" on the root: UserControl is a Control, so IsTabStop defaults to
+       true the same way ItemsControl's did (see PayrollSummaryView.xaml's own fix for the
+       identical issue) - left at the default, this outer wrapper would be a stray Tab stop
+       of its own, ahead of ValueBox below rather than instead of it. A parent's Focusable
+       never cascades to its children, so ValueBox itself is untouched by this. -->
+  <UserControl.Resources>
+    <converters:FractionToPercentConverter x:Key="FractionToPercent" />
+
+    <!-- Same shape as TimeInput's own TimeFieldBorderStyle - see that style's own
+         comment for why the 1px -> 2px focus/error change is safe here (it lands on
+         this Border, not on ValueBox inside it, so nothing around the control
+         reflows). No HasError-style trigger here: unlike a time field, an
+         out-of-range percent is simply clamped by ValueBox on commit, never left
+         showing an invalid value to flag. -->
+    <Style x:Key="PercentBorderStyle" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+      <Style.Triggers>
+        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+          <Setter Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+          <Setter Property="BorderThickness" Value="2" />
+        </Trigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Background" Value="{DynamicResource ControlFillColorDisabledBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          <Setter Property="BorderThickness" Value="1" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- Chrome-stripped, same reasoning and same explicit re-template as TimeInput's own
+         TimeFieldTextBoxStyle: WPF-UI's implicit TextBox style would otherwise wrap
+         ValueBox in its own card background/border/focus underline inside a field
+         PercentBorderStyle above already draws. Right-aligned (not centered, unlike
+         TimeInput's hour/minute fields) to match the "value" half of every label:value
+         settings row this control is meant to drop into - see SettingsDialog.xaml's
+         FieldValueBoxStyle. -->
+    <Style x:Key="PercentValueTextBoxStyle" TargetType="controls:NumericTextBox">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <ScrollViewer x:Name="PART_ContentHost"
+                          Focusable="False"
+                          VerticalAlignment="Center"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Hidden" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+  </UserControl.Resources>
+
+  <Border Style="{StaticResource PercentBorderStyle}" Padding="8,4">
+    <DockPanel LastChildFill="True" MinWidth="60">
+      <!-- Never itself editable or focusable - purely the "%" this control's whole
+           point is to show next to the number, not a second field. Small left margin
+           (not a literal space in Text) so the gap between the number and the sign
+           holds steady across fonts instead of depending on how wide a space
+           character happens to render. Slightly de-emphasized (secondary, not
+           primary, text brush) the same way a unit suffix reads as secondary to the
+           value it's labeling. -->
+      <TextBlock DockPanel.Dock="Right"
+                 Text="%"
+                 Margin="3,0,0,0"
+                 VerticalAlignment="Center"
+                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                 IsHitTestVisible="False" />
+
+      <controls:NumericTextBox x:Name="ValueBox"
+                               Style="{StaticResource PercentValueTextBoxStyle}"
+                               Value="{Binding Value, ElementName=Root, Mode=TwoWay, Converter={StaticResource FractionToPercent}}"
+                               PlaceholderValue="{Binding PlaceholderValue, ElementName=Root, Converter={StaticResource FractionToPercent}}"
+                               DecimalDigits="{Binding DecimalDigits, ElementName=Root}"
+                               Minimum="{Binding Minimum, ElementName=Root, Converter={StaticResource FractionToPercent}}"
+                               Maximum="{Binding Maximum, ElementName=Root, Converter={StaticResource FractionToPercent}}"
+                               ValueCommitted="ValueBox_ValueCommitted" />
+    </DockPanel>
+  </Border>
+</UserControl>

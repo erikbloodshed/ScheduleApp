@@ -4,6 +4,11 @@ A .NET 10 WPF desktop app for managing employee schedules, backed by SQL Server
 Express, with import/export to an Excel layout compatible with the original
 spreadsheet-based workflow this replaced.
 
+> **Pay rules live in [PAYROLL-POLICY.md](PAYROLL-POLICY.md)** -- every rate and
+> multiplier the app applies, in one place, alongside where each still differs
+> from Philippine labor law. The payroll sections below cover how those rules are
+> wired up and configured; that document covers what they actually pay.
+
 ## Solution layout
 
 ```
@@ -450,6 +455,112 @@ grayed-out at the current policy default, the same pattern already used for
 the dialog's clock-in/clock-out buffer overrides. Any field left untouched
 falls through to the next tier above.
 
+## Payroll: Rest Day rates
+
+A Rest Day that's actually worked is paid in **two tiers**, following
+Philippine labor law -- the first eight hours at a premium, everything past
+eight at a further premium on top of *that* rate:
+
+```
+rest day payment = 0.00, unless the day is a worked Rest Day, in which case:
+    rest day rate = hourly rate * (1 + rest day premium)
+
+    first PayrollPolicy.StandardHoursPerDay hours:
+        payment += rest day rate * hours
+    hours beyond that:
+        payment += rest day rate * (1 + PayrollPolicy.RestDayOvertimeRatePercentage) * hours
+```
+
+At the defaults (30% and 30%) that's **130%** for the first eight hours and
+**169%** beyond -- note the second tier *compounds*, `1.30 × 1.30`, rather than
+adding the two premiums to reach 160%.
+
+**Where the premium comes from.** Two tiers, same shape as the buffer defaults:
+
+| | |
+|---|---|
+| `Employee.RestDayWorkPremiumPercentage` | This employee's override. Blank (null) means "inherit". |
+| `PayrollPolicy.RestDayPremiumPercentage` | The company default, `0.30`. Set in Settings → Payroll. |
+
+`RestDayOvertimeRatePercentage` is global only -- there's no per-employee or
+per-day override for it, because a Rest Day never produces
+`AttendanceSummary.OvertimeHours` in the first place (see
+`RestDayShiftCalculationStrategy`); the split is made in Payroll, not
+Attendance, so there's nothing for a per-day overtime override to attach to.
+
+**Night differential on a Rest Day** is taken against the Rest Day rate, not
+the base hourly rate -- so 10% of 130%, not 10% of 100%. All night hours use
+the *first-tier* rate even on a day that ran past eight hours: attendance
+records only a total night-hours figure, with nothing saying which of those
+hours fell past the eighth, so there's nothing to allocate against.
+
+The Rest Day Pay line shows the split when there is one -- `Rest Day Pay
+(8.00H + 3.00H OT)` -- so both tiers can be multiplied back out by hand from
+what's printed.
+
+## Payroll: Holiday premium
+
+A worked Holiday's day component (Holiday Pay's flat "one extra day" -- see
+`PayrollCalculator.CalculateHolidayPay`) is a configurable premium rather than
+a hardcoded full day:
+
+```
+holiday day component = day rate * holiday premium
+```
+
+Same two-tier resolution as the Rest Day premium above:
+
+| | |
+|---|---|
+| `Employee.HolidayPremiumPercentage` | This employee's override. Blank (null) means "inherit". |
+| `PayrollPolicy.HolidayPremiumPercentage` | The company default, `1.00`. Set in Settings → Payroll. |
+
+`1.00` reproduces the app's original behavior exactly (`day rate * 1.00 == day
+rate`, one full extra day, PH law's 200% worked-regular-holiday rate). The
+premium applies equally to the Monthly-rated-only "listed Holiday not worked
+at all" case -- it isn't only for the worked-day branch. It does **not**
+apply to the day's Overtime/Night Diff "copies" (see that method's own
+`KNOWN GAP` comment), which stay a flat doubling of the day's ordinary OT/ND
+pay regardless of what this premium is set to.
+
+## Payroll: Undertime exemption and Work Time default
+
+For a daily-rated employee whose day doesn't need to be completed to earn a
+full day's pay -- only exceeded to earn Overtime -- Edit Employee's Payroll
+tab has an **Exempt from Undertime Deduction** checkbox
+(`Employee.ExemptFromUndertimeDeduction`, default off). Basic Pay was already
+a flat rate per credited day regardless of hours actually worked (see
+`PayrollCalculator.BasicPayForDay`); the only thing that could still cost such
+an employee money for running short was the separate Undertime deduction
+line. Checking this reuses the same `PayrollLineItem.Waived`/
+`PayrollResult.TotalDeductions` machinery a person's manual per-period
+"disregard" already goes through (see `IPayrollUndertimeWaiverRepository`) --
+the Undertime figure keeps showing on the payslip for reference, it just
+never subtracts, regardless of that period's own manual waiver toggle.
+`PayrollCalculator.Calculate` ORs the two together
+(`undertimeWaived || employee.ExemptFromUndertimeDeduction`) rather than one
+replacing the other, so a person can still waive one period's Undertime by
+hand for an otherwise-ordinary employee. Overtime is unaffected either way --
+hours worked past the day's scheduled Work Time are still Overtime, exactly
+like any other employee.
+
+Edit Employee's Attendance tab pairs this with a **Default work time
+(hours)** field (`Employee.DefaultWorkTimeHours`, blank = company default).
+Unlike the Clock-in/Clock-out buffer defaults just below it, this isn't a
+genuine three-tier runtime resolution -- `ScheduleEntry.WorkTimeHours` is a
+required, concrete value once a day is saved, so there's no per-day "blank,
+inheriting" state for this to sit above. It's a one-time starting suggestion:
+Apply Schedule's Work Time field pre-fills from it (in place of
+`AttendanceSettings.DefaultWorkTimeHours`) for a brand-new entry, whenever
+every selected employee shares the same resolved value, so scheduling someone
+whose normal day is genuinely shorter or longer than most doesn't mean
+re-typing that number by hand every time.
+
+Migration `AddEmployeeWorkTimeAndUndertimeExemption` adds both columns --
+`DefaultWorkTimeHours` nullable `decimal(5,2)`, `ExemptFromUndertimeDeduction`
+`bit NOT NULL DEFAULT 0` -- no backfill needed, since false/null reproduce
+every existing employee's current behavior exactly.
+
 ## Payroll: Rest Day Pay and Premium Pay Eligibility
 
 Rest Day Pay and Premium Pay are opt-in per employee, the same way Overtime
@@ -833,6 +944,61 @@ stored -- premium percentages, default amounts, existing `PremiumHoliday`
 adjustment rows -- is touched by the migration itself; it's only ever
 excluded from view while the corresponding flag is off, per "Payroll: Rest
 Day Pay and Premium Pay Eligibility" above.
+
+Separately, `AddRestDayPremiumOverride` turns
+`Employee.RestDayWorkPremiumPercentage` into a nullable *override* column and
+introduces a company-wide default behind it (see "Payroll: Rest Day rates"
+above):
+
+```bash
+dotnet ef database update --project ScheduleApp.Data --startup-project ScheduleApp.Desktop
+```
+
+**This migration changes stored data, not just the schema**: every employee
+whose premium is currently `0` is rewritten to `NULL`, so the new 30% company
+default applies to them. That's deliberate -- a stored `0` meant "nobody ever
+configured this" (the field was opt-in and started at 0), and leaving those
+rows alone would have each of them read as a deliberate "0% premium" override
+that suppresses the company default for the entire payroll, making the change
+a no-op in production. An employee with a real non-zero premium keeps it
+untouched.
+
+The practical effect: **a worked Rest Day now pays 130% by default instead of
+straight time**, and hours past the eighth pay 169%. If some employee genuinely
+should be paid straight time for rest day work, type an explicit `0` into their
+Rest Day Work Premium % box after migrating -- blank and `0` now mean different
+things.
+
+Separately again, `AddHolidayPremiumOverride` adds a new nullable
+`Employee.HolidayPremiumPercentage` column (see "Payroll: Holiday premium"
+above):
+
+```bash
+dotnet ef database update --project ScheduleApp.Data --startup-project ScheduleApp.Desktop
+```
+
+**No data changes here**, unlike the two migrations above -- this is a
+brand-new column, not a conversion of an existing non-nullable one, so every
+row is simply added as `NULL` (inherit the company default) with nothing to
+correct. The default itself, `PayrollPolicy.HolidayPremiumPercentage = 1.00`,
+reproduces the app's pre-existing behavior exactly, so this migration changes
+no one's pay on its own -- it only makes the figure something Settings →
+Payroll and Edit Employee can now change.
+
+Separately again, `AddEmployeeWorkTimeAndUndertimeExemption` adds two new
+`Employees` columns -- `DefaultWorkTimeHours` and `ExemptFromUndertimeDeduction`
+(see "Payroll: Undertime exemption and Work Time default" above):
+
+```bash
+dotnet ef database update --project ScheduleApp.Data --startup-project ScheduleApp.Desktop
+```
+
+**No data changes here either** -- both are brand-new columns. `DefaultWorkTimeHours`
+is added as `NULL` (no employee-level scheduling suggestion) and
+`ExemptFromUndertimeDeduction` as `false` (Undertime deducts normally) for every
+existing row, reproducing pre-migration behavior exactly. Nobody's pay or
+schedule changes until someone deliberately turns either one on via Edit
+Employee.
 
 ## Importing older workbooks
 

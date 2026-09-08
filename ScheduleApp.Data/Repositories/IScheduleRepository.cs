@@ -98,10 +98,13 @@ public interface IScheduleRepository
     /// <param name="defaultCashAdvance">See Employee.DefaultCashAdvance.</param>
     /// <param name="qualifiesForRestDayPay">See Employee.QualifiesForRestDayPay.</param>
     /// <param name="qualifiesForPremiumPay">See Employee.QualifiesForPremiumPay.</param>
+    /// <param name="holidayPremiumPercentage">See Employee.HolidayPremiumPercentage.</param>
     /// <param name="clockInBufferBeforeHours">See Employee.ClockInBufferBeforeHours.</param>
     /// <param name="clockInBufferAfterHours">See Employee.ClockInBufferAfterHours.</param>
     /// <param name="clockOutBufferBeforeHours">See Employee.ClockOutBufferBeforeHours.</param>
     /// <param name="clockOutBufferAfterHours">See Employee.ClockOutBufferAfterHours.</param>
+    /// <param name="defaultWorkTimeHours">See Employee.DefaultWorkTimeHours.</param>
+    /// <param name="exemptFromUndertimeDeduction">See Employee.ExemptFromUndertimeDeduction.</param>
     /// <exception cref="Core.Exceptions.DuplicateEmployeeIdException">
     /// pin already belongs to a different employee.</exception>
     Task<Employee> AddEmployeeAsync(string lastName, string firstName, int? departmentId, int pin,
@@ -110,10 +113,12 @@ public interface IScheduleRepository
         decimal defaultSss = 0m, decimal defaultPhilHealth = 0m, decimal defaultPagIbig = 0m,
         decimal defaultPremiumPay = 0m, decimal defaultAllowance = 0m, decimal defaultCashAdvance = 0m,
         EmployeeType employeeType = EmployeeType.Daily, decimal monthlyRate = 0m,
-        decimal restDayWorkPremiumPercentage = 0m,
+        decimal? restDayWorkPremiumPercentage = null,
         bool qualifiesForRestDayPay = false, bool qualifiesForPremiumPay = false,
         double? clockInBufferBeforeHours = null, double? clockInBufferAfterHours = null,
         double? clockOutBufferBeforeHours = null, double? clockOutBufferAfterHours = null,
+        decimal? holidayPremiumPercentage = null,
+        decimal? defaultWorkTimeHours = null, bool exemptFromUndertimeDeduction = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>Renames, re-IDs, and/or moves an existing employee to a different (or no) department.</summary>
@@ -130,10 +135,13 @@ public interface IScheduleRepository
     /// <param name="defaultCashAdvance">See Employee.DefaultCashAdvance.</param>
     /// <param name="qualifiesForRestDayPay">See Employee.QualifiesForRestDayPay.</param>
     /// <param name="qualifiesForPremiumPay">See Employee.QualifiesForPremiumPay.</param>
+    /// <param name="holidayPremiumPercentage">See Employee.HolidayPremiumPercentage.</param>
     /// <param name="clockInBufferBeforeHours">See Employee.ClockInBufferBeforeHours.</param>
     /// <param name="clockInBufferAfterHours">See Employee.ClockInBufferAfterHours.</param>
     /// <param name="clockOutBufferBeforeHours">See Employee.ClockOutBufferBeforeHours.</param>
     /// <param name="clockOutBufferAfterHours">See Employee.ClockOutBufferAfterHours.</param>
+    /// <param name="defaultWorkTimeHours">See Employee.DefaultWorkTimeHours.</param>
+    /// <param name="exemptFromUndertimeDeduction">See Employee.ExemptFromUndertimeDeduction.</param>
     /// <exception cref="Core.Exceptions.DuplicateEmployeeIdException">
     /// pin already belongs to a different employee.</exception>
     Task UpdateEmployeeAsync(int employeeId, string lastName, string firstName, int? departmentId, int pin,
@@ -142,10 +150,12 @@ public interface IScheduleRepository
         decimal defaultSss = 0m, decimal defaultPhilHealth = 0m, decimal defaultPagIbig = 0m,
         decimal defaultPremiumPay = 0m, decimal defaultAllowance = 0m, decimal defaultCashAdvance = 0m,
         EmployeeType employeeType = EmployeeType.Daily, decimal monthlyRate = 0m,
-        decimal restDayWorkPremiumPercentage = 0m,
+        decimal? restDayWorkPremiumPercentage = null,
         bool qualifiesForRestDayPay = false, bool qualifiesForPremiumPay = false,
         double? clockInBufferBeforeHours = null, double? clockInBufferAfterHours = null,
         double? clockOutBufferBeforeHours = null, double? clockOutBufferAfterHours = null,
+        decimal? holidayPremiumPercentage = null,
+        decimal? defaultWorkTimeHours = null, bool exemptFromUndertimeDeduction = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>Deletes an employee and (by cascade) all of their schedule entries.</summary>

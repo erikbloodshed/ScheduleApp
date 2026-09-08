@@ -84,6 +84,15 @@ public class ScheduleDbContext : DbContext
             e.Property(x => x.ClockOutBufferBeforeHours).HasColumnType("float");
             e.Property(x => x.ClockOutBufferAfterHours).HasColumnType("float");
 
+            // Same decimal(5,2) precision as ScheduleEntry.WorkTimeHours below -- this
+            // is a starting suggestion for exactly that field (see
+            // Employee.DefaultWorkTimeHours's own doc comment), so it needs the same
+            // range/precision that field itself holds. Deliberately no HasDefaultValue,
+            // same reasoning as RestDayWorkPremiumPercentage/HolidayPremiumPercentage
+            // below: null ("no employee-level suggestion") is both the normal state and
+            // the correct one for a row nobody has configured.
+            e.Property(x => x.DefaultWorkTimeHours).HasColumnType("decimal(5,2)");
+
             // Defaults false at the database level too, matching Employee.
             // IsBlacklisted's own C# default -- a raw SQL insert or an older
             // migration replay still leaves existing/newly-added employees
@@ -104,6 +113,12 @@ public class ScheduleDbContext : DbContext
             // QualifiesForPremiumPay's own C# default.
             e.Property(x => x.QualifiesForRestDayPay).HasDefaultValue(false);
             e.Property(x => x.QualifiesForPremiumPay).HasDefaultValue(false);
+
+            // Same defensive-default reasoning again -- a raw SQL insert or an older
+            // migration replay still leaves existing/newly-added employees' Undertime
+            // deducting normally until explicitly exempted, matching Employee.
+            // ExemptFromUndertimeDeduction's own C# default.
+            e.Property(x => x.ExemptFromUndertimeDeduction).HasDefaultValue(false);
 
             // Same defensive-default reasoning as the two flags above -- this is
             // the third overtime state's per-employee default (see Employee.
@@ -132,11 +147,21 @@ public class ScheduleDbContext : DbContext
             // decimal(5,4) -- same precision/headroom convention as ScheduleEntry's
             // OvertimeRatePercentageOverride/NightDiffRatePercentageOverride below
             // (see those for why: enough room for an oddball value like 1.25 typed
-            // in by mistake to fail loudly rather than silently truncate). Defaults
-            // to 0 at the database level too, matching Employee.
-            // RestDayWorkPremiumPercentage's own C# default -- a Rest Day worked
-            // with no premium set just pays straight time rather than erroring.
-            e.Property(x => x.RestDayWorkPremiumPercentage).HasColumnType("decimal(5,4)").HasDefaultValue(0m);
+            // in by mistake to fail loudly rather than silently truncate).
+            // Deliberately no HasDefaultValue: this is an override column now, and
+            // null -- "inherit PayrollPolicy.RestDayPremiumPercentage" -- is both the
+            // normal state and the correct one for a row nobody has configured. A
+            // database-level 0 default would write back exactly the "deliberately no
+            // premium" value the AddRestDayPremiumOverride migration exists to undo.
+            e.Property(x => x.RestDayWorkPremiumPercentage).HasColumnType("decimal(5,4)");
+
+            // Same decimal(5,4)/nullable-means-inherit shape as
+            // RestDayWorkPremiumPercentage just above, for Holiday Pay's own premium --
+            // see Employee.HolidayPremiumPercentage. New from the start (not converted
+            // from an existing non-nullable column), so there's no AddRestDayPremiumOverride-
+            // style backfill needed here: every row is simply null (inherit
+            // PayrollPolicy.HolidayPremiumPercentage) until someone sets an override.
+            e.Property(x => x.HolidayPremiumPercentage).HasColumnType("decimal(5,4)");
 
             // Same defensive-default reasoning again -- defaults false (Unpaid) at
             // the database level too, matching Employee.DefaultLeaveIsPaid's own

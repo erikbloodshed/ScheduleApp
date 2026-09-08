@@ -5,7 +5,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
+using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
+using ScheduleApp.Desktop;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
@@ -107,13 +109,26 @@ public partial class EmployeeTreeViewModel : ObservableObject
     /// the first second or two after sign-in, while this method is still running.</summary>
     private readonly AttendanceBusyState _busy;
 
+    /// <summary>Read only for RestDayPremiumPercentage/HolidayPremiumPercentage, handed
+    /// straight to EmployeeDialog so its per-employee override boxes can show the
+    /// company's current default as a live placeholder -- see EmployeeDialog's own
+    /// constructor doc comment.</summary>
+    private readonly PayrollPolicy _payrollPolicy;
+
+    /// <summary>Read only for DefaultWorkTimeHours, handed straight to EmployeeDialog so
+    /// its own DefaultWorkTimeHoursBox can show the company's current default as a live
+    /// placeholder -- same reasoning as _payrollPolicy just above.</summary>
+    private readonly AttendanceSettings _attendanceSettings;
+
     public EmployeeTreeViewModel(
         IScheduleRepository repository,
         IStatusBarService statusBarService,
         ViewStateStore viewStateStore,
         AttendanceDataVersion dataVersion,
         Action saveViewState,
-        AttendanceBusyState busy)
+        AttendanceBusyState busy,
+        PayrollPolicy payrollPolicy,
+        AttendanceSettings attendanceSettings)
     {
         _repository = repository;
         _statusBarService = statusBarService;
@@ -121,6 +136,8 @@ public partial class EmployeeTreeViewModel : ObservableObject
         _dataVersion = dataVersion;
         _saveViewState = saveViewState;
         _busy = busy;
+        _payrollPolicy = payrollPolicy;
+        _attendanceSettings = attendanceSettings;
     }
 
     public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
@@ -378,7 +395,8 @@ public partial class EmployeeTreeViewModel : ObservableObject
     private async Task AddEmployeeAsync()
     {
         var dialog = new EmployeeDialog(
-            RealDepartments, SelectedEmployee?.DepartmentId ?? SelectedDepartment?.Id,
+            RealDepartments, SelectedEmployee?.DepartmentId ?? SelectedDepartment?.Id, _payrollPolicy,
+            _attendanceSettings.DefaultWorkTimeHours,
             takenEmployeeIds: GetTakenPins())
         { Owner = Application.Current.MainWindow };
         if (dialog.ShowDialog() != true) return;
@@ -393,7 +411,9 @@ public partial class EmployeeTreeViewModel : ObservableObject
                 dialog.EmployeeType, dialog.MonthlyRate, dialog.RestDayWorkPremiumPercentage,
                 dialog.QualifiesForRestDayPay, dialog.QualifiesForPremiumPay,
                 dialog.ClockInBufferBeforeHours, dialog.ClockInBufferAfterHours,
-                dialog.ClockOutBufferBeforeHours, dialog.ClockOutBufferAfterHours);
+                dialog.ClockOutBufferBeforeHours, dialog.ClockOutBufferAfterHours,
+                dialog.HolidayPremiumPercentage,
+                dialog.DefaultWorkTimeHours, dialog.ExemptFromUndertimeDeduction);
         }
         catch (DuplicateEmployeeIdException ex)
         {
@@ -415,7 +435,8 @@ public partial class EmployeeTreeViewModel : ObservableObject
         if (SelectedEmployee is null) return;
 
         var dialog = new EmployeeDialog(
-            RealDepartments, SelectedEmployee.DepartmentId, SelectedEmployee,
+            RealDepartments, SelectedEmployee.DepartmentId, _payrollPolicy,
+            _attendanceSettings.DefaultWorkTimeHours, SelectedEmployee,
             takenEmployeeIds: GetTakenPins(excludingEmployeeId: SelectedEmployee.Id))
         { Owner = Application.Current.MainWindow };
         if (dialog.ShowDialog() != true) return;
@@ -431,7 +452,9 @@ public partial class EmployeeTreeViewModel : ObservableObject
                 dialog.EmployeeType, dialog.MonthlyRate, dialog.RestDayWorkPremiumPercentage,
                 dialog.QualifiesForRestDayPay, dialog.QualifiesForPremiumPay,
                 dialog.ClockInBufferBeforeHours, dialog.ClockInBufferAfterHours,
-                dialog.ClockOutBufferBeforeHours, dialog.ClockOutBufferAfterHours);
+                dialog.ClockOutBufferBeforeHours, dialog.ClockOutBufferAfterHours,
+                dialog.HolidayPremiumPercentage,
+                dialog.DefaultWorkTimeHours, dialog.ExemptFromUndertimeDeduction);
         }
         catch (DuplicateEmployeeIdException ex)
         {

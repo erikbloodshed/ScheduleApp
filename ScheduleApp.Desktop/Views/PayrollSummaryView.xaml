@@ -569,8 +569,19 @@
                                      Style="{StaticResource ValueTextBox}"
                                      Margin="8,0,0,0" />
                         </Grid>
+                        <!-- Focusable="False": ItemsControl is a Control (unlike Border/Grid/
+                             StackPanel/TextBlock, none of which are Controls and so are never
+                             focusable regardless), so IsTabStop defaults to true even though
+                             this is a pure row-generation container with no interaction of its
+                             own - left at the default, every one of these on this page eats a
+                             stray Tab stop between the real TextBox/Button controls in the rows
+                             it generates. ScrollViewer is a Control too but already defaults
+                             IsTabStop to false, so it needed no such override; ItemsControl is
+                             the one exception among the element types this page actually uses.
+                             Every ItemsControl below sets this for the same reason. -->
                         <ItemsControl ItemsSource="{Binding Adjustments}"
-                                      ItemTemplate="{StaticResource InlineAdjustmentRowTemplate}" />
+                                      ItemTemplate="{StaticResource InlineAdjustmentRowTemplate}"
+                                      Focusable="False" />
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -646,7 +657,8 @@
                                      Margin="8,0,0,0" />
                         </Grid>
                         <ItemsControl ItemsSource="{Binding Adjustments}"
-                                      ItemTemplate="{StaticResource DeductionInlineAdjustmentRowTemplate}" />
+                                      ItemTemplate="{StaticResource DeductionInlineAdjustmentRowTemplate}"
+                                      Focusable="False" />
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -781,9 +793,11 @@
                                 </Grid>
                                 <ItemsControl ItemsSource="{Binding Result.ComputedGrossPay}"
                                               ItemTemplate="{StaticResource ComputedLineTemplate}"
-                                              Margin="0,0,0,4" />
+                                              Margin="0,0,0,4"
+                                              Focusable="False" />
                                 <ItemsControl ItemsSource="{Binding GrossPayAdjustmentGroupRows}"
-                                              ItemTemplate="{StaticResource AdjustmentGroupTemplate}" />
+                                              ItemTemplate="{StaticResource AdjustmentGroupTemplate}"
+                                              Focusable="False" />
                             </StackPanel>
                         </Border>
 
@@ -815,9 +829,11 @@
                                      binding. -->
                                 <ItemsControl ItemsSource="{Binding Result.ComputedDeductions}"
                                               ItemTemplate="{StaticResource DeductionLineTemplate}"
-                                              Margin="0,0,0,4" />
+                                              Margin="0,0,0,4"
+                                              Focusable="False" />
                                 <ItemsControl ItemsSource="{Binding DeductionAdjustmentGroupRows}"
-                                              ItemTemplate="{StaticResource DeductionAdjustmentGroupTemplate}" />
+                                              ItemTemplate="{StaticResource DeductionAdjustmentGroupTemplate}"
+                                              Focusable="False" />
                             </StackPanel>
                         </Border>
                     </Grid>

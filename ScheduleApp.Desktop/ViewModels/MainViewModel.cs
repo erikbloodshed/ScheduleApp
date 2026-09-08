@@ -88,7 +88,8 @@ public partial class MainViewModel : ObservableObject
         // risk piece). SaveViewState is passed to Tree/Calendar as a delegate -- see this
         // class's own doc comment above -- rather than either reaching back out to this
         // facade by reference.
-        Tree = new EmployeeTreeViewModel(repository, statusBarService, viewStateStore, dataVersion, SaveViewState, busy);
+        Tree = new EmployeeTreeViewModel(repository, statusBarService, viewStateStore, dataVersion, SaveViewState, busy,
+            payrollSettings.Policy, attendanceSettings);
 
         Calendar = new ScheduleCalendarViewModel(
             repository, holidayRepository, statusBarService, attendanceSettings, attendanceRunner, busy, viewStateStore,
