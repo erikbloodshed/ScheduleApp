@@ -53,8 +53,17 @@
                 <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,16" />
 
                 <TextBlock Grid.Row="1" Text="Server" Margin="0,0,0,4" />
-                <TextBox x:Name="ServerBox" Grid.Row="2" Margin="0,0,0,12"
-                         ToolTip="The SQL Server instance name, e.g. .\SQLEXPRESS for a local SQL Server Express install." />
+
+                <!-- Editable rather than a locked dropdown - SqlServerDiscovery's own
+                     doc comment explains why neither of its two sources is exhaustive
+                     (a remote server with SQL Server Browser disabled, for one, never
+                     shows up), so typing an instance name discovery didn't find has to
+                     keep working exactly as it always did on the plain TextBox this
+                     replaces. ItemsSource is populated after Loaded, in the
+                     constructor - see PopulateServerDiscoveryAsync. -->
+                <ComboBox x:Name="ServerBox" Grid.Row="2" Margin="0,0,0,12"
+                          IsEditable="True" IsTextSearchEnabled="True"
+                          ToolTip="The SQL Server instance name, e.g. .\SQLEXPRESS for a local SQL Server Express install -- pick a discovered server, or type your own." />
 
                 <TextBlock Grid.Row="3" Text="Database name" Margin="0,0,0,4" />
                 <TextBox x:Name="DatabaseNameBox" Grid.Row="4" Margin="0,0,0,16"

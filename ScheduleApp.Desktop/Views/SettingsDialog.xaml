@@ -115,21 +115,86 @@
                             <TextBlock Style="{StaticResource SectionCaptionTextStyle}"
                                        Text="Where both apps look for the ScheduleDb / AttendanceLogs database. This is the only tab here that Push Listener reads." />
 
-                            <TextBlock Text="Connection string" Margin="0,0,0,4" />
+                            <!-- Primary flow: pick a saved profile (Name/Server/Database,
+                                 always Windows-Authenticated - see ConnectionProfile), rather
+                                 than hand-typing a connection string. A ComboBox rather than a
+                                 ListBox deliberately - WPF-UI's merged ControlsDictionary
+                                 doesn't ship a ListBox/ListBoxItem style (confirmed against the
+                                 package's own resources), so a ListBox here would silently fall
+                                 back to stock WPF chrome next to every properly Fluent-themed
+                                 control around it, the same trap FieldValueBoxStyle's own
+                                 comment warns about for TextBox. ComboBox is already proven
+                                 themed correctly in this app (EmployeeDialog's DepartmentCombo). -->
+                            <TextBlock Text="Connection profile" Margin="0,0,0,4" />
+                            <ComboBox x:Name="ConnectionProfilesCombo"
+                                      Margin="0,0,0,8"
+                                      DisplayMemberPath="Name"
+                                      SelectionChanged="ConnectionProfilesCombo_SelectionChanged"
+                                      ToolTip="Pick which saved database to connect to -- Windows Authentication, no separate login needed." />
 
-                            <!-- The one field that doesn't use the shared label:value row
-                                 shape - a connection string wants every pixel of width it
-                                 can get, so its label goes above it, and the wizard button
-                                 goes beside the box it fills in rather than under it. See
-                                 DatabaseSetupDialog / CreateDatabaseButton_Click. -->
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox x:Name="ConnectionStringBox" Grid.Column="0" Margin="0,0,8,0"
-                                         FontFamily="Consolas"
-                                         ToolTip="The SQL Server connection string both apps use to reach the ScheduleDb / AttendanceLogs database." />
-                                <Button Grid.Column="1" Content="Create New Database / Login…" Padding="8,4"
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <Button Content="Add…" Padding="8,4" Margin="0,0,8,0"
+                                        Click="AddProfileButton_Click" />
+                                <Button Content="Remove" Padding="8,4" Margin="0,0,8,0"
+                                        Click="RemoveProfileButton_Click" />
+                                <Button Content="Create New Database…" Padding="8,4"
                                         Click="CreateDatabaseButton_Click"
-                                        ToolTip="Opens a wizard to create a database and SQL Server login, then fills the connection string above with the result -- still needs Save below to apply it." />
-                            </Grid>
+                                        ToolTip="Creates the selected profile's database using your current Windows account -- no separate login needed. Still needs Save below to apply it." />
+                            </StackPanel>
+
+                            <!-- Inline three-field form rather than a separate popup dialog -
+                                 a Name/Server/Database profile is small enough that a whole new
+                                 window would be more ceremony than the task warrants. -->
+                            <StackPanel x:Name="AddProfilePanel" Visibility="Collapsed" Margin="0,0,0,12">
+                                <TextBlock Text="Name" Margin="0,0,0,4" />
+                                <TextBox x:Name="NewProfileNameBox" Margin="0,0,0,8"
+                                         ToolTip="e.g. Production, Testing" />
+                                <TextBlock Text="Server" Margin="0,0,0,4" />
+
+                                <!-- Editable, same reasoning as DatabaseSetupDialog's own
+                                     ServerBox - see SqlServerDiscovery. ItemsSource is
+                                     populated in the constructor, alongside the profile
+                                     list's own setup. -->
+                                <ComboBox x:Name="NewProfileServerBox" Margin="0,0,0,8"
+                                          IsEditable="True" IsTextSearchEnabled="True"
+                                          ToolTip="e.g. .\SQLEXPRESS -- pick a discovered server, or type your own." />
+                                <TextBlock Text="Database name" Margin="0,0,0,4" />
+                                <TextBox x:Name="NewProfileDatabaseBox" Margin="0,0,0,8" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Save profile" Padding="8,4" Margin="0,0,8,0"
+                                            Click="ConfirmAddProfileButton_Click" />
+                                    <Button Content="Cancel" Padding="8,4"
+                                            Click="CancelAddProfileButton_Click" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- A toggle Button + collapsible StackPanel rather than Expander -
+                                 same "not actually styled by WPF-UI" reason ComboBox replaced
+                                 ListBox above; Button is already proven themed everywhere in
+                                 this app. Content flips between the two glyphs below in
+                                 AdvancedToggleButton_Click. -->
+                            <Button x:Name="AdvancedToggleButton" Content="Advanced ▾"
+                                    HorizontalAlignment="Left" Padding="4,2" Margin="0,0,0,8"
+                                    Click="AdvancedToggleButton_Click"
+                                    ToolTip="A raw connection string, or a wizard that creates a dedicated SQL Server login instead of using Windows Authentication." />
+
+                            <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed">
+                                <TextBlock Text="Connection string" Margin="0,0,0,4" />
+
+                                <!-- The one field that doesn't use the shared label:value row
+                                     shape - a connection string wants every pixel of width it
+                                     can get, so its label goes above it, and the wizard button
+                                     goes beside the box it fills in rather than under it. See
+                                     DatabaseSetupDialog / CreateDedicatedLoginButton_Click. -->
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox x:Name="ConnectionStringBox" Grid.Column="0" Margin="0,0,8,0"
+                                             FontFamily="Consolas"
+                                             ToolTip="Overrides the profile selected above. For custom ports, named-instance syntax the profile fields can't express, or a SQL Server login connection string from the wizard below." />
+                                    <Button Grid.Column="1" Content="Dedicated SQL Login Wizard…" Padding="8,4"
+                                            Click="CreateDedicatedLoginButton_Click"
+                                            ToolTip="For a machine where Windows Authentication isn't practical -- creates a database and a SQL Server login, then fills the box above with the result." />
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>

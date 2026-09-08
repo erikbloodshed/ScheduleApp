@@ -112,6 +112,17 @@ public class SharedConfigWriter
     /// writing an empty value, so PayrollSettings.CompanyName reads back null (and
     /// PayslipRenderer's caller falls back to PayslipLineBuilder.DefaultCompanyName)
     /// on next load, the same as if the key had never been set.</param>
+    /// <param name="connectionProfiles">Only ChangedConnectionProfiles from the
+    /// Settings dialog -- the saved-profile list shown in the Database tab in place
+    /// of hand-typing a connection string (see ConnectionProfile). Written as a full
+    /// replace of ConnectionProfiles:Profiles, same "exactly these fields, nothing
+    /// else lives under this key" reasoning as Attendance:Policy/Payroll:Policy
+    /// above. Deliberately doesn't also touch ConnectionStrings:ScheduleDb -- which
+    /// profile (if any) is "active" is never stored, only derived by SettingsDialog
+    /// matching the resolved connection string against each profile's own
+    /// ToConnectionString() -- so a profile-only edit here and a connectionString
+    /// edit above are independent, exactly like every other pair of Changed*
+    /// parameters on this method.</param>
     public string? Save(
         string? connectionString = null,
         DeviceDefaults? device = null,
@@ -119,10 +130,12 @@ public class SharedConfigWriter
         AttendancePolicy? policy = null,
         PayrollPolicy? payrollPolicy = null,
         string? signInLogoSourcePath = null,
-        string? companyName = null)
+        string? companyName = null,
+        IReadOnlyList<ConnectionProfile>? connectionProfiles = null)
     {
         if (connectionString is null && device is null && defaultWorkTimeHours is null &&
-            policy is null && payrollPolicy is null && signInLogoSourcePath is null && companyName is null)
+            policy is null && payrollPolicy is null && signInLogoSourcePath is null && companyName is null &&
+            connectionProfiles is null)
             return null;
 
         var path = SharedConfigFile.ResolvePath();
@@ -261,6 +274,25 @@ public class SharedConfigWriter
             }
 
             root["SignIn"] = signIn;
+        }
+
+        if (connectionProfiles is not null)
+        {
+            // A profile has exactly these 3 fields, so -- same as Attendance:Policy/
+            // Payroll:Policy above -- this replaces ConnectionProfiles:Profiles
+            // wholesale rather than merging into whatever array was already there.
+            var profiles = new JsonArray();
+            foreach (var profile in connectionProfiles)
+            {
+                profiles.Add(new JsonObject
+                {
+                    ["Name"] = profile.Name,
+                    ["Server"] = profile.Server,
+                    ["Database"] = profile.Database
+                });
+            }
+
+            root["ConnectionProfiles"] = new JsonObject { ["Profiles"] = profiles };
         }
 
         File.WriteAllText(path, root.ToJsonString(WriteOptions));

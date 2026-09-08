@@ -136,7 +136,8 @@ public partial class App : Application
 
             var provisioningService = new DatabaseProvisioningService();
             var setupDialog = new DatabaseSetupDialog(
-                provisioningService, prefillConnectionString, isRequiredFirstRun: true);
+                provisioningService, prefillConnectionString,
+                mode: DatabaseSetupMode.WindowsAuthOnly, isRequiredFirstRun: true);
 
             if (setupDialog.ShowDialog() != true || setupDialog.ConnectionString is not { } newConnectionString)
             {
@@ -191,6 +192,7 @@ public partial class App : Application
         PayrollSettings payrollSettings;
         PushListenerSettings pushListenerSettings;
         SignInSettings signInSettings;
+        ConnectionProfilesSettings connectionProfilesSettings;
         try
         {
             configuration = new ConfigurationBuilder()
@@ -230,6 +232,13 @@ public partial class App : Application
             // means SignInPanel/SetupAdminPanel keep showing the built-in logo.
             signInSettings = configuration.GetSection("SignIn").Get<SignInSettings>()
                 ?? new SignInSettings();
+
+            // Same story again -- a missing "ConnectionProfiles" section just means
+            // SettingsDialog's Database tab starts with no saved profiles (it
+            // synthesizes a single "Current" entry from connectionString above for
+            // display -- see SettingsDialog's own constructor).
+            connectionProfilesSettings = configuration.GetSection("ConnectionProfiles").Get<ConnectionProfilesSettings>()
+                ?? new ConnectionProfilesSettings();
         }
         catch (Exception ex)
         {
@@ -349,6 +358,7 @@ public partial class App : Application
         services.AddSingleton(payrollSettings);
         services.AddSingleton(pushListenerSettings);
         services.AddSingleton(signInSettings);
+        services.AddSingleton(connectionProfilesSettings);
         // Lets the Settings dialog (see MainWindow's gear button) show the connection
         // string that's actually in effect right now, whether it came from
         // appsettings.json or from the shared file already overriding it.

@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
+using Microsoft.Data.SqlClient;
 using Microsoft.Win32;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Payroll;
@@ -56,6 +57,19 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
 {
     private readonly DatabaseProvisioningService _provisioningService;
     private readonly string _originalConnectionString;
+
+    /// <summary>Exactly what the constructor was given -- compared against _profiles in
+    /// SaveButton_Click to decide ChangedConnectionProfiles. Never mutated; _profiles
+    /// below is the working copy Add/Remove actually touch.</summary>
+    private readonly IReadOnlyList<ConnectionProfile> _originalConnectionProfiles;
+
+    /// <summary>Working copy of the saved-profile list shown in ConnectionProfilesCombo
+    /// -- starts as a clone of _originalConnectionProfiles (or, on a machine with no
+    /// saved profiles yet, a single synthesized "Current" entry -- see
+    /// BuildImplicitProfileList) and is mutated directly by
+    /// AddProfileButton_Click/RemoveProfileButton_Click. Never null after the
+    /// constructor runs.</summary>
+    private List<ConnectionProfile> _profiles = new();
     private readonly string? _originalDeviceIp;
     private readonly int _originalDevicePort;
     private readonly uint _originalDeviceCommKey;
@@ -78,6 +92,12 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     /// <summary>Null if the connection string field wasn't changed from what the dialog
     /// was opened with.</summary>
     public string? ChangedConnectionString { get; private set; }
+
+    /// <summary>Null if the saved-profile list wasn't changed (by Add/Remove) from what
+    /// the dialog was opened with. Independent of ChangedConnectionString above -- adding
+    /// a profile without also selecting/Saving it as the active connection string still
+    /// counts as a change here, and vice versa.</summary>
+    public IReadOnlyList<ConnectionProfile>? ChangedConnectionProfiles { get; private set; }
 
     /// <summary>Null if none of the four device fields were changed.</summary>
     public DeviceDefaults? ChangedDevice { get; private set; }
@@ -120,7 +140,8 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     /// -- MainWindow only calls SharedConfigWriter.Save (and only offers a restart) when
     /// this is true and at least one Changed* property is non-null.</summary>
     public bool HasChanges =>
-        ChangedConnectionString is not null || ChangedDevice is not null ||
+        ChangedConnectionString is not null || ChangedConnectionProfiles is not null ||
+        ChangedDevice is not null ||
         ChangedDefaultWorkTimeHours is not null || ChangedPolicy is not null ||
         ChangedPayrollPolicy is not null || ChangedLogoPath is not null ||
         ChangedCompanyName is not null;
@@ -128,6 +149,7 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     public SettingsDialog(
         DatabaseProvisioningService provisioningService,
         string connectionString,
+        IReadOnlyList<ConnectionProfile> connectionProfiles,
         string? deviceIp,
         int devicePort,
         uint deviceCommKey,
@@ -143,6 +165,7 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
 
         _provisioningService = provisioningService;
         _originalConnectionString = connectionString;
+        _originalConnectionProfiles = connectionProfiles;
         _originalDeviceIp = deviceIp;
         _originalDevicePort = devicePort;
         _originalDeviceCommKey = deviceCommKey;
@@ -161,6 +184,25 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
             : companyName;
 
         ConnectionStringBox.Text = connectionString;
+
+        // A machine with no saved profiles yet (pre-upgrade, or nothing set up)
+        // synthesizes a single "Current" entry from whatever's already effective,
+        // purely for display -- never written back unless Add/Remove actually
+        // touches the list (see ChangedConnectionProfiles/SaveButton_Click).
+        _profiles = connectionProfiles.Count > 0
+            ? new List<ConnectionProfile>(connectionProfiles)
+            : BuildImplicitProfileList(connectionString);
+
+        // Select whichever profile's own connection string matches what's already
+        // effective, if any -- an Advanced/raw string or a dedicated-login SQL-auth
+        // string won't match anything here, which is exactly the signal to leave the
+        // combo unselected and expand Advanced below instead, so what's actually in
+        // effect is never hidden behind a collapsed section.
+        var activeProfile = _profiles.FirstOrDefault(p =>
+            string.Equals(p.ToConnectionString(), connectionString.Trim(), StringComparison.OrdinalIgnoreCase));
+        RefreshProfilesCombo(activeProfile);
+        if (activeProfile is null) ExpandAdvanced();
+
         DeviceIpBox.Text = deviceIp ?? string.Empty;
         PortBox.Text = devicePort.ToString(CultureInfo.CurrentCulture);
         CommKeyBox.Text = deviceCommKey.ToString(CultureInfo.CurrentCulture);
@@ -209,11 +251,140 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
         // Database is deliberately the first tab, so this would work on its own -- going
         // through RevealField means reordering the tabs later can't quietly turn the
         // opening focus into a no-op on a tab that hasn't been realized yet.
+        //
+        // Focuses ConnectionProfilesCombo, not ConnectionStringBox -- the latter now
+        // lives inside AdvancedPanel, which starts Collapsed whenever a profile matched
+        // above (see the constructor), and Control.Focus() on an element inside a
+        // Visibility.Collapsed container silently no-ops in WPF. The primary control is
+        // the right opening focus target anyway now that it's the primary way to work
+        // with this tab.
         Loaded += (_, _) =>
         {
-            RevealField(ConnectionStringBox);
-            ConnectionStringBox.Focus();
+            RevealField(ConnectionProfilesCombo);
+            ConnectionProfilesCombo.Focus();
         };
+
+        // Synchronous -- see SqlServerDiscovery's own doc comment for why (a registry
+        // read, never network discovery). NewProfileServerBox stays editable
+        // regardless of whether this finds anything, so an empty result never blocks
+        // typing a server name by hand.
+        NewProfileServerBox.ItemsSource = SqlServerDiscovery.DiscoverServers();
+    }
+
+    /// <summary>Best-effort synthesizes a single "Current" profile from whatever
+    /// connection string is already effective, for a machine that hasn't saved any
+    /// profiles yet -- so the combo isn't empty the first time this dialog opens after
+    /// upgrading. Never written back on its own; only an actual Add/Remove marks
+    /// ChangedConnectionProfiles non-null (see SaveButton_Click). A blank or
+    /// unparseable string (nothing configured, or an unusual Advanced-only value) just
+    /// returns an empty list rather than failing to open the dialog over it -- same
+    /// "best-effort prefill, never essential" treatment DatabaseSetupDialog's own
+    /// Server/Database prefill already gives an unparseable connection string.</summary>
+    private static List<ConnectionProfile> BuildImplicitProfileList(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return new List<ConnectionProfile>();
+
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connectionString);
+            return new List<ConnectionProfile> { new("Current", builder.DataSource, builder.InitialCatalog) };
+        }
+        catch (ArgumentException)
+        {
+            return new List<ConnectionProfile>();
+        }
+    }
+
+    /// <summary>Re-binds ConnectionProfilesCombo to the current _profiles list --
+    /// re-assigning ItemsSource rather than mutating in place, since _profiles is a
+    /// plain List (not an ObservableCollection), matching this file's existing
+    /// "no bindings/MVVM, just re-set what changed" idiom elsewhere. Called after every
+    /// Add/Remove, and once from the constructor.</summary>
+    private void RefreshProfilesCombo(ConnectionProfile? selectProfile = null)
+    {
+        ConnectionProfilesCombo.ItemsSource = null;
+        ConnectionProfilesCombo.ItemsSource = _profiles;
+        ConnectionProfilesCombo.SelectedItem = selectProfile;
+    }
+
+    /// <summary>Expands AdvancedPanel and flips AdvancedToggleButton's own glyph to
+    /// match -- the manual equivalent of RevealField's TabItem.IsSelected flip, for the
+    /// one collapsible section on this tab that isn't a TabItem. Needed wherever code
+    /// has to guarantee ConnectionStringBox is actually visible/focusable, since
+    /// Control.Focus() on an element inside a Visibility.Collapsed container silently
+    /// no-ops in WPF.</summary>
+    private void ExpandAdvanced()
+    {
+        AdvancedPanel.Visibility = Visibility.Visible;
+        AdvancedToggleButton.Content = "Advanced ▴";
+    }
+
+    private void ConnectionProfilesCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ConnectionProfilesCombo.SelectedItem is ConnectionProfile profile)
+            ConnectionStringBox.Text = profile.ToConnectionString();
+    }
+
+    private void AddProfileButton_Click(object sender, RoutedEventArgs e)
+    {
+        NewProfileNameBox.Text = string.Empty;
+        NewProfileServerBox.Text = string.Empty;
+        NewProfileDatabaseBox.Text = string.Empty;
+        AddProfilePanel.Visibility = Visibility.Visible;
+        NewProfileNameBox.Focus();
+    }
+
+    private void CancelAddProfileButton_Click(object sender, RoutedEventArgs e)
+        => AddProfilePanel.Visibility = Visibility.Collapsed;
+
+    /// <summary>Validates the three new-profile fields (same "blank blocks, nothing else
+    /// does" shape ShowFieldError's other callers use), appends to _profiles, and
+    /// selects the new entry -- which flows into ConnectionStringBox automatically via
+    /// ConnectionProfilesCombo_SelectionChanged above, the same way picking any other
+    /// profile does.</summary>
+    private void ConfirmAddProfileButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(NewProfileNameBox.Text))
+        {
+            ShowFieldError(NewProfileNameBox, "Enter a name for this profile.", "Required");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NewProfileServerBox.Text))
+        {
+            ShowFieldError(NewProfileServerBox, "Enter the SQL Server instance name.", "Required");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NewProfileDatabaseBox.Text))
+        {
+            ShowFieldError(NewProfileDatabaseBox, "Enter a database name.", "Required");
+            return;
+        }
+
+        var profile = new ConnectionProfile(
+            NewProfileNameBox.Text.Trim(), NewProfileServerBox.Text.Trim(), NewProfileDatabaseBox.Text.Trim());
+        _profiles.Add(profile);
+        RefreshProfilesCombo(profile);
+        AddProfilePanel.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>No confirmation dialog -- same "nothing commits until the outer Save,
+    /// plus MainWindow's own shared-file confirmation" model ChooseLogoButton_Click/
+    /// ResetLogoButton_Click already use for this dialog's other reversible edits.</summary>
+    private void RemoveProfileButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ConnectionProfilesCombo.SelectedItem is not ConnectionProfile profile) return;
+        _profiles.Remove(profile);
+        RefreshProfilesCombo();
+    }
+
+    private void AdvancedToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        var expanding = AdvancedPanel.Visibility != Visibility.Visible;
+        AdvancedPanel.Visibility = expanding ? Visibility.Visible : Visibility.Collapsed;
+        AdvancedToggleButton.Content = expanding ? "Advanced ▴" : "Advanced ▾";
     }
 
     /// <summary>Selects whichever tab <paramref name="field"/> lives on and scrolls it
@@ -292,15 +463,35 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
         return false;
     }
 
-    /// <summary>Opens DatabaseSetupDialog (see its own doc comment) to create a new
-    /// database and SQL Server login, prefilled from whatever's currently in
-    /// ConnectionStringBox. On success just fills ConnectionStringBox with the
-    /// resulting connection string -- same as typing/pasting it in by hand -- so
-    /// SaveButton_Click's existing change-tracking and Save still needs to be clicked
-    /// to actually apply it, the same as every other field in this dialog.</summary>
+    /// <summary>The primary button: creates the database named in whatever's currently
+    /// in ConnectionStringBox (kept in sync with the selected/newly-added profile via
+    /// ConnectionProfilesCombo_SelectionChanged/ConfirmAddProfileButton_Click) using
+    /// the signed-in Windows account -- no SQL Server login of any kind. See
+    /// RunDatabaseSetup below for the shared plumbing with
+    /// CreateDedicatedLoginButton_Click.</summary>
     private void CreateDatabaseButton_Click(object sender, RoutedEventArgs e)
+        => RunDatabaseSetup(DatabaseSetupMode.WindowsAuthOnly);
+
+    /// <summary>The Advanced section's escape hatch, for a machine where Windows
+    /// Authentication "isn't practical" (see DatabaseSetupDialog's own IntroText
+    /// wording) -- the pre-redesign default behavior of what used to be this tab's only
+    /// Create button. See RunDatabaseSetup below.</summary>
+    private void CreateDedicatedLoginButton_Click(object sender, RoutedEventArgs e)
+        => RunDatabaseSetup(DatabaseSetupMode.DedicatedLogin);
+
+    /// <summary>Opens DatabaseSetupDialog (see its own doc comment) in the given mode,
+    /// prefilled from whatever's currently in ConnectionStringBox. On success just
+    /// fills ConnectionStringBox with the resulting connection string -- same as
+    /// typing/pasting it in by hand -- so SaveButton_Click's existing change-tracking
+    /// and Save still needs to be clicked to actually apply it, the same as every other
+    /// field in this dialog. Deliberately doesn't also touch ConnectionProfilesCombo's
+    /// selection or _profiles -- a successful Create for WindowsAuthOnly mode just
+    /// re-derives the same connection string the selected/newly-added profile already
+    /// produced, and DedicatedLogin mode's SQL-auth result was never going to match any
+    /// profile anyway (see the constructor's own active-profile matching).</summary>
+    private void RunDatabaseSetup(DatabaseSetupMode mode)
     {
-        var setupDialog = new DatabaseSetupDialog(_provisioningService, ConnectionStringBox.Text) { Owner = this };
+        var setupDialog = new DatabaseSetupDialog(_provisioningService, ConnectionStringBox.Text, mode) { Owner = this };
         if (setupDialog.ShowDialog() == true && setupDialog.ConnectionString is { } newConnectionString)
             ConnectionStringBox.Text = newConnectionString;
     }
@@ -342,8 +533,11 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
     {
         if (string.IsNullOrWhiteSpace(ConnectionStringBox.Text))
         {
+            // Expand Advanced first -- ShowFieldError's own Focus() call would
+            // otherwise silently no-op on a field inside a Collapsed container.
+            ExpandAdvanced();
             ShowFieldError(ConnectionStringBox,
-                "Enter a connection string -- both apps need it to reach the database.",
+                "Select or add a connection profile above, or enter a connection string directly here -- both apps need one to reach the database.",
                 "Required");
             return;
         }
@@ -458,6 +652,10 @@ public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
         ChangedConnectionString = connectionString == _originalConnectionString
             ? null
             : connectionString;
+
+        ChangedConnectionProfiles = _profiles.SequenceEqual(_originalConnectionProfiles)
+            ? null
+            : _profiles;
 
         var deviceChanged =
             deviceIp != _originalDeviceIp ||

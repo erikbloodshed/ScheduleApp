@@ -4,20 +4,47 @@ using ScheduleApp.Desktop.Services;
 
 namespace ScheduleApp.Desktop.Views;
 
+/// <summary>Which of this dialog's two entirely different Create behaviors runs --
+/// see DatabaseSetupDialog's own doc comment. Explicit rather than derived from
+/// isRequiredFirstRun (the pre-mode shape this replaced): isRequiredFirstRun is
+/// about *framing* (mandatory, no skipping -- see its own doc comment on the
+/// constructor), which is an orthogonal question from *which Create path runs* --
+/// SettingsDialog's Database tab needs WindowsAuthOnly reachable from an entirely
+/// optional context, something isRequiredFirstRun alone could never express.</summary>
+public enum DatabaseSetupMode
+{
+    /// <summary>Creates (or reuses) a database, a SQL Server login on it, and grants
+    /// that login the chosen access level -- the full DatabaseProvisioningService
+    /// round trip, admin credentials and all. The escape hatch for a machine where
+    /// Windows Authentication "isn't practical" (see IntroText's own wording) --
+    /// SettingsDialog's Database tab tucks this behind its Advanced section, since
+    /// WindowsAuthOnly below is what most machines actually want.</summary>
+    DedicatedLogin,
+
+    /// <summary>Just a Server/Database name -> a Windows-Authenticated connection
+    /// string, synchronously, no SQL Server round trip and no admin credentials or
+    /// login of any kind -- see CreateButton_Click's own comment on this branch.</summary>
+    WindowsAuthOnly
+}
+
 /// <summary>
-/// Runs DatabaseProvisioningService end to end: creates (or reuses) a database, a SQL
-/// Server login on it, and grants that login the chosen access level, then hands back
-/// a ready-to-use connection string. Reachable from two places:
-///   - SettingsDialog's "Create New Database / Login…" button, prefilled from
-///     whatever connection string is currently in the Connection String box, which
-///     just copies the result back into that box on success (the person still has to
-///     hit Settings' own Save to actually apply it -- same as any other Settings
-///     field).
-///   - App.xaml.cs's own Migrate() failure path on startup -- offered as a fix when
-///     the configured connection string doesn't work at all yet (e.g. a completely
-///     fresh machine with SQL Server Express installed but nothing set up in it), so
-///     the very first run doesn't require SQL Server Management Studio, sqlcmd, or
-///     hand-typing the T-SQL from ScheduleApp.PushListener's own README.
+/// Runs DatabaseProvisioningService end to end (DatabaseSetupMode.DedicatedLogin) or
+/// just synthesizes a Windows-Authenticated connection string
+/// (DatabaseSetupMode.WindowsAuthOnly) -- see DatabaseSetupMode's own doc comment for
+/// which. Reachable from three places:
+///   - SettingsDialog's Database tab, which now opens this in WindowsAuthOnly mode
+///     from its primary "Create New Database…" button, and in DedicatedLogin mode
+///     from its Advanced section's "Dedicated SQL Login Wizard…" button. Either way,
+///     prefilled from whatever connection string is currently in effect there, and
+///     on success just copies the result back into ConnectionStringBox (the person
+///     still has to hit Settings' own Save to actually apply it -- same as any other
+///     Settings field).
+///   - App.xaml.cs's own Migrate() failure path on startup -- opened in the default
+///     DedicatedLogin mode, offered as a fix when the configured connection string
+///     doesn't work at all yet (e.g. a completely fresh machine with SQL Server
+///     Express installed but nothing set up in it), so the very first run doesn't
+///     require SQL Server Management Studio, sqlcmd, or hand-typing the T-SQL from
+///     ScheduleApp.PushListener's own README.
 ///
 /// This dialog itself only collects input, shows progress, and reports the result --
 /// see DatabaseProvisioningService's own remarks for what actually happens against
@@ -25,12 +52,14 @@ namespace ScheduleApp.Desktop.Views;
 /// credentials never being saved anywhere).
 ///
 /// A third entry point -- App.xaml.cs's own pre-configuration first-run gate -- opens
-/// this with isRequiredFirstRun: true instead, and behaves quite differently: it
-/// collapses both the "Admin connection" and "New login"/"Access level" sections (see
-/// AdminConnectionPanel/LoginProvisioningPanel in the XAML) down to just Server/
-/// Database name, and Create doesn't touch DatabaseProvisioningService or SQL Server
-/// at all -- it just hands back a Windows-Authenticated connection string for
-/// whatever was typed, synchronously, with no admin credentials and no SQL Server
+/// this in WindowsAuthOnly mode too, but also passes isRequiredFirstRun: true, which
+/// swaps in different *framing* (see that parameter's own doc comment below) on top
+/// of the same WindowsAuthOnly Create behavior SettingsDialog's primary button now
+/// also uses: it collapses both the "Admin connection" and "New login"/"Access level"
+/// sections (see AdminConnectionPanel/LoginProvisioningPanel in the XAML) down to
+/// just Server/Database name, and Create doesn't touch DatabaseProvisioningService or
+/// SQL Server at all -- it just hands back a Windows-Authenticated connection string
+/// for whatever was typed, synchronously, with no admin credentials and no SQL Server
 /// login of any kind (see DatabaseProvisioningRequest.NewLoginUsername's own doc
 /// comment for why that's the whole point of this required-first-run case: the only
 /// username/password this app's first run is meant to establish is SetupAdminPanel's
@@ -45,8 +74,8 @@ namespace ScheduleApp.Desktop.Views;
 /// Windows account genuinely lacks rights to create a database on the target server
 /// does this fail -- and it fails where App.xaml.cs already has a recovery path built
 /// in (the reactive Migrate()-failure MessageBox, offering this same dialog again,
-/// this time with the full Admin connection/New login sections available, since that
-/// entry point's isRequiredFirstRun is false).
+/// this time in DedicatedLogin mode with the full Admin connection/New login sections
+/// available).
 ///
 /// Shown before appsettings.json's connection string is even attempted, on any
 /// machine that doesn't have SharedConfigFile's shared.appsettings.json yet, so a
@@ -63,11 +92,15 @@ public partial class DatabaseSetupDialog : Wpf.Ui.Controls.FluentWindow
 
     private readonly DatabaseProvisioningService _provisioningService;
 
-    /// <summary>False only for the required-first-run entry point -- see this class's
-    /// own doc comment for why that one never touches DatabaseProvisioningService or
-    /// SQL Server at all. Set once, in the constructor, from isRequiredFirstRun; read
-    /// by CreateButton_Click to decide which of its two entirely different Create
-    /// behaviors to run.</summary>
+    /// <summary>True only for DatabaseSetupMode.DedicatedLogin -- see that enum's own
+    /// doc comment for why that one, and only that one, touches
+    /// DatabaseProvisioningService or SQL Server at all. Set once, in the constructor,
+    /// from the mode parameter; read by CreateButton_Click to decide which of its two
+    /// entirely different Create behaviors to run. Kept as its own field (rather than
+    /// switching on the mode parameter directly everywhere) since it's a simple bool
+    /// every downstream visibility/branch check already keyed off before the mode
+    /// parameter existed, and there was no reason to touch those once the *only*
+    /// thing that changed was how this one field gets set.</summary>
     private readonly bool _createDedicatedLogin;
 
     /// <summary>Set once Create succeeds -- null until then. MainWindow.xaml.cs's
@@ -86,26 +119,30 @@ public partial class DatabaseSetupDialog : Wpf.Ui.Controls.FluentWindow
     /// that doesn't parse, or is null/blank, e.g. nothing configured yet, just leaves
     /// those fields blank rather than failing to open the dialog at all).
     ///
-    /// isRequiredFirstRun swaps in mandatory-first-run framing -- the title, the intro
-    /// text (prepended, not replaced, so the paragraph explaining what Create actually
-    /// does still shows), and the Cancel button's label (-> "Exit", matching
-    /// SetupAdminPanel's own button for the same "nothing to skip past here"
-    /// situation) -- and collapses AdminConnectionPanel/LoginProvisioningPanel and
-    /// sets _createDedicatedLogin false, so Create takes the synchronous
-    /// Windows-Authentication-only path instead of asking DatabaseProvisioningService
-    /// for anything (see that field's own doc comment). ShowDialog() still just
-    /// returns true/false and ConnectionString either way, so the caller alone decides
-    /// what closing without a successful Create means. Defaults to false so the two
-    /// existing, genuinely optional entry points (SettingsDialog, the reactive
-    /// Migrate()-failure path) are unaffected.</summary>
+    /// mode selects which of CreateButton_Click's two entirely different Create
+    /// behaviors runs -- see DatabaseSetupMode's own doc comment. Defaults to
+    /// DedicatedLogin, the pre-mode behavior every existing optional entry point
+    /// (SettingsDialog's own Advanced button, the reactive Migrate()-failure path)
+    /// still gets unless it opts into WindowsAuthOnly explicitly.
+    ///
+    /// isRequiredFirstRun is a separate, orthogonal axis -- *framing*, not *which
+    /// Create path runs* (mode already decides that on its own): true swaps in
+    /// mandatory-first-run wording -- the title, the intro text (prepended, not
+    /// replaced, so the paragraph explaining what Create actually does still shows),
+    /// and the Cancel button's label (-> "Exit", matching SetupAdminPanel's own
+    /// button for the same "nothing to skip past here" situation). ShowDialog() still
+    /// just returns true/false and ConnectionString either way, so the caller alone
+    /// decides what closing without a successful Create means. Defaults to false so
+    /// every entry point except App.xaml.cs's own first-run gate is unaffected.</summary>
     public DatabaseSetupDialog(
         DatabaseProvisioningService provisioningService,
         string? currentConnectionString,
+        DatabaseSetupMode mode = DatabaseSetupMode.DedicatedLogin,
         bool isRequiredFirstRun = false)
     {
         InitializeComponent();
         _provisioningService = provisioningService;
-        _createDedicatedLogin = !isRequiredFirstRun;
+        _createDedicatedLogin = mode == DatabaseSetupMode.DedicatedLogin;
 
         IntroText.Text = _createDedicatedLogin
             ? "Creates a database and a SQL Server login on the server below, then grants that login access to it -- an alternative to Windows Authentication (see ScheduleApp.PushListener's README) for a machine where that's not practical. Running this again with the same database and login names updates the password and permissions instead of failing."
@@ -141,6 +178,12 @@ public partial class DatabaseSetupDialog : Wpf.Ui.Controls.FluentWindow
         }
 
         Loaded += (_, _) => ServerBox.Focus();
+
+        // Synchronous -- see SqlServerDiscovery's own doc comment for why (a registry
+        // read, never network discovery). ServerBox stays editable regardless of
+        // whether this finds anything, so an empty result never blocks typing a
+        // server name by hand.
+        ServerBox.ItemsSource = SqlServerDiscovery.DiscoverServers();
     }
 
     /// <summary>Shows/hides AdminUsernameBox/AdminPasswordBox -- only relevant, and

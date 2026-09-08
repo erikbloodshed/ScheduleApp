@@ -42,6 +42,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private readonly AttendanceSettings _attendanceSettings;
     private readonly PayrollSettings _payrollSettings;
     private readonly SignInSettings _signInSettings;
+    private readonly ConnectionProfilesSettings _connectionProfilesSettings;
     private readonly SharedConfigWriter _sharedConfigWriter;
     private readonly DatabaseBackupService _backupService;
     private readonly DatabaseProvisioningService _provisioningService;
@@ -81,6 +82,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         AttendanceSettings attendanceSettings,
         PayrollSettings payrollSettings,
         SignInSettings signInSettings,
+        ConnectionProfilesSettings connectionProfilesSettings,
         SharedConfigWriter sharedConfigWriter,
         DatabaseBackupService backupService,
         DatabaseProvisioningService provisioningService,
@@ -97,6 +99,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         _attendanceSettings = attendanceSettings;
         _payrollSettings = payrollSettings;
         _signInSettings = signInSettings;
+        _connectionProfilesSettings = connectionProfilesSettings;
         _sharedConfigWriter = sharedConfigWriter;
         _backupService = backupService;
         _provisioningService = provisioningService;
@@ -376,20 +379,24 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     }
 
     /// <summary>Opens SettingsDialog pre-filled with whatever's currently effective --
-    /// connection string, attendance device defaults, attendance policy, the Net Pay
-    /// rounding multiple, the sign-in logo, and the payslip company name -- whether
-    /// that's coming from the shared file already overriding, or from appsettings.json
-    /// (both are already merged into _configuration/_attendanceSettings/_payrollSettings/
-    /// _signInSettings by the time MainWindow exists, see App.OnStartup), then hands
-    /// anything the user Saved to SharedConfigWriter. AttendanceSettings/PayrollSettings
-    /// rather than _configuration for the device fields/policies since
-    /// AttendanceSettings.DeviceTransport/Policy and PayrollSettings.Policy/CompanyName
-    /// are already the shapes SettingsDialog/SharedConfigWriter expect.</summary>
+    /// connection string, saved connection profiles, attendance device defaults,
+    /// attendance policy, the Net Pay rounding multiple, the sign-in logo, and the
+    /// payslip company name -- whether that's coming from the shared file already
+    /// overriding, or from appsettings.json (all already merged into
+    /// _configuration/_attendanceSettings/_payrollSettings/_signInSettings/
+    /// _connectionProfilesSettings by the time MainWindow exists, see App.OnStartup),
+    /// then hands anything the user Saved to SharedConfigWriter. AttendanceSettings/
+    /// PayrollSettings/ConnectionProfilesSettings rather than _configuration for the
+    /// device fields/policies/profiles since AttendanceSettings.DeviceTransport/
+    /// Policy, PayrollSettings.Policy/CompanyName, and
+    /// ConnectionProfilesSettings.Profiles are already the shapes SettingsDialog/
+    /// SharedConfigWriter expect.</summary>
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SettingsDialog(
             _provisioningService,
             _configuration.GetConnectionString("ScheduleDb") ?? string.Empty,
+            _connectionProfilesSettings.Profiles,
             _attendanceSettings.DeviceIp,
             _attendanceSettings.DevicePort,
             _attendanceSettings.DeviceCommKey,
@@ -433,7 +440,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 dialog.ChangedPolicy,
                 dialog.ChangedPayrollPolicy,
                 dialog.ChangedLogoPath,
-                dialog.ChangedCompanyName);
+                dialog.ChangedCompanyName,
+                dialog.ChangedConnectionProfiles);
         }
         catch (UnauthorizedAccessException ex)
         {
