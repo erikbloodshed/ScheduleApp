@@ -16,5 +16,4 @@
   <Project Path="ScheduleApp.Attendance/ScheduleApp.Attendance.csproj">
     <Platform Solution="Debug|x64" Project="x64" />
   </Project>
-  <Project Path="ScheduleApp.FlexGridDemo/ScheduleApp.FlexGridDemo.csproj" />
 </Solution>
