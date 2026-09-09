@@ -57,7 +57,16 @@ public partial class FlexDataGrid : UserControl
         Columns = [];
         Columns.CollectionChanged += OnColumnsChanged;
 
-        SelectionBrush = (Brush)(TryFindResource("SystemAccentColorPrimaryBrush") ?? new SolidColorBrush(Color.FromArgb(0x40, 0x3B, 0x82, 0xF6)));
+        // Two brushes from one accent colour, and they have to differ: the selected row
+        // fills with the translucent one (so the cell text underneath stays readable) and
+        // the current cell outlines itself with the opaque one. Using a single brush for
+        // both -- as this did originally -- draws the current-cell border in exactly the
+        // colour of the row highlight it sits on, i.e. invisibly.
+        var accent = (TryFindResource("SystemAccentColorPrimaryBrush") as SolidColorBrush)?.Color
+                     ?? Color.FromRgb(0x3B, 0x82, 0xF6);
+
+        SelectionBrush = Freeze(new SolidColorBrush(Color.FromArgb(0x38, accent.R, accent.G, accent.B)));
+        CurrentCellBrush = Freeze(new SolidColorBrush(accent));
 
         _headerPresenter = new FlexGridColumnHeadersPresenter(this);
         HeaderHost.Child = _headerPresenter;
@@ -285,7 +294,19 @@ public partial class FlexDataGrid : UserControl
         if (selectionChanged) SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private static SolidColorBrush Freeze(SolidColorBrush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>Translucent accent fill behind a selected row.</summary>
     internal Brush SelectionBrush { get; }
+
+    /// <summary>Opaque accent used for the current cell's outline -- deliberately distinct
+    /// from <see cref="SelectionBrush"/>, which it is drawn on top of.</summary>
+    internal Brush CurrentCellBrush { get; }
+
     internal Brush? AlternatingRowsBrush => AlternatingRowsBackground;
 
     internal bool IsRowSelected(int rowIndex) => _selectedIndices.Contains(rowIndex);
@@ -332,10 +353,37 @@ public partial class FlexDataGrid : UserControl
         NotifyCellEdited(rowIndex, columnIndex);
     }
 
+    /// <summary>The row/column the keyboard acts on -- what F2 opens for editing, what
+    /// Tab/arrow keys move, and what <see cref="FlexGridRow"/> draws its current-cell
+    /// border around. -1 when nothing has been clicked yet.</summary>
+    internal int CurrentRowIndex => _currentRowIndex;
+    internal int CurrentColumnIndex => _currentColumnIndex;
+
     internal void SetCurrentCell(int rowIndex, int columnIndex)
     {
         _currentRowIndex = rowIndex;
         _currentColumnIndex = columnIndex;
+        RefreshCurrentCellIndicator();
+    }
+
+    /// <summary>Re-evaluates the current-cell border on every realized row -- cheap
+    /// (InvalidateArrange, not a rebuild) since only its Visibility/position depends on
+    /// CurrentRowIndex/CurrentColumnIndex, not the cells themselves.</summary>
+    private void RefreshCurrentCellIndicator()
+    {
+        foreach (var row in _rowsPanel.RealizedRows)
+            row.InvalidateArrange();
+    }
+
+    /// <summary>Commits whatever cell is currently mid-edit, if any -- what Tab/Up/Down
+    /// call before moving, so a key press during an edit doesn't leave that row's TextBox
+    /// behind, still open, with the current-cell pointer already moved elsewhere. Returns
+    /// false only when a commit was attempted and failed to parse, in which case the caller
+    /// should leave the edit in place rather than moving on.</summary>
+    private bool TryCommitActiveEdit()
+    {
+        var editingRow = _rowsPanel.RealizedRows.FirstOrDefault(r => r.IsEditing);
+        return editingRow is null || editingRow.CommitEdit();
     }
 
     internal void MoveCurrentCell(int rowIndex, int columnIndex, bool wrap = false)
@@ -579,6 +627,12 @@ public partial class FlexDataGrid : UserControl
         _rowsPanel.InvalidateMeasure();
     }
 
+    // Attached directly to this UserControl (see the constructor), so as a tunneling event
+    // it fires before any handler further down the tree -- including an active edit
+    // TextBox's own PreviewKeyDown -- gets a chance to run. That's deliberate: Tab/Up/Down
+    // are handled once, here, for both "a cell is merely selected" and "a cell is being
+    // edited" (committing first via TryCommitActiveEdit in the latter case) instead of
+    // duplicating -- and potentially disagreeing with -- per-editor logic.
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         switch (e.Key)
@@ -588,12 +642,21 @@ public partial class FlexDataGrid : UserControl
                 e.Handled = true;
                 break;
 
+            case Key.Tab when _currentRowIndex >= 0:
+                if (!TryCommitActiveEdit()) return;
+                var forward = Keyboard.Modifiers != ModifierKeys.Shift;
+                MoveCurrentCell(_currentRowIndex, Math.Max(0, _currentColumnIndex) + (forward ? 1 : -1), wrap: true);
+                e.Handled = true;
+                break;
+
             case Key.Down:
+                if (!TryCommitActiveEdit()) return;
                 MoveCurrentCell(_currentRowIndex + 1, Math.Max(0, _currentColumnIndex));
                 e.Handled = true;
                 break;
 
             case Key.Up:
+                if (!TryCommitActiveEdit()) return;
                 MoveCurrentCell(_currentRowIndex - 1, Math.Max(0, _currentColumnIndex));
                 e.Handled = true;
                 break;
