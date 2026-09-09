@@ -1,0 +1,45 @@
+<UserControl x:Class="ScheduleApp.Desktop.Controls.FlexGrid.FlexDataGrid"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             Focusable="False">
+    <Border BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            ClipToBounds="True">
+        <!-- Only this outer ScrollViewer scrolls horizontally, and it scrolls the header
+             and body together (they're both inside LayoutRoot below): that's what keeps
+             the header lined up with the body's columns without any manual offset syncing.
+             CanContentScroll="False" so it uses ordinary layout-based horizontal scrolling
+             (no virtualization needed on this axis; see FlexGridRowsPanel's own comment
+             for why row virtualization is the one that matters). -->
+        <ScrollViewer x:Name="OuterScrollViewer"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled"
+                      CanContentScroll="False">
+            <Grid x:Name="LayoutRoot">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border x:Name="HeaderHost"
+                        Grid.Row="0"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1" />
+
+                <!-- CanContentScroll="True" is what activates this ScrollViewer's use of
+                     its content's IScrollInfo implementation (FlexGridRowsPanel) instead of
+                     wrapping it in a plain ScrollContentPresenter: without it, row
+                     virtualization never engages and every row gets realized up front. -->
+                <ScrollViewer x:Name="BodyScrollViewer"
+                              Grid.Row="1"
+                              CanContentScroll="True"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" />
+            </Grid>
+        </ScrollViewer>
+    </Border>
+</UserControl>

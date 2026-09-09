@@ -1,0 +1,21 @@
+<Application x:Class="ScheduleApp.FlexGridDemo.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Same theme + control chrome ScheduleApp.Desktop's own App.xaml merges,
+                     so FlexDataGrid's DynamicResource brushes (CardStrokeColorDefaultBrush
+                     etc.) resolve the same way here as they do in the real app. AppStyles.xaml
+                     is pulled from ScheduleApp.Desktop's own compiled assembly (AssemblyName
+                     "ScheduleApp") via pack URI rather than copied, so this project has no
+                     styles of its own to keep in sync. -->
+                <ui:ThemesDictionary Theme="Light" />
+                <ui:ControlsDictionary />
+                <ResourceDictionary Source="pack://application:,,,/ScheduleApp;component/Themes/AppStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

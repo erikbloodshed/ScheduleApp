@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows7.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>ScheduleApp.FlexGridDemo</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Standalone showcase for FlexDataGrid (ScheduleApp.Desktop/Controls/FlexGrid): not
+       part of the real app, just a small runnable window to try the control's bound and
+       unbound modes without going through ScheduleApp.Desktop's own sign-in/database
+       startup. References ScheduleApp.Desktop purely to reuse the control itself and its
+       WPF-UI/AppStyles resources (see App.xaml); it doesn't touch any of that project's
+       database, payroll, or attendance code. -->
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScheduleApp.Desktop\ScheduleApp.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>

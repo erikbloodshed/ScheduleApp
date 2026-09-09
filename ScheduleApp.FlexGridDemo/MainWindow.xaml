@@ -1,0 +1,84 @@
+<ui:FluentWindow x:Class="ScheduleApp.FlexGridDemo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:flexGrid="clr-namespace:ScheduleApp.Desktop.Controls.FlexGrid;assembly=ScheduleApp"
+        Title="FlexDataGrid Demo"
+        Width="900"
+        Height="640"
+        WindowStartupLocation="CenterScreen"
+        ExtendsContentIntoTitleBar="True">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0"
+                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}" />
+
+        <TabControl Grid.Row="1" Margin="16,8,16,12">
+            <TabItem Header="Bound (ItemsSource)">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button x:Name="AddRowButton" Content="Add Row" Click="AddRowButton_Click" Margin="0,0,8,0" />
+                        <Button x:Name="RemoveSelectedButton" Content="Remove Selected" Click="RemoveSelectedButton_Click" Margin="0,0,8,0" />
+                        <CheckBox x:Name="ReadOnlyCheck" Content="Read-only" VerticalAlignment="Center" Margin="16,0,0,0"
+                                  Checked="ReadOnlyCheck_CheckedChanged" Unchecked="ReadOnlyCheck_CheckedChanged" />
+                        <CheckBox x:Name="AlternatingCheck" Content="Alternating rows" VerticalAlignment="Center" Margin="16,0,0,0"
+                                  IsChecked="True" Checked="AlternatingCheck_CheckedChanged" Unchecked="AlternatingCheck_CheckedChanged" />
+                    </StackPanel>
+
+                    <flexGrid:FlexDataGrid x:Name="Grid"
+                                            Grid.Row="1"
+                                            SelectionChanged="Grid_SelectionChanged"
+                                            CellEdited="Grid_CellEdited" />
+
+                    <TextBlock x:Name="StatusText"
+                               Grid.Row="2"
+                               Margin="0,8,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Unbound (cell-based)">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="No ItemsSource, no bound object -- rows/columns are just cells, set directly through Grid[row, col] or typed into like a spreadsheet. This is FlexGrid's own unbound mode." />
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button x:Name="UnboundAddRowButton" Content="Add Row" Click="UnboundAddRowButton_Click" Margin="0,0,8,0" />
+                        <Button x:Name="UnboundInsertRowButton" Content="Insert Above Selected" Click="UnboundInsertRowButton_Click" Margin="0,0,8,0" />
+                        <Button x:Name="UnboundRemoveRowButton" Content="Remove Selected" Click="UnboundRemoveRowButton_Click" Margin="0,0,8,0" />
+                        <Button x:Name="UnboundFillButton" Content="Fill With Random Numbers" Click="UnboundFillButton_Click" Margin="0,0,8,0" />
+                        <Button x:Name="UnboundClearButton" Content="Clear Rows" Click="UnboundClearButton_Click" />
+                    </StackPanel>
+
+                    <flexGrid:FlexDataGrid x:Name="UnboundGrid"
+                                            Grid.Row="2"
+                                            SelectionChanged="UnboundGrid_SelectionChanged"
+                                            CellEdited="UnboundGrid_CellEdited" />
+
+                    <TextBlock x:Name="UnboundStatusText"
+                               Grid.Row="3"
+                               Margin="0,8,0,0"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</ui:FluentWindow>
