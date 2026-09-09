@@ -113,7 +113,7 @@
                     Width="80"
                     Margin="0,0,8,0"
                     Click="PrintButton_Click"
-                    ToolTip="Send straight to your default PDF handler without opening it first." />
+                    ToolTip="Open a print preview -- print from there, choosing your printer." />
             <Button Content="Close"
                     Width="80"
                     IsCancel="True" />

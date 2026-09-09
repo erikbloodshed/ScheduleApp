@@ -1,6 +1,10 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Markup;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using ScheduleApp.Payroll;
@@ -27,8 +31,10 @@ namespace ScheduleApp.Desktop.Views;
 /// actions a person might reach for at different times after Save…, not just
 /// once right after saving; _savedPath below is what lets either one reuse
 /// the same written file on demand. Print is the one action beyond Save/Open
-/// this dialog adds -- see PrintButton_Click's own doc comment for why it's a
-/// shell "print" verb rather than a direct printer API call.
+/// this dialog adds -- see PrintButton_Click's own doc comment for why it
+/// opens a custom, in-app preview window rather than going straight to WPF's
+/// own PrintDialog (or shelling out to whatever's registered as the default
+/// PDF handler, which is what an even earlier version of this method did).
 /// </summary>
 public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
 {
@@ -98,8 +104,11 @@ public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
     /// <summary>Disables paging/Save/Print (Open is separately gated on
     /// _savedPath, not busy state, since it does no rendering of its own)
     /// and swaps the page image for a "Rendering…" placeholder while either
-    /// the initial preview or a Save/Print's own PDF generation is in
-    /// flight.</summary>
+    /// the initial preview or a Save's own PDF generation is in flight.
+    /// Print no longer renders anything of its own -- it reuses the page
+    /// images already loaded -- so PrintButton_Click doesn't call this; its
+    /// IsEnabled stays gated on whatever the initial preview load last set
+    /// here.</summary>
     private void SetBusy(bool busy)
     {
         BusyPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
@@ -197,41 +206,92 @@ public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
         Process.Start(new ProcessStartInfo(_savedPath) { UseShellExecute = true });
     }
 
-    /// <summary>Writes to a temp file (if Save… hasn't already written one)
-    /// and shell-executes the OS's own "print" verb against it. QuestPDF has
-    /// no direct print-to-printer API of its own -- only Generate*/
-    /// GenerateImages (see PayslipRenderer's own doc comment) -- so this
-    /// hands off to whatever's registered as the default PDF handler (Edge,
-    /// Acrobat Reader, etc.), the same "print" action that would run if a
-    /// person right-clicked the file and chose Print themselves, just
-    /// without that extra manual step. Reuses _savedPath if Save… already
-    /// ran (the exact same file, no reason to write it twice); otherwise
-    /// writes a throwaway temp copy just for this one print.</summary>
-    private async void PrintButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>Opens the custom print preview built by <see
+    /// cref="ShowPrintPreview"/> instead of going straight to WPF's own
+    /// <see cref="PrintDialog"/>. WPF's PrintDialog has a preview pane in its
+    /// chrome, but there's nothing behind it -- WPF never implemented a
+    /// hookup to feed it a previewable package, so it just shows "This app
+    /// doesn't support print preview" (a known WPF limitation, not something
+    /// specific to this app). This replaces an even earlier version that
+    /// shell-executed the OS's registered PDF handler's "print" verb, which
+    /// had the opposite problem: no dialog at all, since QuestPDF has no
+    /// direct print-to-printer API of its own (only Generate*/GenerateImages
+    /// -- see PayslipRenderer's own doc comment) and Edge's PDF handler sends
+    /// straight to the default printer with no dialog and no way to pick a
+    /// different one. A real Windows PrintDialog still shows up -- there's no
+    /// way around one somewhere in the flow, since that's what actually
+    /// offers the printer picker -- but only once <see cref="DocumentViewer"/>'s
+    /// own Print command is invoked from inside the preview window, so a
+    /// person has already seen the real thing before that point rather than
+    /// a placeholder message.</summary>
+    private void PrintButton_Click(object sender, RoutedEventArgs e)
     {
-        SetBusy(true);
-        try
-        {
-            string path = _savedPath ?? Path.Combine(Path.GetTempPath(), BuildDefaultFileName());
+        if (_pageImages.Count == 0) return;
 
-            if (_savedPath is null)
+        ShowPrintPreview(BuildPrintDocument());
+    }
+
+    /// <summary>One <see cref="FixedPage"/> per already-rendered preview
+    /// image (see LoadPreviewAsync/_pageImages), sized to a nominal Letter
+    /// page (8.5x11", the same page every payslip is composed at -- see
+    /// PayslipDocument's own doc comment) at WPF's 96-DPI device-independent
+    /// units. This is the one document both <see cref="ShowPrintPreview"/>'s
+    /// DocumentViewer displays and its own Print command sends to the
+    /// printer -- one render, reused for both looking and printing, same
+    /// "what's previewed is what prints" property PayslipRenderer.RenderPreview's
+    /// own doc comment describes for the PDF path. Reusing these images
+    /// (already rasterized at ImageGenerationSettings.Default's 288 DPI)
+    /// also skips composing/rendering anything a second time.</summary>
+    private FixedDocument BuildPrintDocument()
+    {
+        const double PageWidth = 8.5 * 96;
+        const double PageHeight = 11 * 96;
+
+        var document = new FixedDocument();
+        foreach (var pageImage in _pageImages)
+        {
+            var image = new Image
             {
-                var result = await Task.Run(() => PayslipRenderer.RenderToPdf(_payrolls, _companyName));
-                await File.WriteAllBytesAsync(path, result.PdfBytes);
-            }
+                Source = pageImage,
+                Stretch = Stretch.Uniform,
+                Width = PageWidth,
+                Height = PageHeight,
+            };
 
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, Verb = "print" });
+            var fixedPage = new FixedPage { Width = PageWidth, Height = PageHeight };
+            fixedPage.Children.Add(image);
+
+            var pageContent = new PageContent();
+            ((IAddChild)pageContent).AddChild(fixedPage);
+            document.Pages.Add(pageContent);
         }
-        catch (Exception ex)
+
+        return document;
+    }
+
+    /// <summary>The custom print preview itself -- a plain <see
+    /// cref="DocumentViewer"/> (page thumbnails, zoom, Prev/Next -- all built
+    /// in) showing <paramref name="document"/> inside its own modal window.
+    /// No print logic lives here: DocumentViewer's own toolbar already has a
+    /// Print button wired to <c>ApplicationCommands.Print</c>, which opens
+    /// WPF's PrintDialog and sends <c>document.DocumentPaginator</c> to
+    /// whatever printer is picked there -- the same PrintDialog
+    /// PrintButton_Click used to call directly, just reached one step later,
+    /// after an actual look at the payslip instead of a "doesn't support
+    /// preview" placeholder.</summary>
+    private void ShowPrintPreview(FixedDocument document)
+    {
+        var previewWindow = new Window
         {
-            MessageBox.Show(this,
-                $"Could not send this to your printer directly ({ex.Message}). Try Save… then Open, and print from there instead.",
-                "Could not print", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
+            Title = "Print Preview",
+            Width = 850,
+            Height = 950,
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new DocumentViewer { Document = document },
+        };
+
+        previewWindow.ShowDialog();
     }
 
     private string BuildDefaultFileName()

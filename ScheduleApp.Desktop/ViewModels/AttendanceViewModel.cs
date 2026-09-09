@@ -187,12 +187,17 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         // when Report.PeriodStart changes for a reason other than that same binding
         // setting it (e.g. after LoadEmployeeTreeAsync). Most forwarded properties keep
         // the child's own name, so the blanket relay reaches their bindings directly.
-        // The exceptions are the three pages' Refresh/Cancel glyph/tooltip pairs, which
-        // are forwarded under *prefixed* names (SummaryRefreshOrCancelGlyph etc.) because
-        // the child property name (RefreshOrCancelGlyph) would otherwise collide across
-        // all three -- the blanket relay re-raises "RefreshOrCancelGlyph", which no
-        // binding listens for, so those are re-raised explicitly in the _busy handler
-        // below off the one flag all three derive from.
+        // The exceptions are the three pages' Refresh/Cancel button-state properties,
+        // which are forwarded under *prefixed* names (SummaryRefreshOrCancelGlyph etc.)
+        // because the child property name would otherwise collide across all three -- the
+        // blanket relay re-raises the child's own (unprefixed) name, which no binding
+        // listens for, so those are re-raised explicitly in the _busy handler below off
+        // the one flag all three derive from. PunchRecords' pair is named
+        // RefreshOrCancelContent/RefreshOrCancelIcon (split so its controls:IconButton can
+        // show a text label and a glyph as two separate things), while Report's and
+        // ManualEntriesTab's stay the older single RefreshOrCancelGlyph (a plain Button
+        // whose Content *is* the glyph) -- see PunchRecordsViewModel.RefreshOrCancelContent's
+        // own doc comment for why that one page's button looks different.
         Report.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
         PunchRecords.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
         ManualEntriesTab.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
@@ -205,7 +210,8 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
 
             OnPropertyChanged(nameof(SummaryRefreshOrCancelGlyph));
             OnPropertyChanged(nameof(SummaryRefreshOrCancelToolTip));
-            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelGlyph));
+            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelContent));
+            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelIcon));
             OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelToolTip));
             OnPropertyChanged(nameof(ManualEntriesRefreshOrCancelGlyph));
             OnPropertyChanged(nameof(ManualEntriesRefreshOrCancelToolTip));
@@ -383,9 +389,13 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
 
     /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
     /// PunchRecordsViewModel.RefreshOrCancelStoredLogs's own doc comment. Named with the
-    /// "PunchRecords" prefix for the same reason SummaryRefreshOrCancelGlyph is.</summary>
+    /// "PunchRecords" prefix for the same reason SummaryRefreshOrCancelGlyph is. Split into
+    /// Content/Icon rather than a single Glyph -- see
+    /// PunchRecordsViewModel.RefreshOrCancelContent's own doc comment -- since this
+    /// button, unlike Summary's/ManualEntries', is a controls:IconButton.</summary>
     public IRelayCommand RefreshOrCancelStoredLogsCommand => PunchRecords.RefreshOrCancelStoredLogsCommand;
-    public string PunchRecordsRefreshOrCancelGlyph => PunchRecords.RefreshOrCancelGlyph;
+    public string PunchRecordsRefreshOrCancelContent => PunchRecords.RefreshOrCancelContent;
+    public string PunchRecordsRefreshOrCancelIcon => PunchRecords.RefreshOrCancelIcon;
     public string PunchRecordsRefreshOrCancelToolTip => PunchRecords.RefreshOrCancelToolTip;
 
     /// <summary>Named with the "LogView" prefix (unlike PreviousPeriodCommand/

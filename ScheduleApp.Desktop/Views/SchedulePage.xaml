@@ -170,9 +170,17 @@
                             Padding="8,2" />
                 </StackPanel>
 
+                <!-- Bordered box, same look as the Attendance tab's own Report Scope tree
+                     (see AttendanceSummaryView.xaml's copy of this TreeView) - just
+                     BorderThickness/BorderBrush set directly on the TreeView itself
+                     (that page doesn't wrap its tree in a separate Border either), not
+                     the page's CardBorder style, which this page doesn't otherwise use
+                     for its tree. -->
                 <TreeView x:Name="EmployeeTree"
                           ItemsSource="{Binding Departments}"
                           SelectedItemChanged="EmployeeTree_OnSelectedItemChanged"
+                          BorderThickness="1"
+                          BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                           ItemContainerStyle="{StaticResource DepartmentItemStyle}">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"

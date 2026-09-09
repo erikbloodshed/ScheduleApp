@@ -103,7 +103,8 @@ public partial class PunchRecordsViewModel : ObservableObject
                 // this is what flips the toolbar's "Load" button between Load and Cancel,
                 // same mechanism ReportViewModel's own analogous handler uses for the
                 // Attendance Summary tab's Refresh/Cancel button.
-                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
+                OnPropertyChanged(nameof(RefreshOrCancelContent));
+                OnPropertyChanged(nameof(RefreshOrCancelIcon));
                 OnPropertyChanged(nameof(RefreshOrCancelToolTip));
                 RefreshOrCancelStoredLogsCommand.NotifyCanExecuteChanged();
             }
@@ -443,11 +444,16 @@ public partial class PunchRecordsViewModel : ObservableObject
             _ = LoadStoredLogsCoreAsync(showFeedback: true);
     }
 
-    /// <summary>Plain-Unicode symbols (not the Segoe Fluent Icons glyphs
-    /// ReportViewModel.RefreshOrCancelGlyph uses) since this button has never been an
-    /// icon-only IconHeaderActionButton -- it's a plain text "Load" button sitting among
-    /// other plain text buttons (◀/▶/Export…/Open) in this same Period row.</summary>
-    public string RefreshOrCancelGlyph => _busy.IsVisiblyRunning ? "✕ Cancel" : "Load";
+    /// <summary>Split into a text Content and a separate Icon -- unlike
+    /// ReportViewModel.RefreshOrCancelGlyph/ManualEntriesViewModel.RefreshOrCancelGlyph,
+    /// each a single Segoe Fluent Icons glyph that *is* an icon-only Button's whole
+    /// Content -- because this button is a controls:IconButton (see that control's own
+    /// doc comment) showing a short label and an icon side by side, sitting among the
+    /// other labeled buttons (◀/▶/Export/Import/Fetch from Device) in this same Period
+    /// row rather than standing alone the way the other two pages' buttons do.</summary>
+    public string RefreshOrCancelContent => _busy.IsVisiblyRunning ? "Cancel" : "Reload";
+
+    public string RefreshOrCancelIcon => _busy.IsVisiblyRunning ? "\uE711" : "\uE72C"; // Segoe Fluent Icons: Cancel / Refresh
 
     /// <summary>Generic on purpose, not "Stop this load" -- same reasoning as the old
     /// Cancel button's own ToolTip, which this replaces: IsVisiblyRunning can be true

@@ -1,5 +1,6 @@
 <UserControl x:Class="ScheduleApp.Desktop.Views.PunchRecordsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- One of three views the "Attendance" drawer item's submenu navigates between - see
          AttendanceSummaryView.xaml's own doc comment for the shared AttendanceViewModel/
@@ -8,80 +9,26 @@
          Import…/Fetch from Device buttons, moved here from that old shared toolbar (which
          used to sit above the TabControl, visible regardless of which tab was showing) -
          importing punches is what this page is *for*, so it made more sense living on the
-         page that actually displays them than on a page-external strip. Generate Reports
-         (AttendanceSummaryView) still picks up whatever a fetch/import here added the same
-         way it always has, via the shared AttendanceDataVersion.DeviceLogsVersion counter -
-         moving the buttons only changes where they're clicked from, not what they affect. -->
+         page that actually displays them than on a page-external strip. They used to sit
+         in their own boxed toolbar row above this one; now folded into the same row as
+         Load/Export below (see that row's own comment) since all four are just different
+         ways of getting punches into/out of the grid beneath them - no reason to spread
+         that across two rows. Generate Reports (AttendanceSummaryView) still picks up
+         whatever a fetch/import here added the same way it always has, via the shared
+         AttendanceDataVersion.DeviceLogsVersion counter - moving the buttons only changes
+         where they're clicked from, not what they affect. -->
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-
-        <!-- Shared "card" look for the toolbar strip - see AttendanceSummaryView.xaml's
-             own copy of this style for the fuller "why duplicated, not shared" doc
-             comment. -->
-        <Style x:Key="CardBorder"
-               TargetType="Border">
-            <Setter Property="Background"
-                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
-            <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
-            <Setter Property="BorderThickness"
-                    Value="1" />
-            <Setter Property="CornerRadius"
-                    Value="4" />
-            <Setter Property="Padding"
-                    Value="10,8" />
-            <Setter Property="Margin"
-                    Value="0,0,0,8" />
-        </Style>
-
-        <Style x:Key="GroupLabel"
-               TargetType="TextBlock">
-            <Setter Property="VerticalAlignment"
-                    Value="Center" />
-            <Setter Property="Margin"
-                    Value="0,0,8,0" />
-            <Setter Property="Foreground"
-                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
-            <Setter Property="FontWeight"
-                    Value="SemiBold" />
-        </Style>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     </UserControl.Resources>
 
     <Grid Margin="10"
-          RowDefinitions="Auto,Auto,Auto,*">
-        <!-- Punches toolbar, relocated here from the old page-external strip (see this
-             file's own doc comment above) - three ways in, side by side: .dat import,
-             ZKTeco device fetch, and (on the Manual Entries page) a manual entry for
-             whatever neither of those has. The first two both call the same underlying
-             import, so it's fine to use either one, or both, for the same period;
-             already-known punches are simply skipped as duplicates either way. Fetch from
-             Device connects straight to the terminal configured in Settings (IP/port/comm
-             key/UDP) - no per-fetch dialog, since a deployment only ever talks to one
-             device (see DeviceFetchViewModel.FetchFromDeviceAsync). -->
-        <Border Grid.Row="0"
-                Style="{StaticResource CardBorder}">
-            <DockPanel LastChildFill="False">
-                <WrapPanel DockPanel.Dock="Left"
-                           Orientation="Horizontal">
-                    <TextBlock Text="Punches:"
-                               Style="{StaticResource GroupLabel}" />
-                    <Button Content="Import"
-                            Command="{Binding ImportPunchLogCommand}"
-                            Margin="0,0,6,0"
-                            ToolTip="Add punches from a .dat file to the database -- Generate Reports and this grid both need at least one import first." />
-                    <Button Content="Fetch from Device"
-                            Command="{Binding FetchFromDeviceCommand}"
-                            ToolTip="Pull the full log from the device configured in Settings -- same as Import, without a file. Already-known punches are skipped, so it's safe to re-run." />
-                </WrapPanel>
-            </DockPanel>
-        </Border>
-
-        <StackPanel Grid.Row="1"
+          RowDefinitions="Auto,Auto,*">
+        <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
                     Margin="0,0,0,10">
             <TextBlock Text="Start"
                        Width="40"
-                       VerticalAlignment="Center" />
+                       VerticalAlignment="Center"/>
             <!-- Steps LogViewStart/LogViewEnd to the adjacent cut-off period
                  and reloads immediately; see
                  PunchRecordsViewModel.PreviousPeriodAsync. -->
@@ -89,7 +36,7 @@
                     Command="{Binding PreviousLogViewPeriodCommand}"
                     Padding="8,3"
                     Margin="0,0,6,0"
-                    ToolTip="Previous cut-off period." />
+                    ToolTip="Previous cut-off period."/>
             <DatePicker SelectedDate="{Binding LogViewStart}"
                         Width="190"
                         Margin="0,0,24,0">
@@ -101,7 +48,7 @@
                                     <!-- Overriding the text binding to apply the custom string format -->
                                     <TextBox Text="{Binding Path=SelectedDate,
                                             RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                             TextAlignment="Center" />
+                                             TextAlignment="Center"/>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
@@ -110,7 +57,7 @@
             </DatePicker>
             <TextBlock Text="End"
                        Width="32"
-                       VerticalAlignment="Center" />
+                       VerticalAlignment="Center"/>
             <DatePicker SelectedDate="{Binding LogViewEnd}"
                         Width="190"
                         Margin="0,0,6,0">
@@ -122,7 +69,7 @@
                                     <!-- Overriding the text binding to apply the custom string format -->
                                     <TextBox Text="{Binding Path=SelectedDate,
                                             RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                             TextAlignment="Center" />
+                                             TextAlignment="Center"/>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
@@ -136,15 +83,15 @@
                     Command="{Binding NextLogViewPeriodCommand}"
                     Padding="8,3"
                     Margin="0,0,18,0"
-                    ToolTip="Next cut-off period." />
+                    ToolTip="Next cut-off period."/>
             <TextBlock Text="Search"
                        VerticalAlignment="Center"
-                       Margin="0,0,8,0" />
+                       Margin="0,0,8,0"/>
             <Grid VerticalAlignment="Center">
                 <TextBox x:Name="PunchSearchTextBox"
                          Width="220"
                          Text="{Binding LogViewSearchText, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Filter by Employee ID, name, or department -- doesn't change what Export saves." />
+                         ToolTip="Filter by Employee ID, name, or department -- doesn't change what Export saves."/>
                 <Popup PlacementTarget="{Binding ElementName=PunchSearchTextBox}"
                        Placement="Bottom"
                        Width="220"
@@ -160,7 +107,7 @@
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="8"
                                               ShadowDepth="1"
-                                              Opacity="0.2" />
+                                              Opacity="0.2"/>
                         </Border.Effect>
                         <ListBox x:Name="PunchSearchSuggestionList"
                                  ItemsSource="{Binding LogViewSuggestions}"
@@ -170,9 +117,9 @@
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
                                     <Setter Property="Padding"
-                                            Value="8,4" />
+                                            Value="8,4"/>
                                     <Setter Property="Cursor"
-                                            Value="Hand" />
+                                            Value="Hand"/>
                                 </Style>
                             </ListBox.ItemContainerStyle>
                         </ListBox>
@@ -185,30 +132,49 @@
                  used to be a separate Cancel button in this page's own toolbar CardBorder
                  above, visible only while something was running; this one button now
                  toggles in place instead, same pattern as AttendanceSummaryView's own
-                 Period-row button. Also now the one place to cancel Import…/Fetch from
-                 Device above, not just this page's own Load. -->
-            <Button Content="{Binding PunchRecordsRefreshOrCancelGlyph}"
-                    Command="{Binding RefreshOrCancelStoredLogsCommand}"
-                    Width="80"
-                    Margin="12,0,0,0"
-                    ToolTip="{Binding PunchRecordsRefreshOrCancelToolTip}" />
-            <Button Content="Export"
+                 Period-row button. Also the one place to cancel Import…/Fetch from Device
+                 alongside it below, not just this page's own Load. -->
+            <controls:IconButton Content="{Binding PunchRecordsRefreshOrCancelContent}"
+                                 Icon="{Binding PunchRecordsRefreshOrCancelIcon}"
+                                 Command="{Binding RefreshOrCancelStoredLogsCommand}"
+                                 Width="90"
+                                 Margin="12,0,0,0"
+                                 ToolTip="{Binding PunchRecordsRefreshOrCancelToolTip}"/>
+            <controls:IconButton Content="Export"
+                    Icon="&#xE8A5;"
                     Command="{Binding ExportStoredLogsCommand}"
-                    Padding="8,3"
                     Margin="8,0,0,0"
-                    ToolTip="Save these punches to Excel, independent of any report -- opens automatically." />
+                    ToolTip="Save these punches to Excel, independent of any report -- opens automatically."/>
+            <!-- Two more ways in, alongside Load/Export above rather than in their own
+                 boxed toolbar row (see this file's own doc comment) - .dat import and
+                 ZKTeco device fetch. Both call the same underlying import, so it's fine to
+                 use either one, or both, for the same period; already-known punches are
+                 simply skipped as duplicates either way. Fetch from Device connects
+                 straight to the terminal configured in Settings (IP/port/comm key/UDP) -
+                 no per-fetch dialog, since a deployment only ever talks to one device (see
+                 DeviceFetchViewModel.FetchFromDeviceAsync). -->
+            <controls:IconButton Content="Import"
+                    Icon="&#xE8E5;"
+                    Command="{Binding ImportPunchLogCommand}"
+                    Margin="12,0,0,0"
+                    ToolTip="Add punches from a .dat file to the database -- Generate Reports and this grid both need at least one import first."/>
+            <controls:IconButton Content="Fetch from Device"
+                    Icon="&#xE814;"
+                    Command="{Binding FetchFromDeviceCommand}"
+                    Margin="6,0,0,0"
+                    ToolTip="Pull the full log from the device configured in Settings -- same as Import, without a file. Already-known punches are skipped, so it's safe to re-run."/>
         </StackPanel>
 
-        <TextBlock Grid.Row="2"
+        <TextBlock Grid.Row="1"
                    Margin="0,0,0,6"
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding HasLoadedStoredLogs, Converter={StaticResource BoolToVisibility}}">
             <Run Text="{Binding StoredLogsCount, Mode=OneWay}"
-                 FontWeight="Bold" />
-            <Run Text="punch(es) found in range." />
+                 FontWeight="Bold"/>
+            <Run Text="punch(es) found in range."/>
         </TextBlock>
 
-        <DataGrid Grid.Row="3"
+        <DataGrid Grid.Row="2"
                   ItemsSource="{Binding StoredLogsView}"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
@@ -220,28 +186,28 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="PIN"
                                     Binding="{Binding EmployeeId}"
-                                    Width="90" />
+                                    Width="90"/>
                 <DataGridTextColumn Header="Employee Name"
                                     Binding="{Binding EmployeeName}"
-                                    Width="200" />
+                                    Width="200"/>
                 <DataGridTextColumn Header="Department"
                                     Binding="{Binding DepartmentName}"
-                                    Width="140" />
+                                    Width="140"/>
                 <DataGridTextColumn Header="Date"
                                     Binding="{Binding Timestamp, StringFormat={}{0:MM/dd/yyyy}}"
-                                    Width="100" />
+                                    Width="100"/>
                 <DataGridTextColumn Header="Time"
                                     Binding="{Binding Timestamp, StringFormat={}{0:hh:mm tt}}"
-                                    Width="90" />
+                                    Width="90"/>
                 <DataGridTextColumn Header="Type"
                                     Binding="{Binding PunchTypeText}"
-                                    Width="90" />
+                                    Width="90"/>
                 <DataGridTextColumn Header="Source"
                                     Binding="{Binding Source}"
-                                    Width="70" />
+                                    Width="70"/>
                 <DataGridTextColumn Header="Imported"
                                     Binding="{Binding ImportedAt, StringFormat={}{0:MM/dd/yyyy h:mm tt}}"
-                                    Width="*" />
+                                    Width="*"/>
             </DataGrid.Columns>
         </DataGrid>
     </Grid>
