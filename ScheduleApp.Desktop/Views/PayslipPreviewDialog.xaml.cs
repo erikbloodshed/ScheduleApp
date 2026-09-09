@@ -20,14 +20,15 @@ namespace ScheduleApp.Desktop.Views;
 /// Rendering happens on a background thread (see <see
 /// cref="LoadPreviewAsync"/>) since composing/rasterizing a multi-employee
 /// batch is real CPU work that would otherwise freeze the dialog while it
-/// runs. Save…/Open mirror ReportViewModel.ExportSummary/OpenSummary's
-/// existing "write to a chosen path, then a separate button opens what was
-/// just written" shape exactly (see Print_Feature.md's own Preview section:
-/// "mirrors the existing ReportViewModel.ExportSummary/OpenSummary pattern
-/// already used for xlsx exports elsewhere in the app"). Print is the one
-/// new action this dialog adds beyond that existing pattern -- see
-/// PrintButton_Click's own doc comment for why it's a shell "print" verb
-/// rather than a direct printer API call.
+/// runs. Save…/Open/Print here keep Open as a separate, repeatable button
+/// (unlike ReportViewModel.ExportSummary, which now opens the file itself the
+/// moment it's written, with no separate Open button left at all -- see that
+/// method's own doc comment) because Open and Print are two independent
+/// actions a person might reach for at different times after Save…, not just
+/// once right after saving; _savedPath below is what lets either one reuse
+/// the same written file on demand. Print is the one action beyond Save/Open
+/// this dialog adds -- see PrintButton_Click's own doc comment for why it's a
+/// shell "print" verb rather than a direct printer API call.
 /// </summary>
 public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
 {
@@ -45,8 +46,9 @@ public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
 
     /// <summary>Set once Save… succeeds -- lets Open/Print reuse the exact
     /// file that was already written instead of asking again or writing a
-    /// second throwaway copy, mirroring ReportViewModel.OutputSummaryPath's
-    /// own "remember what Export just wrote" role.</summary>
+    /// second throwaway copy. See this class's own doc comment for why Open
+    /// stays a separate, repeatable button here rather than firing
+    /// automatically the way ReportViewModel.ExportSummary's now does.</summary>
     private string? _savedPath;
 
     public PayslipPreviewDialog(IReadOnlyList<PayrollResult> payrolls, string companyName)

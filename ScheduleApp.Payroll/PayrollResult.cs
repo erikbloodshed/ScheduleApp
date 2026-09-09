@@ -1,4 +1,4 @@
-using ScheduleApp.Core.Enums;
+﻿using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Payroll;
 
 namespace ScheduleApp.Payroll;
@@ -166,10 +166,16 @@ public class PayrollResult
     /// depending on whether the line itself is present.)</summary>
     public required IReadOnlyList<PayrollLineItem> ComputedGrossPay { get; init; }
 
-    /// <summary>Undertime -- the one computed (non-editable) Deductions line. A
-    /// list rather than a single property for symmetry with ComputedGrossPay,
-    /// and so PayrollSummaryView can render both the same way without a special
-    /// case for there being exactly one.</summary>
+    /// <summary>Undertime -- the one computed (non-editable) Deductions line,
+    /// present unless Employee.ExemptFromUndertimeDeduction is true, in which case
+    /// the list is empty -- same "omit rather than zero" convention ComputedGrossPay's
+    /// own Rest Day Pay line uses for Employee.QualifiesForRestDayPay (see
+    /// PayrollCalculator.Calculate). UndertimeHours/UndertimePayAmount/
+    /// UndertimeWaived below carry the same figures the line itself would, without
+    /// depending on whether it's present. A list rather than a single nullable
+    /// property for symmetry with ComputedGrossPay, and so PayrollSummaryView can
+    /// render both the same way without a special case for there being at most
+    /// one.</summary>
     public required IReadOnlyList<PayrollLineItem> ComputedDeductions { get; init; }
 
     /// <summary>Count of days credited as paid this period, matching the day
@@ -288,14 +294,47 @@ public class PayrollResult
     /// and so can't be divided back out into a day count on its own.</summary>
     public required int HolidayWorkedDays { get; init; }
 
-    /// <summary>Total Undertime hours for the period, matching the figure already
-    /// shown inline in ComputedDeductions[0].Label. Sum of each day's hours already
-    /// rounded to 2 dp, same reasoning as OvertimeHours above. Unaffected by whether
-    /// Undertime is waived, same as ComputedDeductions[0].Amount itself, which stays
-    /// the real computed figure regardless of Waived (see PayrollLineItem.Waived's
-    /// own doc comment). Exposed here as its own property for the same reason as
-    /// WorkDays above.</summary>
+    /// <summary>Total Undertime hours for the period -- matches the figure shown
+    /// inline in the Undertime line's Label within ComputedDeductions when that
+    /// line is present (see UndertimePayAmount below for why it sometimes isn't).
+    /// Sum of each day's hours already rounded to 2 dp, same reasoning as
+    /// OvertimeHours above. Real regardless of Employee.ExemptFromUndertimeDeduction
+    /// or a per-period waiver -- shortfall hours worked is a fact independent of
+    /// whether they're deducted for it, same "worked is a fact" reasoning
+    /// RestDayHours' own doc comment gives for Rest Day Pay. Exposed here as its
+    /// own property for the same reason as WorkDays above.</summary>
     public required decimal UndertimeHours { get; init; }
+
+    /// <summary>The Undertime peso figure this period computed to -- added once
+    /// PayrollExcelExporter turned out to need this and had been reaching for
+    /// ComputedDeductions[0].Amount instead, which throws for any employee with
+    /// Employee.ExemptFromUndertimeDeduction set, since ComputedDeductions omits
+    /// the Undertime line entirely for them (see PayrollCalculator.Calculate) --
+    /// the exact same crash PayrollExcelExporter hit for RestDayPayAmount before
+    /// that property existed (see its own doc comment).
+    ///
+    /// Unlike RestDayPayAmount, this is NOT zeroed when the line is omitted: it's
+    /// always hourlyRate * UndertimeHours above, the same raw computed figure
+    /// ComputedDeductions[0].Amount carries when the line does exist, regardless
+    /// of exemption or a manual per-period waiver -- matching how
+    /// PayrollLineItem.Amount already behaves for a merely-waived (non-exempt)
+    /// employee, whose line stays visible and unzeroed too. Whether it actually
+    /// counts toward TotalDeductions is UndertimeWaived below, not this value --
+    /// the same Amount-vs-Waived split PayrollLineItem itself uses. Equivalent to
+    /// (and always kept equal to) the Undertime line's Amount when that line is
+    /// present, so a reader like PayrollExcelExporter can use this directly
+    /// without checking ComputedDeductions.Count first.</summary>
+    public required decimal UndertimePayAmount { get; init; }
+
+    /// <summary>Whether Undertime is excluded from TotalDeductions this period --
+    /// true for an Employee.ExemptFromUndertimeDeduction employee (always, since
+    /// the line is omitted precisely because this is permanently true for them)
+    /// or a non-exempt employee who's manually waived this one period (see
+    /// IPayrollUndertimeWaiverRepository), false otherwise. Equivalent to (and
+    /// always kept equal to) the Undertime line's own Waived when that line is
+    /// present -- exists here for the same "don't check ComputedDeductions.Count
+    /// first" reason as UndertimePayAmount above.</summary>
+    public required bool UndertimeWaived { get; init; }
 
     /// <summary>One group per PayrollAdjustmentType where IsDeduction() is false
     /// -- Allowance, Incentive, Premium Pay, in that enum-declaration

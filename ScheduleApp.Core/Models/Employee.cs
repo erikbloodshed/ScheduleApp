@@ -1,4 +1,4 @@
-using ScheduleApp.Core.Enums;
+﻿using ScheduleApp.Core.Enums;
 
 namespace ScheduleApp.Core.Models;
 
@@ -194,11 +194,14 @@ public class Employee
     /// see ScheduleApp.Payroll.PayrollCalculator) never reduces Total Deductions/Net
     /// Pay, no matter how far short of the day's scheduled Work Time they ran --
     /// they're always paid their full DailyRate/effectiveDailyRate for a credited
-    /// day. The Undertime figure itself still shows on the Payroll Summary/payslip
-    /// for reference (same as a manually "disregarded" period -- see
-    /// PayrollLineItem.Waived), it's just never subtracted, and PayrollSummaryView's
-    /// own per-period Exclude/Include toggle is hidden for this employee's Undertime
-    /// line rather than offered as a no-op (see PayrollLineItem.SupportsWaiver).
+    /// day. The Undertime line itself is left off the Payroll Summary/payslip
+    /// entirely for this employee -- not shown-but-excluded the way a manually
+    /// "disregarded" period is for an ordinary employee (see PayrollLineItem.Waived)
+    /// -- since the concept doesn't apply to their pay at all; with no line, there's
+    /// also no per-period Exclude/Include toggle to show (see
+    /// PayrollLineItem.SupportsWaiver). PayrollResult.UndertimeHours/
+    /// UndertimePayAmount/UndertimeWaived still carry the real figures for a reader
+    /// that wants them regardless (e.g. PayrollExcelExporter).
     ///
     /// Hours worked *beyond* the day's scheduled Work Time are unaffected -- still
     /// Overtime, exactly as for any other employee (see OvertimeHours in

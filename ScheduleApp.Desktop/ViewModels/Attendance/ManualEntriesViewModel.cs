@@ -85,6 +85,17 @@ public partial class ManualEntriesViewModel : ObservableObject
                 ImportManualEntriesCommand.NotifyCanExecuteChanged();
                 PreviousPeriodCommand.NotifyCanExecuteChanged();
                 NextPeriodCommand.NotifyCanExecuteChanged();
+                RefreshOrCancelManualEntriesCommand.NotifyCanExecuteChanged();
+            }
+            else if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
+            {
+                // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
+                // this is what flips the toolbar's icon Refresh button between Refresh
+                // and Cancel, same mechanism ReportViewModel's own analogous handler
+                // uses for the Attendance Summary tab's Refresh/Cancel button.
+                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
+                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
+                RefreshOrCancelManualEntriesCommand.NotifyCanExecuteChanged();
             }
         };
     }
@@ -110,7 +121,7 @@ public partial class ManualEntriesViewModel : ObservableObject
     /// the date range, or AttendanceDataVersion.ManualLogsVersion (this grid only ever
     /// shows ManualAttendanceLogs, so DeviceLogsVersion changing is irrelevant here).
     /// Checked only by OnIsManualEntriesTabSelectedChanged's silent auto-reload above --
-    /// LoadManualEntriesAsync (the explicit Load/↻ Refresh click) always runs regardless.
+    /// LoadManualEntriesAsync (the explicit Load/Refresh click) always runs regardless.
     /// Mirrors ReportViewModel.ShouldAutoReload/PunchRecordsViewModel.ShouldAutoReload;
     /// see the former's doc comment for why this is what actually stops the grid's
     /// scroll position resetting on an ordinary tab revisit.
@@ -169,13 +180,48 @@ public partial class ManualEntriesViewModel : ObservableObject
         return LoadManualEntriesCoreAsync(showFeedback: true);
     }
 
-    [ObservableProperty]
-    private string? manualEntriesExportPath;
-
-    partial void OnManualEntriesExportPathChanged(string? value) => OpenManualEntriesExportCommand.NotifyCanExecuteChanged();
-
     [RelayCommand(CanExecute = nameof(CanLoad))]
     private Task LoadManualEntriesAsync() => LoadManualEntriesCoreAsync(showFeedback: true);
+
+    /// <summary>What ManualEntriesView's toolbar button is actually wired to now -- see
+    /// ReportViewModel.RefreshOrCancelSummary's own doc comment for the fuller reasoning.
+    /// This replaces a separate "Cancel" button that used to sit docked to the right of
+    /// this same toolbar row, visible only while _busy.IsVisiblyRunning, with one button
+    /// that toggles in place instead of two buttons appearing/disappearing next to each
+    /// other -- see RefreshOrCancelGlyph's own doc comment for its current look/placement.
+    ///
+    /// CanExecute is IsVisiblyRunning (always fine to try to cancel) OR CanLoad() -- needed
+    /// because CanLoad() alone would leave the button disabled during a run it didn't
+    /// itself start (an Import/Export here, or an Import/Fetch started from Punch Records)
+    /// at exactly the moment IsVisiblyRunning makes it look like a live Cancel
+    /// button.</summary>
+    private bool CanRefreshOrCancelManualEntries() => _busy.IsVisiblyRunning || CanLoad();
+
+    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelManualEntries))]
+    private void RefreshOrCancelManualEntries()
+    {
+        if (_busy.IsVisiblyRunning)
+            _busy.Cancel();
+        else
+            _ = LoadManualEntriesCoreAsync(showFeedback: true);
+    }
+
+    /// <summary>Segoe Fluent Icons glyphs for RefreshOrCancelManualEntriesCommand's
+    /// button -- see ReportViewModel.RefreshOrCancelGlyph's own doc comment for why these
+    /// two specific codepoints (Refresh/Cancel). Icon-only, same IconHeaderActionButton
+    /// look as AttendanceSummaryView's own Period-row button, now that this button is
+    /// docked to this row's own right edge rather than sitting inline among the other
+    /// (text) buttons in the toolbar's left-docked StackPanel.</summary>
+    public string RefreshOrCancelGlyph => _busy.IsVisiblyRunning ? "" : "";
+
+    /// <summary>Generic on purpose, not "Stop this load" -- same reasoning as the old
+    /// Cancel button's own ToolTip, which this replaces: IsVisiblyRunning can be true
+    /// because of literally anything on the Attendance page (an Import/Fetch started from
+    /// Punch Records, a manual entry save/delete, or this tab's own Load), not only a
+    /// click on this same button.</summary>
+    public string RefreshOrCancelToolTip => _busy.IsVisiblyRunning
+        ? "Stop whatever's currently running."
+        : "Reload manual entries for this period.";
 
     /// <summary>Exports manual entries in [ManualEntriesStart, ManualEntriesEnd] to Excel
     /// -- same range PunchRecordsViewModel.ExportStoredLogsAsync validates, just against
@@ -213,7 +259,7 @@ public partial class ManualEntriesViewModel : ObservableObject
             // a Cancel click always lands before any file is written, never partway
             // through one.
             AttendanceExcelExporter.ExportManualLogsToExcel(dialog.FileName, entries, employees);
-            ManualEntriesExportPath = dialog.FileName;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
             _saveViewState();
             _statusBarService.ShowSuccess($"Saved {entries.Count} manual entry(ies) to {dialog.FileName}.");
         },
@@ -299,12 +345,6 @@ public partial class ManualEntriesViewModel : ObservableObject
     }
 
     private bool CanImportManualEntries() => !_busy.IsRunning;
-
-    [RelayCommand(CanExecute = nameof(CanOpenManualEntriesExport))]
-    private void OpenManualEntriesExport() =>
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ManualEntriesExportPath!) { UseShellExecute = true });
-
-    private bool CanOpenManualEntriesExport() => ManualEntriesExportPath is not null;
 
     /// <summary>Called by ManualEntryEditorViewModel after adding or editing a manual
     /// entry, so a just-added/edited entry shows up immediately if this grid is already

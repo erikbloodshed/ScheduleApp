@@ -88,6 +88,7 @@ public partial class PunchRecordsViewModel : ObservableObject
                 ExportStoredLogsCommand.NotifyCanExecuteChanged();
                 PreviousPeriodCommand.NotifyCanExecuteChanged();
                 NextPeriodCommand.NotifyCanExecuteChanged();
+                RefreshOrCancelStoredLogsCommand.NotifyCanExecuteChanged();
 
                 // A keystroke that arrived while busy never got a suggestion fetch (see
                 // OnLogViewSearchTextChanged below) -- catch up now that the shared
@@ -95,6 +96,16 @@ public partial class PunchRecordsViewModel : ObservableObject
                 // empty until the next keystroke.
                 if (!_busy.IsRunning && LogViewSearchText.Trim().Length > 0)
                     _ = UpdateLogViewSuggestionsAsync(LogViewSearchText);
+            }
+            else if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
+            {
+                // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
+                // this is what flips the toolbar's "Load" button between Load and Cancel,
+                // same mechanism ReportViewModel's own analogous handler uses for the
+                // Attendance Summary tab's Refresh/Cancel button.
+                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
+                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
+                RefreshOrCancelStoredLogsCommand.NotifyCanExecuteChanged();
             }
         };
 
@@ -403,13 +414,49 @@ public partial class PunchRecordsViewModel : ObservableObject
             || row.DepartmentName.Contains(term, StringComparison.OrdinalIgnoreCase);
     }
 
-    [ObservableProperty]
-    private string? storedLogsExportPath;
-
-    partial void OnStoredLogsExportPathChanged(string? value) => OpenStoredLogsExportCommand.NotifyCanExecuteChanged();
-
     [RelayCommand(CanExecute = nameof(CanLoad))]
     private Task LoadStoredLogsAsync() => LoadStoredLogsCoreAsync(showFeedback: true);
+
+    /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
+    /// ReportViewModel.RefreshOrCancelSummary's own doc comment for the fuller reasoning.
+    /// This replaces the separate "Cancel" button that used to sit in this page's own
+    /// CardBorder toolbar row (alongside Import…/Fetch from Device), visible only while
+    /// _busy.IsVisiblyRunning -- inline in that same row rather than its own, so it never
+    /// pushed anything down the way Attendance Summary's old Cancel bar did, but it was
+    /// still a second button appearing and disappearing next to Import…/Fetch. One button
+    /// per row, toggling in place, is simpler still -- and this one now doubles as the
+    /// page's Cancel for Import…/Fetch too, not just its own Load.
+    ///
+    /// CanExecute is IsVisiblyRunning (always fine to try to cancel) OR CanLoad() -- needed
+    /// because CanLoad() alone would leave the button disabled during a run it didn't
+    /// itself start (an Import…/Fetch from Device here, or an Import/Fetch/manual entry
+    /// action started from another Attendance page) at exactly the moment IsVisiblyRunning
+    /// makes it look like a live Cancel button.</summary>
+    private bool CanRefreshOrCancelStoredLogs() => _busy.IsVisiblyRunning || CanLoad();
+
+    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelStoredLogs))]
+    private void RefreshOrCancelStoredLogs()
+    {
+        if (_busy.IsVisiblyRunning)
+            _busy.Cancel();
+        else
+            _ = LoadStoredLogsCoreAsync(showFeedback: true);
+    }
+
+    /// <summary>Plain-Unicode symbols (not the Segoe Fluent Icons glyphs
+    /// ReportViewModel.RefreshOrCancelGlyph uses) since this button has never been an
+    /// icon-only IconHeaderActionButton -- it's a plain text "Load" button sitting among
+    /// other plain text buttons (◀/▶/Export…/Open) in this same Period row.</summary>
+    public string RefreshOrCancelGlyph => _busy.IsVisiblyRunning ? "✕ Cancel" : "Load";
+
+    /// <summary>Generic on purpose, not "Stop this load" -- same reasoning as the old
+    /// Cancel button's own ToolTip, which this replaces: IsVisiblyRunning can be true
+    /// because of literally anything on the Attendance page (Import…/Fetch from Device
+    /// here, or an Import/Fetch/manual entry action started from another Attendance
+    /// page), not only a click on this same button.</summary>
+    public string RefreshOrCancelToolTip => _busy.IsVisiblyRunning
+        ? "Stop whatever's currently running."
+        : "Reload stored punches for this period.";
 
     /// <summary>Does the actual load; showFeedback controls whether the
     /// validation-error/success/error status bar messages fire. The Load button always wants that
@@ -497,7 +544,7 @@ public partial class PunchRecordsViewModel : ObservableObject
             // Cancel click always lands before any file is written, never partway
             // through one.
             AttendanceExcelExporter.ExportLogsToExcel(dialog.FileName, logs, employees);
-            StoredLogsExportPath = dialog.FileName;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
             _saveViewState();
             _statusBarService.ShowSuccess($"Saved {logs.Count} punch(es) to {dialog.FileName}.");
         },
@@ -505,12 +552,6 @@ public partial class PunchRecordsViewModel : ObservableObject
     }
 
     private bool CanExportStoredLogs() => !_busy.IsRunning;
-
-    [RelayCommand(CanExecute = nameof(CanOpenStoredLogsExport))]
-    private void OpenStoredLogsExport() =>
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(StoredLogsExportPath!) { UseShellExecute = true });
-
-    private bool CanOpenStoredLogsExport() => StoredLogsExportPath is not null;
 
     /// <summary>Cheap, synchronous checks only -- deliberately doesn't touch the
     /// database, so both Load and Export can call it before setting IsRunning, the same

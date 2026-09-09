@@ -147,7 +147,7 @@
                     Visibility="Collapsed"
                     Checked="RestDayDutyCheckBox_CheckedChanged"
                     Unchecked="RestDayDutyCheckBox_CheckedChanged"
-                    ToolTip="Unchecked (default): a plain rest day -- punches that day are never honored, so no Rest Day Duty pay is possible. Checked: gives this rest day a fixed Work time/Time in, matched against punches exactly like a Normal shift; only a matched punch pair within that window earns Rest Day Duty pay." />
+                    ToolTip="Unchecked (default): plain rest day, punches never honored. Checked: matches punches like a Normal shift within a fixed Work time/Time in window to earn Rest Day Duty pay." />
 
           <TextBlock x:Name="WorkTimeLabel"
                      Text="Work time (hours)"
@@ -165,7 +165,7 @@
                    Width="90"
                    HorizontalAlignment="Left"
                    Margin="0,0,8,12"
-                   ToolTip="Shift length for Normal. For Flexible/Split Shift, this is the day's required total hours instead -- there's no single shift to measure a length from. For a Rest Day duty, this is the scheduled length punches are matched against." />
+                   ToolTip="Shift length for Normal; required total hours for Flexible/Split Shift; scheduled length to match for Rest Day duty." />
           <controls:TimeInput x:Name="TimeInPicker"
                               Grid.Row="8"
                               Grid.Column="1"
@@ -261,14 +261,14 @@
                                   Density="Compact"
                                   HorizontalAlignment="Left"
                                   Margin="0,0,4,0"
-                                  ToolTip="Caps how early a punch counts toward WorkedHours -- early punches still stay in the search/pairing and still show in ClockIn, just clamped for the hours math (see FlexibleShiftCalculationStrategy)." />
+                                  ToolTip="Caps how early a punch counts toward WorkedHours -- still shows in ClockIn, just clamped for the hours math." />
               <controls:TimeInput x:Name="RestrictedTimeOutPicker"
                                   Grid.Row="1"
                                   Grid.Column="1"
                                   Density="Compact"
                                   HorizontalAlignment="Left"
                                   Margin="4,0,0,0"
-                                  ToolTip="Excludes punches after this time from the day's search entirely -- a plain boundary filter, not a cap (see FlexibleShiftCalculationStrategy)." />
+                                  ToolTip="Excludes punches after this time from the day's search entirely -- a boundary, not a cap." />
             </Grid>
           </Border>
 
@@ -368,14 +368,14 @@
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="0,0,4,10"
-                       ToolTip="How many hours before the scheduled time in a punch is still considered a clock-in. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+                       ToolTip="How many hours before the scheduled time in a punch still counts as clock-in. Grayed-out tracks the employee/policy default live; type over it to lock in just this day." />
               <TextBox x:Name="ClockInBufferAfterBox"
                        Grid.Row="1"
                        Grid.Column="1"
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="4,0,0,10"
-                       ToolTip="How many hours after the scheduled time in a punch is still considered a clock-in. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+                       ToolTip="How many hours after the scheduled time in a punch still counts as clock-in. Grayed-out tracks the employee/policy default live; type over it to lock in just this day." />
 
               <TextBlock Grid.Row="2"
                          Grid.Column="0"
@@ -395,14 +395,14 @@
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="0,0,4,0"
-                       ToolTip="How many hours before the scheduled time out a punch is still considered a clock-out. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+                       ToolTip="How many hours before the scheduled time out a punch still counts as clock-out. Grayed-out tracks the employee/policy default live; type over it to lock in just this day." />
               <TextBox x:Name="ClockOutBufferAfterBox"
                        Grid.Row="3"
                        Grid.Column="1"
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="4,0,0,0"
-                       ToolTip="How many hours after the scheduled time out a punch is still considered a clock-out. Shown grayed-out at the employee's own default (or the policy default, if they don't have one) -- type over it to override just this day, or leave it as-is to keep tracking whichever of those two applies even if it changes later." />
+                       ToolTip="How many hours after the scheduled time out a punch still counts as clock-out. Grayed-out tracks the employee/policy default live; type over it to lock in just this day." />
             </Grid>
           </Border>
 
@@ -469,13 +469,13 @@
                         Grid.Column="0"
                         Margin="0,0,4,10"
                         HorizontalAlignment="Stretch"
-                        ToolTip="Per-day override of this employee's overtime eligibility (Employee.QualifiesForOvertime). 'Use employee default' inherits whatever's set on the employee (Add/Edit Employee dialog); 'Eligible'/'Not eligible' overrides just this day (or these days), without changing the employee's own default." />
+                        ToolTip="Per-day override of overtime eligibility -- 'Use employee default' inherits it; 'Eligible'/'Not eligible' overrides just this day, without changing the employee's own setting." />
               <ComboBox x:Name="NightDiffEligibleCombo"
                         Grid.Row="1"
                         Grid.Column="1"
                         Margin="4,0,0,10"
                         HorizontalAlignment="Stretch"
-                        ToolTip="Per-day override of this employee's night differential eligibility (Employee.QualifiesForNightDiff). 'Use employee default' inherits whatever's set on the employee; 'Eligible'/'Not eligible' overrides just this day (or these days)." />
+                        ToolTip="Per-day override of night differential eligibility -- 'Use employee default' inherits it; 'Eligible'/'Not eligible' overrides just this day." />
 
               <TextBlock Grid.Row="2"
                          Grid.Column="0"
@@ -488,7 +488,7 @@
                         Grid.Column="0"
                         Margin="0,0,4,10"
                         HorizontalAlignment="Stretch"
-                        ToolTip="Per-day override of whether overtime hours actually get the rate-percentage premium, once eligible (Employee.ApplyOvertimeRatePercentageByDefault) -- separate from eligibility above. 'Use employee default' inherits the employee's own setting; 'Apply premium' pays hourly rate x (1 + overtime rate %); 'Straight time only' pays overtime at plain hourly rate with no premium, e.g. during a temporary policy transition. No Night Diff equivalent -- once eligible, its rate percentage always applies." />
+                        ToolTip="Per-day override of the overtime premium (separate from eligibility above) -- 'Apply premium' pays rate x (1 + overtime %); 'Straight time only' pays plain hourly rate. No Night Diff equivalent; its rate always applies once eligible." />
 
               <TextBlock Grid.Row="4"
                          Grid.Column="0"
@@ -508,14 +508,14 @@
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="0,0,4,0"
-                       ToolTip="Overrides the global overtime rate percentage (e.g. 0.25 for 25%) just for this day. Shown grayed-out at the current policy default -- type over it to override, or leave it as-is to keep tracking the policy default even if it changes later. Only takes effect when overtime is eligible and the premium applies (see the two dropdowns above)." />
+                       ToolTip="Overrides the overtime rate % for just this day. Grayed-out tracks the policy default live; type over it to lock in. Only applies when eligible and the premium is on." />
               <TextBox x:Name="NightDiffRatePercentageBox"
                        Grid.Row="5"
                        Grid.Column="1"
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="4,0,0,0"
-                       ToolTip="Overrides the global night differential rate percentage (e.g. 0.10 for 10%) just for this day. Shown grayed-out at the current policy default -- type over it to override, or leave it as-is to keep tracking the policy default even if it changes later. Only takes effect when night diff is eligible (see the dropdown above)." />
+                       ToolTip="Overrides the night differential rate % for just this day. Grayed-out tracks the policy default live; type over it to lock in. Only applies when eligible." />
             </Grid>
           </Border>
 

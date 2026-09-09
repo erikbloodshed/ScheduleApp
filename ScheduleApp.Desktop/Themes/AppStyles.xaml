@@ -1,6 +1,7 @@
 <ResourceDictionary
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls">
 
     <!--
       Shared, theme-aware resources for ScheduleApp.Desktop's own views/dialogs/controls -
@@ -79,6 +80,38 @@
     <Style x:Key="SectionCaptionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <!-- IconButton's own default look (see Controls/IconButton.cs's doc comment for why
+         it's a Button subclass rather than a UserControl), based on the app's own implicit
+         Button style (WPF-UI's, merged by App.xaml before this file) rather than a
+         from-scratch Template, so an IconButton keeps exactly the same chrome (colors,
+         rounded corners, hover/pressed/disabled states) as every plain Button sitting next
+         to it, and picks up any future change to that shared style automatically. Content
+         rendering is the only thing overridden: ContentTemplate's DataTemplate reaches
+         back up to the templated IconButton itself for Icon (an ordinary Binding with
+         RelativeSource, not TemplateBinding, since ContentTemplate's DataContext is
+         Content, not the control), and renders it in its own TextBlock ahead of a second
+         TextBlock showing Content itself. An IconButton with no Icon set still renders
+         correctly: Text="" on the icon TextBlock takes up no visible space, so it degrades
+         to an ordinary label-only button rather than leaving a gap. -->
+    <Style TargetType="{x:Type controls:IconButton}"
+           BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType={x:Type controls:IconButton}}, Path=Icon}"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   FontSize="14"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding}"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- One row of a compact flyout menu (MainWindow's own AttendanceFlyout is the first

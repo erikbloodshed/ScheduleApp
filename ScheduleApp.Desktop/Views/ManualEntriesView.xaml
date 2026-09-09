@@ -1,7 +1,8 @@
 <UserControl x:Class="ScheduleApp.Desktop.Views.ManualEntriesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters">
+             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls">
     <!-- One of three views the "Attendance" drawer item's submenu navigates between - see
          AttendanceSummaryView.xaml's own doc comment for the shared AttendanceViewModel/
          page-navigation story all three follow. This one used to be the "Manual Entries"
@@ -10,8 +11,61 @@
          by the split (see ManualEntriesViewModel's own doc comment for why it was always
          kept separate from Punch Records, even before this page split). -->
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+
+        <!-- Icon-only header action button - same style, same font-fallback reasoning, and
+             same role as AttendanceSummaryView's own IconHeaderActionButton (see that
+             file's copy of this style for the fuller doc comment) - duplicated here rather
+             than shared via a merged resource dictionary, same "each page keeps its own
+             copy of a small style resource" convention this app already follows. -->
+        <Style x:Key="IconHeaderActionButton"
+               TargetType="Button">
+            <Setter Property="FontFamily"
+                    Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+            <Setter Property="FontSize"
+                    Value="14"/>
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="Foreground"
+                    Value="#2563EB"/>
+            <Setter Property="BorderThickness"
+                    Value="0"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="Width"
+                    Value="28"/>
+            <Setter Property="Height"
+                    Value="28"/>
+            <Setter Property="VerticalAlignment"
+                    Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter Property="Background"
+                                        Value="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        TargetName="Bg"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.4"
+                                        TargetName="Bg"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="10"
@@ -19,103 +73,97 @@
         <DockPanel Grid.Row="0"
                    LastChildFill="False"
                    Margin="0,0,0,10">
-            <!-- Cancel pinned to the right of the toolbar row, shown only while something's
-                 running (Load/Import/Export/Fetch, or a manual entry save-delete - any of
-                 which may have been started from another Attendance page; see
-                 PunchRecordsView.xaml's own copy of this strip for the "one Cancel per page"
-                 reasoning). Inline here, not in its own card, so it appearing doesn't push
-                 the whole grid down - and docked right of the left-docked toolbar so it
-                 doesn't nudge the period picker or buttons either. -->
+            <!-- Doubles as a Cancel button while anything's running (see
+                 RefreshOrCancelManualEntriesCommand/ManualEntriesRefreshOrCancelGlyph/
+                 ManualEntriesRefreshOrCancelToolTip on AttendanceViewModel) - same
+                 icon-only look and same in-place Refresh<->Cancel toggle as
+                 AttendanceSummaryView's own Period-row button. Docked to this row's own
+                 right edge (rather than sitting inline with the date-range/action buttons
+                 in the StackPanel below), same "pinned to the row's true right edge"
+                 placement PayrollSummaryView's/SchedulePage's own icon Refresh buttons use. -->
             <Button DockPanel.Dock="Right"
-                    Content="Cancel"
-                    Command="{Binding CancelCommand}"
-                    Padding="8,3"
-                    Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}"
-                    ToolTip="Stop whatever's currently running (Load, Import, an Import/Fetch started from Punch Records, or a manual entry save/delete)." />
+                    Style="{StaticResource IconHeaderActionButton}"
+                    Content="{Binding ManualEntriesRefreshOrCancelGlyph}"
+                    Command="{Binding RefreshOrCancelManualEntriesCommand}"
+                    ToolTip="{Binding ManualEntriesRefreshOrCancelToolTip}"/>
             <StackPanel DockPanel.Dock="Left"
                         Orientation="Horizontal">
-            <TextBlock Text="Start"
-                       Width="40"
-                       VerticalAlignment="Center" />
-            <!-- Steps ManualEntriesStart/ManualEntriesEnd to the adjacent
+                <TextBlock Text="Start"
+                           Width="40"
+                           VerticalAlignment="Center"/>
+                <!-- Steps ManualEntriesStart/ManualEntriesEnd to the adjacent
                  cut-off period and reloads immediately; see
                  ManualEntriesViewModel.PreviousPeriodAsync. -->
-            <Button Content="◀"
-                    Command="{Binding PreviousManualEntriesPeriodCommand}"
-                    Padding="8,3"
-                    Margin="0,0,6,0"
-                    ToolTip="Previous cut-off period." />
-            <DatePicker SelectedDate="{Binding ManualEntriesStart}"
-                        Width="190"
-                        Margin="0,0,24,0">
-                <DatePicker.Resources>
-                    <Style TargetType="DatePickerTextBox">
-                        <Setter Property="Control.Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="DatePickerTextBox">
-                                    <!-- Overriding the text binding to apply the custom string format -->
-                                    <TextBox Text="{Binding Path=SelectedDate,
+                <Button Content="◀"
+                        Command="{Binding PreviousManualEntriesPeriodCommand}"
+                        Padding="8,3"
+                        Margin="0,0,6,0"
+                        ToolTip="Previous cut-off period."/>
+                <DatePicker SelectedDate="{Binding ManualEntriesStart}"
+                            Width="190"
+                            Margin="0,0,24,0">
+                    <DatePicker.Resources>
+                        <Style TargetType="DatePickerTextBox">
+                            <Setter Property="Control.Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DatePickerTextBox">
+                                        <!-- Overriding the text binding to apply the custom string format -->
+                                        <TextBox Text="{Binding Path=SelectedDate,
                                             RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                             TextAlignment="Center" />
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </DatePicker.Resources>
-            </DatePicker>
-            <TextBlock Text="End"
-                       Width="32"
-                       VerticalAlignment="Center" />
-            <DatePicker SelectedDate="{Binding ManualEntriesEnd}"
-                        Width="190"
-                        Margin="0,0,6,0">
-                <DatePicker.Resources>
-                    <Style TargetType="DatePickerTextBox">
-                        <Setter Property="Control.Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="DatePickerTextBox">
-                                    <!-- Overriding the text binding to apply the custom string format -->
-                                    <TextBox Text="{Binding Path=SelectedDate, RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                             TextAlignment="Center" />
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </DatePicker.Resources>
-            </DatePicker>
-            <!-- See PreviousManualEntriesPeriodCommand's own comment above;
+                                                 TextAlignment="Center"/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DatePicker.Resources>
+                </DatePicker>
+                <TextBlock Text="End"
+                           Width="32"
+                           VerticalAlignment="Center"/>
+                <DatePicker SelectedDate="{Binding ManualEntriesEnd}"
+                            Width="190"
+                            Margin="0,0,6,0">
+                    <DatePicker.Resources>
+                        <Style TargetType="DatePickerTextBox">
+                            <Setter Property="Control.Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DatePickerTextBox">
+                                        <!-- Overriding the text binding to apply the custom string format -->
+                                        <TextBox Text="{Binding Path=SelectedDate, RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
+                                                 TextAlignment="Center"/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DatePicker.Resources>
+                </DatePicker>
+                <!-- See PreviousManualEntriesPeriodCommand's own comment above;
                  NextManualEntriesPeriodCommand is the same step in the other
                  direction. -->
-            <Button Content="▶"
-                    Command="{Binding NextManualEntriesPeriodCommand}"
-                    Padding="8,3"
-                    Margin="0,0,18,0"
-                    ToolTip="Next cut-off period." />
-            <Button Content="↻ Refresh"
-                    Command="{Binding LoadManualEntriesCommand}"
-                    Padding="8,3"
-                    Margin="0,0,6,0" />
-            <Button Content="Add Manual Entry…"
-                    Command="{Binding AddManualEntryCommand}"
-                    Padding="8,3"
-                    ToolTip="Log a punch by hand for an employee who forgot to clock in/out -- stored separately from device
-                             punches and only used to fill in a clock-in/out the device has nothing for. Shows up only in
-                             this Manual Entries grid, not in Punch Records -- but is still included when generating an
-                             attendance summary." />
-            <Button Content="Export…"
-                    Command="{Binding ExportManualEntriesCommand}"
-                    Padding="8,3"
-                    Margin="12,0,0,0"
-                    ToolTip="Choose where to save the manual entries in range as an Excel file, including Reason and Entered By -- the two columns Punch Records no longer shows." />
-            <Button Content="Open"
-                    Command="{Binding OpenManualEntriesExportCommand}"
-                    Padding="8,3"
-                    Margin="6,0,0,0" />
-            <Button Content="Import…"
-                    Command="{Binding ImportManualEntriesCommand}"
-                    Padding="8,3"
-                    Margin="12,0,0,0"
-                    ToolTip="Choose an Excel workbook and bulk-add every row in it as a manual entry -- for a whole batch of forgotten punches at once instead of Add Manual Entry one at a time. Expects the same columns Export… writes (Id, Date, Time, Punch Type, Reason, Entered By), so exporting first and reusing that file as a template is the easiest way to build one. The whole file is validated before anything is added -- if any row has a problem, none of them are." />
+                <Button Content="▶"
+                        Command="{Binding NextManualEntriesPeriodCommand}"
+                        Padding="8,3"
+                        Margin="0,0,18,0"
+                        ToolTip="Next cut-off period."/>
+                <Button Content="Add"
+                        Command="{Binding AddManualEntryCommand}"
+                        Padding="8,3"
+                        ToolTip="Log a missed punch by hand -- shown here only (not Punch Records), but still counted in attendance summaries."/>
+                <!-- "Export" glyph (U+EDE1) from the Segoe Fluent Icons font reference:
+                 https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font
+                 See Controls/IconButton.cs for why this is its own control rather than
+                 the hand-rolled Button/StackPanel/two-TextBlock markup this replaced. -->
+                <controls:IconButton Icon="&#xEDE1;"
+                                     Content="Export"
+                                     Command="{Binding ExportManualEntriesCommand}"
+                                     Padding="8,3"
+                                     Margin="12,0,0,0"
+                                     ToolTip="Save these entries to Excel (includes Reason/Entered By) -- opens automatically."/>
+                <Button Content="Import"
+                        Command="{Binding ImportManualEntriesCommand}"
+                        Padding="8,3"
+                        Margin="12,0,0,0"
+                        ToolTip="Bulk-add every row in an Excel workbook. Use Export's file as a template -- the whole file must be valid, or nothing is added."/>
             </StackPanel>
         </DockPanel>
 
@@ -124,8 +172,8 @@
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource BoolToVisibility}}">
             <Run Text="{Binding ManualEntriesCount, Mode=OneWay}"
-                 FontWeight="Bold" />
-            <Run Text="manual entry(ies) found in range." />
+                 FontWeight="Bold"/>
+            <Run Text="manual entry(ies) found in range."/>
         </TextBlock>
 
         <DataGrid Grid.Row="2"
@@ -140,28 +188,28 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="PIN"
                                     Binding="{Binding EmployeeId}"
-                                    Width="90" />
+                                    Width="90"/>
                 <DataGridTextColumn Header="Employee Name"
                                     Binding="{Binding EmployeeName}"
-                                    Width="200" />
+                                    Width="200"/>
                 <DataGridTextColumn Header="Department"
                                     Binding="{Binding DepartmentName}"
-                                    Width="140" />
+                                    Width="140"/>
                 <DataGridTextColumn Header="Date"
                                     Binding="{Binding Timestamp, StringFormat={}{0:MM/dd/yyyy}}"
-                                    Width="100" />
+                                    Width="100"/>
                 <DataGridTextColumn Header="Time"
                                     Binding="{Binding Timestamp, StringFormat={}{0:hh:mm tt}}"
-                                    Width="90" />
+                                    Width="90"/>
                 <DataGridTextColumn Header="Type"
                                     Binding="{Binding PunchTypeText}"
-                                    Width="90" />
+                                    Width="90"/>
                 <DataGridTextColumn Header="Reason"
                                     Binding="{Binding Reason}"
-                                    Width="200" />
+                                    Width="200"/>
                 <DataGridTextColumn Header="Imported"
                                     Binding="{Binding ImportedAt, StringFormat={}{0:MM/dd/yyyy h:mm tt}}"
-                                    Width="*" />
+                                    Width="*"/>
                 <DataGridTemplateColumn Header=""
                                         Width="130">
                     <DataGridTemplateColumn.CellTemplate>
@@ -176,12 +224,12 @@
                                         FontSize="11"
                                         Margin="0,0,4,0"
                                         Command="{Binding DataContext.EditManualEntryCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                        CommandParameter="{Binding}" />
+                                        CommandParameter="{Binding}"/>
                                 <Button Content="Delete"
                                         Padding="6,2"
                                         FontSize="11"
                                         Command="{Binding DataContext.DeleteManualEntryCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                        CommandParameter="{Binding}" />
+                                        CommandParameter="{Binding}"/>
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
@@ -194,6 +242,6 @@
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource InverseBoolToVisibility}}" />
+                   Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource InverseBoolToVisibility}}"/>
     </Grid>
 </UserControl>

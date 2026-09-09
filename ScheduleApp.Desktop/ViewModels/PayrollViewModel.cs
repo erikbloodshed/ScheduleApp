@@ -386,6 +386,12 @@ public partial class PayrollViewModel : ObservableObject
     public IRelayCommand PrintCurrentPayslipCommand => Summary.PrintCurrentPayslipCommand;
     public IAsyncRelayCommand RecalculatePayslipCommand => Summary.RecalculatePayslipCommand;
 
+    /// <summary>What PayrollSummaryView's payslip-header icon button actually binds to now
+    /// -- see PayrollSummaryViewModel.RefreshOrCancelPayslip's own doc comment.</summary>
+    public IRelayCommand RefreshOrCancelPayslipCommand => Summary.RefreshOrCancelPayslipCommand;
+    public string RefreshOrCancelGlyph => Summary.RefreshOrCancelGlyph;
+    public string RefreshOrCancelToolTip => Summary.RefreshOrCancelToolTip;
+
     // ---- End forwarded members (PayrollSummaryViewModel) ----
 
     /// <summary>Thin forwarder to <see cref="PayrollScopeState.PeriodStart"/> -- storage

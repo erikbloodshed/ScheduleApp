@@ -82,7 +82,7 @@
                 <TextBlock Style="{StaticResource SectionCaptionTextStyle}"
                            Margin="0,0,0,2"
                            Text="Shared, machine-wide settings -- applied the next time each app starts."
-                           ToolTip="Saved to the shared, machine-wide config file both Schedule Manager and the Push Listener service read -- set once per machine instead of once per app. Takes effect the next time each one starts. Only the Database tab affects Push Listener; every other tab here is Schedule Manager's alone, but they all live in the same file for one place to manage all of it." />
+                           ToolTip="Shared config file read by both Schedule Manager and Push Listener -- takes effect on next start. Only the Database tab affects Push Listener." />
 
                 <TextBlock x:Name="FilePathText" Style="{StaticResource SectionCaptionTextStyle}" Margin="0" />
             </StackPanel>
@@ -130,7 +130,7 @@
                                       Margin="0,0,0,8"
                                       DisplayMemberPath="Name"
                                       SelectionChanged="ConnectionProfilesCombo_SelectionChanged"
-                                      ToolTip="Pick which saved database to connect to -- Windows Authentication, no separate login needed." />
+                                      ToolTip="Pick which saved database to connect to (Windows Authentication)." />
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                                 <Button Content="Add…" Padding="8,4" Margin="0,0,8,0"
@@ -139,7 +139,7 @@
                                         Click="RemoveProfileButton_Click" />
                                 <Button Content="Create New Database…" Padding="8,4"
                                         Click="CreateDatabaseButton_Click"
-                                        ToolTip="Creates the selected profile's database using your current Windows account -- no separate login needed. Still needs Save below to apply it." />
+                                        ToolTip="Creates the selected profile's database using your Windows account. Still needs Save below." />
                             </StackPanel>
 
                             <!-- Inline three-field form rather than a separate popup dialog -
@@ -176,7 +176,7 @@
                             <Button x:Name="AdvancedToggleButton" Content="Advanced ▾"
                                     HorizontalAlignment="Left" Padding="4,2" Margin="0,0,0,8"
                                     Click="AdvancedToggleButton_Click"
-                                    ToolTip="A raw connection string, or a wizard that creates a dedicated SQL Server login instead of using Windows Authentication." />
+                                    ToolTip="A raw connection string, or a wizard to create a dedicated SQL Server login." />
 
                             <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed">
                                 <TextBlock Text="Connection string" Margin="0,0,0,4" />
@@ -189,10 +189,10 @@
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox x:Name="ConnectionStringBox" Grid.Column="0" Margin="0,0,8,0"
                                              FontFamily="Consolas"
-                                             ToolTip="Overrides the profile selected above. For custom ports, named-instance syntax the profile fields can't express, or a SQL Server login connection string from the wizard below." />
+                                             ToolTip="Overrides the profile above -- for custom ports, named instances, or a SQL login string from the wizard below." />
                                     <Button Grid.Column="1" Content="Dedicated SQL Login Wizard…" Padding="8,4"
                                             Click="CreateDedicatedLoginButton_Click"
-                                            ToolTip="For a machine where Windows Authentication isn't practical -- creates a database and a SQL Server login, then fills the box above with the result." />
+                                            ToolTip="Creates a database and SQL Server login, then fills the box above -- for machines where Windows Authentication isn't practical." />
                                 </Grid>
                             </StackPanel>
                         </StackPanel>
@@ -219,12 +219,12 @@
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="CommKeyBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="The device's communication password (Menu → Comm → Ethernet/Comm Key). 0 = no password, the out-of-the-box default on most units." />
+                                         ToolTip="Comm password (Menu → Comm → Ethernet/Comm Key). 0 = no password, the default on most units." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Comm key" />
                             </DockPanel>
 
                             <CheckBox x:Name="UseUdpCheckBox" Content="Use UDP" Margin="0,4,0,0"
-                                      ToolTip="Most deployments use TCP (unchecked). Check this only if the device is configured for UDP-only communication." />
+                                      ToolTip="Leave unchecked for TCP (most deployments); check only for UDP-only devices." />
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
@@ -238,7 +238,7 @@
 
                             <DockPanel Style="{StaticResource FieldRowStyle}" Margin="0,0,0,16">
                                 <TextBox x:Name="DefaultWorkTimeHoursBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="Starting value for a new Normal/Official Business/Flexible schedule entry's work-time-hours field. Default 10." />
+                                         ToolTip="Default work-time-hours for a new Normal/Official Business/Flexible entry. Default 10." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Default work time (hours)" />
                             </DockPanel>
 
@@ -248,31 +248,31 @@
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="ClockInBufferBeforeBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="How far before a shift's scheduled start a punch still counts as that shift's clock-in. Default 2." />
+                                         ToolTip="How early a punch can be and still count as clock-in. Default 2." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Clock-in buffer, before scheduled time" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="ClockInBufferAfterBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="How far after a shift's scheduled start a punch still counts as that shift's clock-in. Default 2." />
+                                         ToolTip="How late a punch can be and still count as clock-in. Default 2." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Clock-in buffer, after scheduled time" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="ClockOutBufferBeforeBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="How far before a shift's scheduled end a punch still counts as that shift's clock-out. Default 6." />
+                                         ToolTip="How early a punch can be and still count as clock-out. Default 6." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Clock-out buffer, before scheduled time" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="ClockOutBufferAfterBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="How far after a shift's scheduled end a punch still counts as that shift's clock-out. Default 6." />
+                                         ToolTip="How late a punch can be and still count as clock-out. Default 6." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Clock-out buffer, after scheduled time" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="FlexInBufferBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="Same idea as the clock-in buffers above, but for one segment of a split shift -- tighter by default since a segment is usually much shorter than a full shift. Default 1." />
+                                         ToolTip="Same idea as the buffers above, but for one segment of a split shift. Default 1." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Split shift segment clock-in buffer" />
                             </DockPanel>
 
@@ -284,19 +284,19 @@
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="FlexMinBreakGapBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="Affects every Flexible day: every punch that day counts, paired off in order. Two consecutive punch-pairs count as separate work stretches only if at least this many hours separate them -- a shorter gap is treated as a duplicate/stray punch and folded into one continuous stretch instead. Default 1." />
+                                         ToolTip="For Flexible days: two punch-pairs count as separate work stretches only if at least this many hours separate them; a shorter gap merges into one stretch. Default 1." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Flexible minimum break gap" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="GracePeriodBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="Extra time after a shift's scheduled end that's still treated as on-time rather than overtime. Default 0.5." />
+                                         ToolTip="Time after a shift's end still treated as on-time, not overtime. Default 0.5." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Clock-out grace period" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="LateEarlyGraceMinutesBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="How many minutes late clocking in, or early clocking out, still count as exactly on time -- so a couple minutes' slack doesn't get flagged as Late In/Early Out or dock pay. Past this many minutes, the full difference counts, not just the amount beyond it. Default 5." />
+                                         ToolTip="Minutes of slack before Late In/Early Out is flagged -- past this, the full difference counts, not just the excess. Default 5." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Late in / early out grace period (minutes)" />
                             </DockPanel>
 
@@ -306,20 +306,20 @@
                                  density's fixed footprint stands in for the style's fixed Width. -->
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <controls:TimeInput x:Name="NightDiffStartBox" Density="Compact" DockPanel.Dock="Right"
-                                         ToolTip="Start of the night-differential window, based on actual clocked-in/out time (not the scheduled shift). Default 10:00 PM. Official Business never earns night diff, regardless of this setting." />
+                                         ToolTip="Start of the night-differential window (actual clock time, not scheduled). Default 10:00 PM. Official Business never earns night diff." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Night differential start" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}" Margin="0,0,0,12">
                                 <controls:TimeInput x:Name="NightDiffEndBox" Density="Compact" DockPanel.Dock="Right"
-                                         ToolTip="End of the night-differential window. Default 6:00 AM -- earlier than the start, which is how this (and every other time field here) marks a window that crosses midnight." />
+                                         ToolTip="End of the night-differential window. Default 6:00 AM -- earlier than the start marks a window crossing midnight." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Night differential end" />
                             </DockPanel>
 
                             <CheckBox x:Name="CapEarlyClockInCheckBox" Content="Cap early clock-in at the scheduled start time" Margin="0,0,0,8"
-                                      ToolTip="If checked, clocking in early doesn't count extra time before the shift was due to start." />
+                                      ToolTip="If checked, clocking in early doesn't earn extra time before the shift start." />
                             <CheckBox x:Name="StrictOvertimeCheckBox" Content="Count overtime strictly from the shift's scheduled end" Margin="0,0,0,8"
-                                      ToolTip="If checked, overtime is measured from the scheduled shift end rather than from the grace period's cutoff." />
+                                      ToolTip="If checked, overtime is measured from the shift's scheduled end, not the grace cutoff." />
 
                             <!-- Reads like a reporting option, and it is one - but it's
                                  AttendancePolicy.UseExcelFormula, so it belongs to the
@@ -328,7 +328,7 @@
                                  the whole Attendance:Policy section from a tab that never
                                  showed those values. -->
                             <CheckBox x:Name="UseExcelFormulaCheckBox" Content="Use live formulas in exported Excel summaries"
-                                      ToolTip="If checked, Generate Reports writes recalculating Excel formulas instead of literal computed values, so the workbook stays correct if these numbers are tweaked by hand afterward." />
+                                      ToolTip="If checked, exported reports use live Excel formulas instead of static values, so edits stay correct." />
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
@@ -359,31 +359,31 @@
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="StandardHoursPerDayBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="The length of a standard workday, in hours. Divides into the daily rate to produce the hourly rate that every premium below is computed from, and is also the boundary where rest day work crosses from the first tier to the overtime tier. Must be greater than 0. Default 8." />
+                                         ToolTip="Standard workday length (hours) -- divides the daily rate into an hourly rate every premium below uses, and marks where rest day work crosses into overtime. Default 8." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Standard hours per day" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <controls:PercentTextBox x:Name="OvertimeRatePercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
-                                         ToolTip="Added on top of straight time for overtime hours on an ordinary workday -- 25% means overtime pays 125%. Overridable per day from the Set/Edit Schedule dialog, and skipped entirely for a day whose apply-rate-% toggle is off. Default 25%." />
+                                         ToolTip="Overtime premium on an ordinary workday (25% = pays 125%). Overridable per day; skipped if that day's apply-rate toggle is off. Default 25%." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Overtime premium" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <controls:PercentTextBox x:Name="NightDiffRatePercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
-                                         ToolTip="Paid for each hour falling inside the night differential window set on the Attendance tab -- 10% means those hours earn an extra 10%. Taken against whatever rate is in force that day, so night hours on a rest day earn 10% of the rest day rate, not of straight time. Overridable per day. Default 10%." />
+                                         ToolTip="Night differential premium (10% = extra 10% on whatever rate applies that day, e.g. the rest day rate on a rest day). Overridable per day. Default 10%." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Night differential premium" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <controls:PercentTextBox x:Name="RestDayPremiumPercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
-                                         ToolTip="Added on top of straight time for the first 8 hours of a rest day that is actually worked -- 30% means those hours pay 130%, the Philippine statutory rate. Overridable per employee from the Add/Edit Employee dialog, where leaving the box blank inherits this value. Default 30%." />
+                                         ToolTip="Rest day premium for the first 8 worked hours (30% = pays 130%, the statutory rate). Overridable per employee; blank inherits this. Default 30%." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Rest day premium" />
                             </DockPanel>
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <controls:PercentTextBox x:Name="RestDayOvertimeRatePercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
-                                         ToolTip="Added on top of the REST DAY rate for hours beyond the standard workday -- it compounds rather than adding to the rest day premium, so 30% on top of a 30% rest day premium pays 130% x 130% = 169%, not 160%. No per-employee or per-day override: a rest day never produces ordinary overtime hours for one to attach to. Default 30%." />
+                                         ToolTip="Premium for rest day hours beyond the standard workday -- compounds with the rest day rate (30% on 30% = 169%, not 160%). No per-employee/day override. Default 30%." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Rest day overtime premium" />
                             </DockPanel>
 
@@ -391,7 +391,7 @@
                                  0,0,0,16 separator the Attendance tab uses in the same spot. -->
                             <DockPanel Style="{StaticResource FieldRowStyle}" Margin="0,0,0,16">
                                 <controls:PercentTextBox x:Name="HolidayPremiumPercentageBox" DockPanel.Dock="Right" Width="120" Maximum="5"
-                                         ToolTip="Added on top of Basic Pay's own 100% for a worked holiday's day component -- 100% means one full extra day, 200% total, the Philippine statutory rate for a worked regular holiday. Also what a Monthly-rated employee earns for a listed holiday they didn't work at all. Overridable per employee from the Add/Edit Employee dialog, where leaving the box blank inherits this value. Default 100%." />
+                                         ToolTip="Holiday premium (100% = one extra day, 200% total worked -- the statutory rate). Also what a Monthly employee earns for an unworked holiday. Overridable per employee; blank inherits this. Default 100%." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Holiday premium" />
                             </DockPanel>
 
@@ -399,7 +399,7 @@
 
                             <DockPanel Style="{StaticResource FieldRowStyle}">
                                 <TextBox x:Name="NetPayRoundingMultipleBox" Style="{StaticResource FieldValueBoxStyle}"
-                                         ToolTip="Rounds each employee's Net Pay to the nearest multiple of this amount, the same way Excel's MROUND(number, multiple) function works -- e.g. 1 rounds to the nearest whole unit, 5 to the nearest 5, 0.25 to the nearest quarter. 0.01 (the default) keeps Net Pay at its normal 2-decimal precision -- effectively no extra rounding. Must be greater than 0." />
+                                         ToolTip="Rounds Net Pay to the nearest multiple of this (like Excel's MROUND) -- e.g. 5 rounds to the nearest 5. Default 0.01 means no extra rounding." />
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Net pay rounding (nearest multiple)" />
                             </DockPanel>
                         </StackPanel>

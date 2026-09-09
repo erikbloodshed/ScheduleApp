@@ -1,4 +1,4 @@
-using ScheduleApp.Core.Attendance;
+﻿using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
@@ -52,11 +52,14 @@ public static class PayrollCalculator
     /// the Undertime line is still computed and shown exactly the same either way
     /// (see PayrollLineItem.Waived's own doc comment), this only flows through to
     /// that flag so PayrollResult.TotalDeductions knows whether to count it. ORed
-    /// with employee.ExemptFromUndertimeDeduction internally (see that field's own
-    /// doc comment) rather than replaced by it -- a person can still waive one
-    /// period's Undertime by hand for an otherwise-ordinary employee regardless of
-    /// this parameter. Defaults to false so every existing caller/test that
-    /// predates waiving doesn't need to change.</param>
+    /// with employee.ExemptFromUndertimeDeduction internally into undertimeExcluded
+    /// rather than replaced by it -- a person can still waive one period's
+    /// Undertime by hand for an otherwise-ordinary employee regardless of this
+    /// parameter. Unlike this parameter, though, ExemptFromUndertimeDeduction also
+    /// removes the Undertime line from ComputedDeductions entirely rather than
+    /// merely marking it Excluded -- see that field's own doc comment and the
+    /// line's construction below. Defaults to false so every existing caller/test
+    /// that predates waiving doesn't need to change.</param>
     /// <param name="holidayDates">Every date on file in the Holidays table (see
     /// Holiday/IHolidayRepository) -- not pre-filtered to this period, the same
     /// "hand the whole thing through, this method does its own filtering"
@@ -562,15 +565,37 @@ public static class PayrollCalculator
             computedGrossPay.Add(new() { Label = restDayLabel, Amount = restDayPayAmount });
         }
 
-        var computedDeductions = new List<PayrollLineItem>
+        // Undertime is a deliberate, documented exception to the "every computed
+        // line always shows, even at zero" convention that Basic Pay/Overtime/Night
+        // Diff above follow -- same "omit rather than zero" treatment Rest Day Pay
+        // gets from QualifiesForRestDayPay below, just on the Deductions side: an
+        // employee with ExemptFromUndertimeDeduction never sees an "Undertime" line
+        // at all, since the whole concept -- being deducted for falling short of a
+        // scheduled day -- doesn't apply to their pay (see that field's own doc
+        // comment). undertimeHours/undertimePayAmount/undertimeExcluded above are
+        // computed unconditionally either way, and PayrollResult.UndertimeHours/
+        // UndertimePayAmount/UndertimeWaived below still carry the real figures for
+        // a reader (e.g. PayrollExcelExporter) that wants them regardless of
+        // whether the line itself is shown -- only the line item on the Payroll
+        // Summary/payslip is gated here.
+        //
+        // A per-period manual waiver (the undertimeWaived parameter) is a
+        // different, lesser thing and does NOT remove the line -- it stays
+        // visible, just marked ", Excluded" below, precisely so it can be toggled
+        // back for an otherwise-ordinary employee. Only the permanent,
+        // employee-level exemption removes it outright, since there's nothing to
+        // toggle back for them (SupportsWaiver would always have been false).
+        var computedDeductions = new List<PayrollLineItem>();
+        if (!employee.ExemptFromUndertimeDeduction)
         {
-            new()
+            computedDeductions.Add(new()
             {
                 // Undertime's Amount (below) is already hourlyRate * undertimeHours
                 // combined, not split by Late-In vs. Early-Out -- so the label just
                 // states the same combined hours figure back, plus the current
-                // Excluded/Included state (undertimeWaived, the parameter this
-                // method was called with) so a look at the Payroll Summary card
+                // Excluded/Included state (undertimeExcluded -- always just
+                // undertimeWaived here, since this branch only runs when the
+                // employee isn't exempt) so a look at the Payroll Summary card
                 // explains itself instead of just showing a bare peso figure. This
                 // is the state, not the action -- opposite of DeductionLineTemplate's
                 // own toggle button label (see WaivedToExcludeIncludeLabelConverter's
@@ -588,14 +613,14 @@ public static class PayrollCalculator
                 Amount = undertimePayAmount,
                 Waived = undertimeExcluded,
 
-                // False for an exempt employee: the per-period toggle would be a
-                // no-op for them (Waived above is already permanently true
-                // regardless of what it's set to -- see undertimeExcluded), so it's
-                // hidden entirely rather than offered as a button that does nothing
-                // when clicked. True (the toggle works normally) for everyone else.
-                SupportsWaiver = !employee.ExemptFromUndertimeDeduction,
-            },
-        };
+                // Always true here: an exempt employee (the only case where this
+                // toggle would be a no-op, since Waived above is already
+                // permanently true for them regardless of what it's set to) never
+                // reaches this branch at all now -- the whole line is omitted for
+                // them above, rather than shown with the toggle merely hidden.
+                SupportsWaiver = true,
+            });
+        }
 
         var periodAdjustments = adjustments.Where(a =>
             a.EmployeeId == employeeId &&
@@ -655,6 +680,8 @@ public static class PayrollCalculator
             HolidayPayAmount = holidayPayAmount,
             HolidayWorkedDays = holidayWorkedDays,
             UndertimeHours = undertimeHours,
+            UndertimePayAmount = undertimePayAmount,
+            UndertimeWaived = undertimeExcluded,
             GrossPayAdjustmentGroups = grossPayGroups,
             DeductionAdjustmentGroups = deductionGroups,
             NetPayRoundingMultiple = policy.NetPayRoundingMultiple,

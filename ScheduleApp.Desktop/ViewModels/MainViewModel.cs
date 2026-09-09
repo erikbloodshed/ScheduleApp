@@ -155,6 +155,7 @@ public partial class MainViewModel : ObservableObject
             Assignment.SetLeaveForSelectionCommand.NotifyCanExecuteChanged();
             Assignment.ClearScheduleForSelectionCommand.NotifyCanExecuteChanged();
             Calendar.RecalculateScheduleCommand.NotifyCanExecuteChanged();
+            Calendar.RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
 
             // Leaving the mode (whether by cancelling or after a successful bulk assign)
             // clears whatever was checked -- checkboxes are about to disappear, so a leftover
@@ -261,6 +262,12 @@ public partial class MainViewModel : ObservableObject
     public IRelayCommand PreviousMonthCommand => Calendar.PreviousMonthCommand;
     public IRelayCommand NextMonthCommand => Calendar.NextMonthCommand;
     public IAsyncRelayCommand RecalculateScheduleCommand => Calendar.RecalculateScheduleCommand;
+
+    /// <summary>What SchedulePage's calendar-header icon button actually binds to now --
+    /// see ScheduleCalendarViewModel.RefreshOrCancelSchedule's own doc comment.</summary>
+    public IRelayCommand RefreshOrCancelScheduleCommand => Calendar.RefreshOrCancelScheduleCommand;
+    public string RefreshOrCancelGlyph => Calendar.RefreshOrCancelGlyph;
+    public string RefreshOrCancelToolTip => Calendar.RefreshOrCancelToolTip;
 
     public IAsyncRelayCommand LoadCommand => Tree.LoadCommand;
 

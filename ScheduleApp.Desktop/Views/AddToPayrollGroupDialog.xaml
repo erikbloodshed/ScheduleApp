@@ -61,7 +61,7 @@
         <TextBox Grid.Row="1"
                  x:Name="SearchBox"
                  TextChanged="SearchBox_OnTextChanged"
-                 ToolTip="Comma-separated Employee ID, last name, first name, or department terms. Leave blank to show everyone."
+                 ToolTip="Comma-separated ID, name, or department terms."
                  Margin="0,0,0,8" />
 
         <!-- Department/employee checkbox tree - same shape as wizard Step 2. -->

@@ -382,7 +382,7 @@
                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
                             Click="UndertimeWaivedToggle_Click"
                             Margin="0,0,4,0"
-                            ToolTip="Excludes this employee's Undertime deduction from Total Deductions/Net Pay for this period. The figure stays visible - it's still calculated, just disregarded." />
+                            ToolTip="Excludes Undertime from Total Deductions/Net Pay -- the figure stays visible, just disregarded." />
                     <TextBox Grid.Column="2"
                              Text="{Binding Amount, Converter={StaticResource NumberConverter}, Mode=OneWay}"
                              Style="{StaticResource UndertimeAmountTextBox}"
@@ -723,15 +723,19 @@
                  single, self-explanatory action sitting in a header row that's already
                  tight on space. Same NotNullToVisibility toggle as the Pay Type badge above
                  - there's nothing to recalculate with no employee selected, so this
-                 disappears right alongside it; RecalculatePayslipCommand's own CanExecute
-                 (Result is not null, !_busy.IsRunning) additionally disables it whenever a
-                 payslip hasn't loaded yet or a refresh is already running. -->
+                 disappears right alongside it.
+
+                 Doubles as a Cancel button while anything's running (see
+                 RefreshOrCancelPayslipCommand/RefreshOrCancelGlyph/RefreshOrCancelToolTip
+                 on PayrollSummaryViewModel) - same in-place Refresh<->Cancel toggle as
+                 AttendanceSummaryView's own Period-row button, rather than just sitting
+                 disabled with no way to stop a recalculation once started. -->
             <Button DockPanel.Dock="Right"
                     Style="{StaticResource IconHeaderActionButton}"
-                    Content="&#xE72C;"
-                    Command="{Binding RecalculatePayslipCommand}"
+                    Content="{Binding RefreshOrCancelGlyph}"
+                    Command="{Binding RefreshOrCancelPayslipCommand}"
                     Visibility="{Binding SelectedEmployee, Converter={StaticResource NotNullToVisibility}}"
-                    ToolTip="Recalculate this employee's payslip using the latest attendance and adjustments for this period." />
+                    ToolTip="{Binding RefreshOrCancelToolTip}" />
         </DockPanel>
 
         <!-- Empty-state placeholder and the itemized breakdown occupy the same Grid cell,

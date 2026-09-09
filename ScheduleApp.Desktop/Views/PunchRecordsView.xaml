@@ -65,30 +65,14 @@
                            Orientation="Horizontal">
                     <TextBlock Text="Punches:"
                                Style="{StaticResource GroupLabel}" />
-                    <Button Content="Import…"
+                    <Button Content="Import"
                             Command="{Binding ImportPunchLogCommand}"
                             Margin="0,0,6,0"
-                            ToolTip="Choose a punch log (.dat) file and add any new punches to the database. Generate Reports and this grid both read from the database, not this file, so import at least once before using either." />
+                            ToolTip="Add punches from a .dat file to the database -- Generate Reports and this grid both need at least one import first." />
                     <Button Content="Fetch from Device"
                             Command="{Binding FetchFromDeviceCommand}"
-                            ToolTip="Connect to the ZKTeco terminal configured in Settings, pull its full attendance log, and add any new punches to the database -- same effect as Import…, just without an intermediate .dat file. Every fetch reads the device's entire log (the device protocol has no server-side date filter), so already-known punches are simply skipped as duplicates. Wrong device? Change it in Settings (gear icon)." />
+                            ToolTip="Pull the full log from the device configured in Settings -- same as Import, without a file. Already-known punches are skipped, so it's safe to re-run." />
                 </WrapPanel>
-
-                <!-- Global "something's running" indicator + Cancel - AttendanceSummaryView
-                     and ManualEntriesView each show their own copy of this same strip, since
-                     Load/Export/Import/Fetch/a manual entry save-delete all flow through the
-                     one shared AttendanceBusyState (see its own doc comment) regardless of
-                     which of the three pages started them; one Cancel button per page means
-                     it's always reachable from wherever the person is currently looking,
-                     rather than only from whichever page happened to start the operation. -->
-                <StackPanel DockPanel.Dock="Right"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}">
-                    <Button Content="Cancel"
-                            Command="{Binding CancelCommand}"
-                            ToolTip="Stop whatever's currently running (Load, Import, Fetch from Device, Generate Reports, or a manual entry save/delete)." />
-                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -160,7 +144,7 @@
                 <TextBox x:Name="PunchSearchTextBox"
                          Width="220"
                          Text="{Binding LogViewSearchText, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="An Employee ID, employee name, or department to filter the grid below by -- one at a time. Pick a suggestion below to apply it (or clear the box to show everyone again) -- doesn't change what Export… saves." />
+                         ToolTip="Filter by Employee ID, name, or department -- doesn't change what Export saves." />
                 <Popup PlacementTarget="{Binding ElementName=PunchSearchTextBox}"
                        Placement="Bottom"
                        Width="220"
@@ -195,19 +179,24 @@
                     </Border>
                 </Popup>
             </Grid>
-            <Button Content="Load"
-                    Command="{Binding LoadStoredLogsCommand}"
+            <!-- Doubles as a Cancel button while anything's running (see
+                 RefreshOrCancelStoredLogsCommand/PunchRecordsRefreshOrCancelGlyph/
+                 PunchRecordsRefreshOrCancelToolTip on AttendanceViewModel) - replaces what
+                 used to be a separate Cancel button in this page's own toolbar CardBorder
+                 above, visible only while something was running; this one button now
+                 toggles in place instead, same pattern as AttendanceSummaryView's own
+                 Period-row button. Also now the one place to cancel Import…/Fetch from
+                 Device above, not just this page's own Load. -->
+            <Button Content="{Binding PunchRecordsRefreshOrCancelGlyph}"
+                    Command="{Binding RefreshOrCancelStoredLogsCommand}"
                     Width="80"
-                    Margin="12,0,0,0" />
-            <Button Content="Export…"
+                    Margin="12,0,0,0"
+                    ToolTip="{Binding PunchRecordsRefreshOrCancelToolTip}" />
+            <Button Content="Export"
                     Command="{Binding ExportStoredLogsCommand}"
                     Padding="8,3"
                     Margin="8,0,0,0"
-                    ToolTip="Choose where to save these punches as an Excel file, independent of any report." />
-            <Button Content="Open"
-                    Command="{Binding OpenStoredLogsExportCommand}"
-                    Padding="8,3"
-                    Margin="6,0,0,0" />
+                    ToolTip="Save these punches to Excel, independent of any report -- opens automatically." />
         </StackPanel>
 
         <TextBlock Grid.Row="2"

@@ -1,4 +1,4 @@
-# Schedule App
+﻿# Schedule App
 
 A .NET 10 WPF desktop app for managing employee schedules, backed by SQL Server
 Express, with import/export to an Excel layout compatible with the original
@@ -532,17 +532,25 @@ tab has an **Exempt from Undertime Deduction** checkbox
 a flat rate per credited day regardless of hours actually worked (see
 `PayrollCalculator.BasicPayForDay`); the only thing that could still cost such
 an employee money for running short was the separate Undertime deduction
-line. Checking this reuses the same `PayrollLineItem.Waived`/
-`PayrollResult.TotalDeductions` machinery a person's manual per-period
-"disregard" already goes through (see `IPayrollUndertimeWaiverRepository`) --
-the Undertime figure keeps showing on the payslip for reference, it just
-never subtracts, regardless of that period's own manual waiver toggle.
-`PayrollCalculator.Calculate` ORs the two together
-(`undertimeWaived || employee.ExemptFromUndertimeDeduction`) rather than one
-replacing the other, so a person can still waive one period's Undertime by
-hand for an otherwise-ordinary employee. Overtime is unaffected either way --
-hours worked past the day's scheduled Work Time are still Overtime, exactly
-like any other employee.
+line. Checking this **omits the Undertime line from the Payroll Summary and
+payslip entirely** -- the same "omit rather than show excluded" treatment
+Rest Day Pay/Premium Pay get from their own eligibility flags below, not
+shown-but-never-subtracted the way a manually "disregarded" period is for an
+ordinary employee (see `PayrollLineItem.Waived`/
+`IPayrollUndertimeWaiverRepository`). `PayrollResult.UndertimeHours`/
+`UndertimePayAmount`/`UndertimeWaived` still carry the real figures
+regardless, for a reader that wants them independent of whether the line
+itself is shown (e.g. `PayrollExcelExporter`, which reads those rather than
+indexing into `ComputedDeductions` for exactly that reason).
+`PayrollCalculator.Calculate` ORs the flag together with the per-period
+manual waiver into one `undertimeExcluded` value used for
+`TotalDeductions`/`UndertimeWaived`
+(`undertimeWaived || employee.ExemptFromUndertimeDeduction`) -- but only the
+flag also removes the line itself, so a person can still waive one period's
+Undertime by hand for an otherwise-ordinary employee without losing their
+line (or its Exclude/Include toggle) the way an exempt employee does.
+Overtime is unaffected either way -- hours worked past the day's scheduled
+Work Time are still Overtime, exactly like any other employee.
 
 Edit Employee's Attendance tab pairs this with a **Default work time
 (hours)** field (`Employee.DefaultWorkTimeHours`, blank = company default).
@@ -606,7 +614,13 @@ the `PremiumHoliday` group is omitted from
 `PayrollResult.GrossPayAdjustmentGroups` when `QualifiesForPremiumPay` is
 false -- not shown at ₱0.00, left out entirely. `TotalGrossPay`/`NetPay`
 exclude both amounts for an ineligible employee automatically, since they
-just sum whatever lines/groups happen to be present.
+just sum whatever lines/groups happen to be present. The Undertime deduction
+line above follows the exact same convention for `ExemptFromUndertimeDeduction`
+-- omitted from `PayrollResult.ComputedDeductions` rather than shown at
+₱0.00 or shown-but-Excluded, with `UndertimeHours`/`UndertimePayAmount`/
+`UndertimeWaived` playing the same "real figure regardless of whether the
+line is present" role `RestDayHours`/`RestDayPayAmount` play for Rest Day
+Pay.
 
 **Live-read, not a snapshot.** Same as `QualifiesForOvertime`/
 `QualifiesForNightDiff` above -- toggling either flag takes effect

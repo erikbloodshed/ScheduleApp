@@ -176,22 +176,22 @@
                             Command="{Binding PrintPayslipsCommand}"
                             Padding="8,3"
                             Margin="0,0,10,0"
-                            ToolTip="Choose a department/employee scope and period, then preview and print/save a payslip for each -- 4 per Letter page." />
+                            ToolTip="Choose a scope and period, then preview/print/save a payslip for each -- 4 per Letter page." />
                     <Button Content="Export Payroll Report…"
                             Command="{Binding ExportPayrollReportCommand}"
                             Padding="8,3"
                             Margin="0,0,10,0"
-                            ToolTip="Choose a department/employee scope and period, then save an Excel roster of everyone's payroll for it." />
+                            ToolTip="Choose a scope and period, then save an Excel payroll roster." />
                     <Button Content="New Payroll Run…"
                             Command="{Binding NewPayrollRunCommand}"
                             Padding="8,3"
                             Margin="0,0,10,0"
-                            ToolTip="Choose who this period covers, review calculated payroll, then save it as a payroll run." />
+                            ToolTip="Choose who this period covers, review payroll, then save it as a run." />
                     <Button Content="Load Payroll Group…"
                             Command="{Binding LoadPayrollGroupCommand}"
                             Padding="8,3"
                             Margin="0,0,10,0"
-                            ToolTip="Reopen a payroll run saved earlier -- sets the period and employee checklist back to what was saved." />
+                            ToolTip="Reopen a payroll run saved earlier -- restores its period and employee checklist." />
                 </StackPanel>
             </Grid>
         </Border>
@@ -230,7 +230,7 @@
                     <TextBox DockPanel.Dock="Top"
                              Text="{Binding PayrollGroupSearchText, UpdateSourceTrigger=PropertyChanged}"
                              Margin="0,0,0,8"
-                             ToolTip="Comma-separated Employee ID, last name, first name, or department terms to narrow the table to (e.g. &quot;342, Cruz, Kitchen&quot;). Leave blank to show everyone." />
+                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;)." />
 
                     <!-- "Add to group" button - opens AddToPayrollGroupDialog so the
                          person can check employees from the full roster and append them
@@ -556,12 +556,12 @@
                         HorizontalAlignment="Stretch"
                         Padding="8,8"
                         Margin="0,0,0,10"
-                        ToolTip="Choose who this period covers, review calculated payroll, then save it as a payroll run." />
+                        ToolTip="Choose who this period covers, review payroll, then save it as a run." />
                 <Button Content="Load Payroll Group…"
                         Command="{Binding LoadPayrollGroupCommand}"
                         HorizontalAlignment="Stretch"
                         Padding="8,8"
-                        ToolTip="Reopen a payroll run saved earlier -- sets the period and employee checklist back to what was saved." />
+                        ToolTip="Reopen a payroll run saved earlier -- restores its period and employee checklist." />
             </StackPanel>
         </Border>
     </Grid>

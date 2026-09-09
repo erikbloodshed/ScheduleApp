@@ -184,29 +184,16 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="10"
-          RowDefinitions="Auto,*">
-        <!-- Global "something's running" indicator + Cancel, same shared
-             AttendanceBusyState this page's siblings (Punch Records/Manual Entries) each
-             show their own copy of - see PunchRecordsView.xaml's own comment on this same
-             strip for why it isn't just one shared control anymore now that Summary/Punch
-             Records/Manual Entries are three separate pages instead of three tabs on one. -->
-        <Border Grid.Row="0"
-                Style="{StaticResource CardBorder}"
-                Visibility="{Binding IsVisiblyRunning, Converter={StaticResource BoolToVisibility}}">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Right"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <Button Content="Cancel"
-                            Command="{Binding CancelCommand}"
-                            ToolTip="Stop whatever's currently running (Generate Reports, an Import/Fetch started from Punch Records, or a manual entry save/delete)." />
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <Grid Grid.Row="1"
-              Margin="0,0,0,0">
+    <Grid Margin="10">
+        <!-- No more separate "something's running" Cancel bar above this Grid (see
+             AttendanceBusyState) - it used to appear/disappear in its own CardBorder row
+             every time IsVisiblyRunning flipped, shoving the Report Scope tree and Period
+             row down and back up again around it. The icon-only Refresh button in the
+             Period row below (see RefreshOrCancelSummaryCommand) now doubles as that same
+             Cancel button in place instead, so nothing above it ever moves. Punch
+             Records/Manual Entries each still show their own copy of the old bar - see
+             PunchRecordsView.xaml's own comment on that strip. -->
+        <Grid Margin="0,0,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="255" />
                 <ColumnDefinition Width="*" />
@@ -242,7 +229,7 @@
                                Style="{StaticResource GroupLabel}"
                                Margin="0,0,0,4" />
                     <TextBox Text="{Binding ReportScopeSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Comma-separated Employee ID, last name, first name, or department terms to narrow the tree to (e.g. &quot;342, Cruz, Kitchen&quot;). Leave blank to show everyone -- this only changes what's shown, not what's checked." />
+                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom"
@@ -266,7 +253,7 @@
                         <Button Content="↻ Refresh"
                                 Command="{Binding LoadEmployeeTreeCommand}"
                                 Padding="8,3"
-                                ToolTip="Reload the employee list -- use this after adding, editing, or importing employees on the Schedule tab. Resets the checkboxes back to everyone checked." />
+                                ToolTip="Reload the employee list -- resets checkboxes back to everyone checked." />
                     </StackPanel>
                 </StackPanel>
 
@@ -333,6 +320,7 @@
                 <Grid Grid.Row="0"
                       Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -408,25 +396,45 @@
                             Content="▶"
                             Command="{Binding NextPeriodCommand}"
                             Padding="8,3"
+                            Margin="0,0,8,0"
                             ToolTip="Next cut-off period." />
+
+                    <!-- Sits right after the ▶ button (moved here from the status-counts
+                         strip below). No Visibility toggle - CanExportSummary already
+                         disables it whenever there's no result to export yet, the same
+                         CanExecute-driven greying every other command button on this page
+                         uses rather than hiding outright. -->
+                    <Button Grid.Column="6"
+                            Content="Export Summary…"
+                            Command="{Binding ExportSummaryCommand}"
+                            Padding="8,3"
+                            ToolTip="Save the attendance summary to Excel -- opens automatically." />
 
                     <!-- Manual fallback for the auto-refresh every Period/tree edit
                          already triggers (see ReportViewModel.RefreshSummaryAsync's
                          own doc comment for the exact gap this closes) - the
                          rightmost element in this row, same icon-button look as
                          SchedulePage's and PayrollSummaryView's own Refresh buttons
-                         (see IconHeaderActionButton above). Column 6 (the "*" star)
-                         absorbs whatever's left between the ◀/▶ buttons and this,
+                         (see IconHeaderActionButton above). Column 7 (the "*" star)
+                         absorbs whatever's left between Export Summary… and this,
                          so it stays pinned to the row's true right edge regardless
-                         of window width. -->
-                    <Button Grid.Column="7"
+                         of window width.
+
+                         Doubles as the page's Cancel button while anything is running
+                         (see RefreshOrCancelSummaryCommand/RefreshOrCancelGlyph/
+                         RefreshOrCancelToolTip) - Content/ToolTip swap to the Cancel
+                         glyph/label and Command switches to actually cancelling,
+                         instead of a separate Cancel button appearing elsewhere and
+                         shifting this row down. -->
+                    <Button Grid.Column="8"
                             Style="{StaticResource IconHeaderActionButton}"
-                            Content="&#xE72C;"
-                            Command="{Binding RefreshSummaryCommand}"
-                            ToolTip="Re-run this report now -- useful right after editing the schedule on the Schedule page." />
+                            Content="{Binding SummaryRefreshOrCancelGlyph}"
+                            Command="{Binding RefreshOrCancelSummaryCommand}"
+                            ToolTip="{Binding SummaryRefreshOrCancelToolTip}" />
                 </Grid>
 
-                <!-- Status counts + Export Summary, one slim strip. -->
+                <!-- Status counts + Clear Filter, one slim strip. (Export Summary… moved
+                     up to the Period row, next to the ▶ button.) -->
                 <Border Grid.Row="1"
                         Style="{StaticResource CardBorder}"
                         Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}">
@@ -459,7 +467,7 @@
                                 <Button Style="{StaticResource StatusCountButton}"
                                         Command="{Binding ShowStatusDetailCommand}"
                                         CommandParameter="{x:Static coreAttendance:PunchStatus.Complete}"
-                                        ToolTip="Click to filter the summary grid to Complete records only. Click again to show every status.">
+                                        ToolTip="Filter to Complete only -- click again to show everyone.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Complete"
                                                    Foreground="#16A34A" />
@@ -477,7 +485,7 @@
                                 <Button Style="{StaticResource StatusCountButton}"
                                         Command="{Binding ShowStatusDetailCommand}"
                                         CommandParameter="{x:Static coreAttendance:PunchStatus.Partial}"
-                                        ToolTip="Click to filter the summary grid to Partial records only. Click again to show every status.">
+                                        ToolTip="Filter to Partial only -- click again to show everyone.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Partial"
                                                    Foreground="#D97706" />
@@ -495,7 +503,7 @@
                                 <Button Style="{StaticResource StatusCountButton}"
                                         Command="{Binding ShowStatusDetailCommand}"
                                         CommandParameter="{x:Static coreAttendance:PunchStatus.Absent}"
-                                        ToolTip="Click to filter the summary grid to Absent records only. Click again to show every status.">
+                                        ToolTip="Filter to Absent only -- click again to show everyone.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Absent"
                                                    Foreground="#DC2626" />
@@ -513,7 +521,7 @@
                                 <Button Style="{StaticResource StatusCountButton}"
                                         Command="{Binding ShowStatusDetailCommand}"
                                         CommandParameter="{x:Static coreAttendance:PunchStatus.Leave}"
-                                        ToolTip="Click to filter the summary grid to Leave records only. Click again to show every status.">
+                                        ToolTip="Filter to Leave only -- click again to show everyone.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Leave"
                                                    Foreground="#475569" />
@@ -531,7 +539,7 @@
                                 <Button Style="{StaticResource StatusCountButton}"
                                         Command="{Binding ShowStatusDetailCommand}"
                                         CommandParameter="{x:Static coreAttendance:PunchStatus.OfficialBusiness}"
-                                        ToolTip="Click to filter the summary grid to Official Business records only. Click again to show every status.">
+                                        ToolTip="Filter to Official Business only -- click again to show everyone.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Official Business"
                                                    Foreground="#7C3AED" />
@@ -549,7 +557,7 @@
                                 <Button Style="{StaticResource StatusCountButton}"
                                         Command="{Binding ShowStatusDetailCommand}"
                                         CommandParameter="{x:Static coreAttendance:PunchStatus.RestDay}"
-                                        ToolTip="Click to filter the summary grid to Rest Day records only. Click again to show every status.">
+                                        ToolTip="Filter to Rest Day only -- click again to show everyone.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Rest Day"
                                                    Foreground="#0D9488" />
@@ -608,17 +616,8 @@
                             <Button Content="✕ Clear Filter"
                                     Command="{Binding ClearStatusFilterCommand}"
                                     Padding="8,3"
-                                    Margin="0,0,6,0"
                                     Visibility="{Binding SelectedStatusFilter, Converter={StaticResource NotNullToVisibility}}"
                                     ToolTip="Show every status in the summary grid again." />
-                            <Button Content="Export Summary…"
-                                    Command="{Binding ExportSummaryCommand}"
-                                    Padding="8,3"
-                                    ToolTip="Choose where to save the attendance summary as an Excel file." />
-                            <Button Content="Open"
-                                    Command="{Binding OpenSummaryCommand}"
-                                    Padding="8,3"
-                                    Margin="6,0,0,0" />
                         </StackPanel>
                     </DockPanel>
                 </Border>

@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using ScheduleApp.Core.Enums;
@@ -218,8 +218,13 @@ public static class PayrollExcelExporter
         ws.Cells[row, PayrollColumns.TotalGrossPay].Value = result.TotalGrossPay;
 
         ws.Cells[row, PayrollColumns.UndertimeHours].Value = result.UndertimeHours;
-        ws.Cells[row, PayrollColumns.Undertime].Value = result.ComputedDeductions[0].Amount;
-        ws.Cells[row, PayrollColumns.UndertimeWaived].Value = result.ComputedDeductions[0].Waived ? "Yes" : "No";
+        // UndertimePayAmount/UndertimeWaived, not ComputedDeductions[0] -- that line
+        // is omitted entirely for an Employee.ExemptFromUndertimeDeduction employee
+        // (see PayrollCalculator.Calculate), which would throw here otherwise; see
+        // those two properties' own doc comments for why they carry the same figures
+        // regardless of whether the line itself is present.
+        ws.Cells[row, PayrollColumns.Undertime].Value = result.UndertimePayAmount;
+        ws.Cells[row, PayrollColumns.UndertimeWaived].Value = result.UndertimeWaived ? "Yes" : "No";
 
         ws.Cells[row, PayrollColumns.Sss].Value =
             Subtotal(result.DeductionAdjustmentGroups, PayrollAdjustmentType.SSS);

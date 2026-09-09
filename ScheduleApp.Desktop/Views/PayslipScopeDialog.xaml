@@ -116,7 +116,7 @@
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Margin="0,0,0,4" />
             <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                     ToolTip="Comma-separated Employee ID, last name, first name, or department terms to narrow the tree to (e.g. &quot;342, Cruz, Kitchen&quot;). Leave blank to show everyone -- this only changes what's shown, not what's checked." />
+                     ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
         </StackPanel>
 
         <!-- Department/Employee checkbox tree - adapted from

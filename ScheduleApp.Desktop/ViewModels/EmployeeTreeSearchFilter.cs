@@ -58,8 +58,13 @@ internal static class EmployeeTreeSearchFilter
     /// <summary>True if term matches this employee's Employee ID (exact, numeric terms
     /// only), first name, or last name -- the same fields ResolveMatchingPins on
     /// PunchRecordsViewModel checks, minus department name, which Apply already checks
-    /// once per department instead of once per employee.</summary>
-    private static bool EmployeeMatchesSearchTerm(Employee employee, string term)
+    /// once per department instead of once per employee. Internal (not private) so
+    /// EmployeesPage's own "find an employee" search (see its code-behind's
+    /// SearchEmployee) can reuse this exact per-employee matching rule rather than a
+    /// second copy of it -- that page doesn't call Apply itself, since hiding a
+    /// department there is the one thing its tree was built to avoid (see
+    /// EmployeesPage.xaml's own DepartmentTree doc comment).</summary>
+    internal static bool EmployeeMatchesSearchTerm(Employee employee, string term)
     {
         if (int.TryParse(term, out var id))
             return employee.Pin == id;

@@ -121,7 +121,7 @@
                     Command="{Binding DeletePayrollRunCommand}"
                     HorizontalAlignment="Left"
                     Width="90"
-                    ToolTip="Permanently delete the selected payroll run. The employees' own payroll figures for that period aren't affected -- only this saved run record." />
+                    ToolTip="Permanently deletes this saved payroll run -- doesn't affect the employees' own payroll figures for that period." />
 
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal">

@@ -63,7 +63,7 @@
                      constructor - see PopulateServerDiscoveryAsync. -->
                 <ComboBox x:Name="ServerBox" Grid.Row="2" Margin="0,0,0,12"
                           IsEditable="True" IsTextSearchEnabled="True"
-                          ToolTip="The SQL Server instance name, e.g. .\SQLEXPRESS for a local SQL Server Express install -- pick a discovered server, or type your own." />
+                          ToolTip="SQL Server instance name (e.g. .\SQLEXPRESS) -- pick a discovered server or type your own." />
 
                 <TextBlock Grid.Row="3" Text="Database name" Margin="0,0,0,4" />
                 <TextBox x:Name="DatabaseNameBox" Grid.Row="4" Margin="0,0,0,16"
@@ -115,9 +115,9 @@
                     <StackPanel Margin="0,0,0,8">
                         <RadioButton x:Name="FullAccessRadio" GroupName="AccessLevel" Content="Full access (db_owner)"
                                      Margin="0,0,0,4" IsChecked="True"
-                                     ToolTip="Needed by Schedule Manager itself, which creates and updates the database schema on startup. Use this for the connection string Schedule Manager will use." />
+                                     ToolTip="Needed for Schedule Manager's own connection -- it creates/updates the schema on startup." />
                         <RadioButton x:Name="ReadWriteRadio" GroupName="AccessLevel" Content="Read &amp; write only (db_datareader + db_datawriter)"
-                                     ToolTip="Enough for the Push Listener service, which only ever reads and writes rows in tables that already exist -- see its own README. Not enough for Schedule Manager, which needs to create/alter the schema." />
+                                     ToolTip="Enough for Push Listener (existing tables only) -- not enough for Schedule Manager, which needs to alter the schema." />
                     </StackPanel>
                 </StackPanel>
 

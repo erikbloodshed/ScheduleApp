@@ -1,4 +1,4 @@
-using ScheduleApp.Core.Attendance;
+﻿using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
@@ -13,13 +13,14 @@ namespace ScheduleApp.Payroll.Tests;
 /// extra. Basic Pay was already a flat DailyRate per credited day regardless of
 /// actual hours worked (see PayrollCalculator.BasicPayForDay); the only thing that
 /// ever reduced pay for falling short of a day's scheduled Work Time was the
-/// separate Undertime deduction line. This flag reuses the pre-existing
-/// PayrollLineItem.Waived/PayrollResult.TotalDeductions machinery a person's manual
-/// per-period "disregard" already goes through (see IPayrollUndertimeWaiverRepository)
-/// rather than a parallel "zero out the hours" path -- the Undertime figure keeps
-/// showing on the payslip for reference, it just never subtracts, and the exemption
-/// holds regardless of whatever that period's own manual waiver toggle happens to be
-/// set to.
+/// separate Undertime deduction line. The Undertime line is omitted from
+/// ComputedDeductions entirely for an exempt employee -- not shown-but-never-
+/// subtracted, which was this feature's original shape before the Payroll Summary
+/// was asked to stop surfacing it for them at all -- while UndertimeHours/
+/// UndertimePayAmount/UndertimeWaived on PayrollResult still carry the real
+/// figures for a reader that wants them regardless (e.g. PayrollExcelExporter).
+/// The exemption holds regardless of whatever that period's own manual waiver
+/// toggle (IPayrollUndertimeWaiverRepository) happens to be set to.
 ///
 /// Overtime is deliberately untouched by any of this -- hours worked *beyond* the
 /// day's scheduled Work Time were already priced independently of Undertime before
@@ -79,17 +80,26 @@ public class PayrollCalculatorUndertimeExemptionTests
     }
 
     [Fact]
-    public void ExemptEmployee_UndertimeStillShowsButNeverReducesTheTotal()
+    public void ExemptEmployee_OmitsTheLineEntirely()
     {
-        // The core of the feature: same figure computed and displayed as the
-        // non-exempt case above -- only whether it counts toward the total differs.
+        // The core of the feature: no "Undertime" line at all for this employee --
+        // not present-with-Waived-true (this test's own name until the Payroll
+        // Summary was asked to stop surfacing it for exempt employees at all), the
+        // same "omit rather than show excluded" treatment Rest Day Pay gets from
+        // QualifiesForRestDayPay (see PayrollCalculatorPayEligibilityFlagsTests).
+        // That also means there's no per-period Exclude/Include toggle to show --
+        // trivially true of an empty list, so no separate assertion for it.
         var employee = DailyEmployee(exempt: true);
         var result = Run(employee);
 
+        Assert.Empty(result.ComputedDeductions);
+
+        // The figures themselves are still computed and available off
+        // PayrollResult directly, same as the non-exempt case above -- only
+        // whether they're shown as a line (and whether they count) differs.
         Assert.Equal(2.00m, result.UndertimeHours);
-        Assert.Equal(200.00m, result.ComputedDeductions[0].Amount);
-        Assert.True(result.ComputedDeductions[0].Waived);
-        Assert.Equal("Undertime (2.00H), Excluded", result.ComputedDeductions[0].Label);
+        Assert.Equal(200.00m, result.UndertimePayAmount);
+        Assert.True(result.UndertimeWaived);
 
         // The 200.00 that reduced NormalEmployee's total above simply isn't
         // subtracted here -- this employee's Net Pay is 200.00 higher for the
@@ -98,29 +108,17 @@ public class PayrollCalculatorUndertimeExemptionTests
     }
 
     [Fact]
-    public void ExemptEmployee_HidesTheManualWaiverToggle()
-    {
-        // PayrollSummaryView's own per-period Exclude/Include toggle would be a
-        // no-op for this employee (Waived above is already permanently true
-        // regardless of what that toggle is set to) -- hidden entirely rather
-        // than offered as a button that visibly does nothing when clicked.
-        var employee = DailyEmployee(exempt: true);
-        var result = Run(employee);
-
-        Assert.False(result.ComputedDeductions[0].SupportsWaiver);
-    }
-
-    [Fact]
     public void ExemptEmployee_StaysExcludedEvenWithThePerPeriodWaiverOff()
     {
         // undertimeWaived: false -- nobody has touched this period's own manual
         // waiver toggle (IPayrollUndertimeWaiverRepository). The employee-level
-        // flag alone must still exclude the deduction; this is the regression
+        // flag alone must still omit/exclude the deduction; this is the regression
         // guard for the OR, not a replace, in PayrollCalculator.Calculate.
         var employee = DailyEmployee(exempt: true);
         var result = Run(employee, undertimeWaived: false);
 
-        Assert.True(result.ComputedDeductions[0].Waived);
+        Assert.Empty(result.ComputedDeductions);
+        Assert.True(result.UndertimeWaived);
         Assert.Equal(0.00m, result.TotalDeductions);
     }
 

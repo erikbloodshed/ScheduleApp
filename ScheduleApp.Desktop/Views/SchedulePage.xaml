@@ -10,25 +10,6 @@
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-        <!-- Same "card" look as AttendanceView's status strips, so the command
-             row reads as a Fluent surface instead of the old grip-and-chevron
-             ToolBar/ToolBarTray look. -->
-        <Style x:Key="CardBorder"
-               TargetType="Border">
-            <Setter Property="Background"
-                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
-            <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
-            <Setter Property="BorderThickness"
-                    Value="1" />
-            <Setter Property="CornerRadius"
-                    Value="4" />
-            <Setter Property="Padding"
-                    Value="10,8" />
-            <Setter Property="Margin"
-                    Value="0,0,0,8" />
-        </Style>
-
         <Style TargetType="{x:Type ui:Button}">
             <Setter Property="Margin"
                     Value="0,0,6,0" />
@@ -69,12 +50,12 @@
         </Style>
 
         <!-- Icon-only header action button - currently just the calendar's own Refresh
-             button at the right edge of the "Select an employee"/employee-name header
-             below. Same style, same font-fallback reasoning, and same role as
-             PayrollSummaryView's own IconHeaderActionButton (see that file's copy of this
-             style for the fuller doc comment) - duplicated here rather than shared via a
-             merged resource dictionary, same "each page keeps its own copy of a small style
-             resource" convention CardBorder above already follows on this page. -->
+             button at the right edge of the Import/Export Schedule row below. Same
+             style, same font-fallback reasoning, and same role as PayrollSummaryView's
+             own IconHeaderActionButton (see that file's copy of this style for the
+             fuller doc comment) - duplicated here rather than shared via a merged
+             resource dictionary, same "each page keeps its own copy of a small style
+             resource" convention this app already follows. -->
         <Style x:Key="IconHeaderActionButton"
                TargetType="Button">
             <Setter Property="FontFamily"
@@ -124,30 +105,18 @@
         </Style>
     </Page.Resources>
 
-    <Grid Margin="8" RowDefinitions="Auto,*">
-        <!-- Command row for this page only - schedule import/export only
-             makes sense while working the schedule, so it lives here instead
-             of on a window-wide bar. Department/Employee management commands
-             live on the Employees page instead (see EmployeesPage.xaml),
-             which has its own copy of a department/employee tree (plus an
-             employee grid) reading the same MainViewModel.Departments this
-             one does - selecting something on either page updates the same
-             shared SelectedEmployee/SelectedDepartment, so the two stay in
-             sync without one page depending on the other's tree. -->
-        <Border Grid.Row="0"
-                Style="{StaticResource CardBorder}">
-            <WrapPanel Orientation="Horizontal">
-                <TextBlock Text="Schedule:"
-                           Style="{StaticResource GroupLabel}" />
-                <Button Content="Import Schedule (Excel)"
-                        Command="{Binding ImportScheduleCommand}" />
-                <Button Content="Export Schedule (Excel)"
-                        Command="{Binding ExportScheduleCommand}"
-                        Margin="0" />
-            </WrapPanel>
-        </Border>
-
-        <Grid Grid.Row="1">
+    <Grid Margin="8">
+        <!-- The page-level command row (Import/Export Schedule, previously its own
+             CardBorder above this Grid) now lives in the calendar's own header row
+             instead (see Grid.Row="0" below, in place of CalendarHeaderText) - one
+             less row height spent on chrome, freeing that space for the calendar
+             itself. Department/Employee management commands live on the Employees
+             page instead (see EmployeesPage.xaml), which has its own copy of a
+             department/employee tree (plus an employee grid) reading the same
+             MainViewModel.Departments this one does - selecting something on either
+             page updates the same shared SelectedEmployee/SelectedDepartment, so the
+             two stay in sync without one page depending on the other's tree. -->
+        <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280" />
                 <ColumnDefinition Width="*" />
@@ -181,7 +150,7 @@
                                Style="{StaticResource GroupLabel}"
                                Margin="0,0,0,4" />
                     <TextBox Text="{Binding EmployeeTreeSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Comma-separated Employee ID, last name, first name, or department terms to narrow the tree to (e.g. &quot;342, Cruz, Kitchen&quot;). Leave blank to show everyone -- this only changes what's shown, not what's checked." />
+                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom"
@@ -245,51 +214,76 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- CalendarHeaderText plus a Refresh button pinned to the row's own right
-                     edge - same DockPanel/LastChildFill="False" shape as
+                <!-- Import/Export Schedule (formerly this page's own CardBorder row above
+                     the tree+calendar split) plus a Refresh button pinned to the row's own
+                     right edge - same DockPanel/LastChildFill="False" shape as
                      PayrollSummaryView's own employee-name header (see that file for the
-                     fuller reasoning): CalendarHeaderText docks Left and takes only the
-                     width it needs, Refresh docks Right regardless of how long that text
-                     is, and the space between the two just stays empty rather than either
-                     side stretching into it. No Visibility toggle on the button the way
-                     PayrollSummaryView's has - unlike that page, this one has no
-                     NotNullToVisibility converter already in scope, and every other
-                     command-bound button on this page (Set/Remove Schedule, Clear
-                     Selection, below) already relies on plain CanExecute-driven disabling
-                     rather than hiding outright, so RecalculateScheduleCommand's own
-                     CanExecute (see ScheduleCalendarViewModel.CanRecalculateSchedule)
-                     graying the button out for "no employee selected"/multi-select mode
-                     stays consistent with that. -->
+                     fuller reasoning): the button pair docks Left and takes only the width
+                     it needs, Refresh docks Right regardless, and the space between the two
+                     just stays empty rather than either side stretching into it. No
+                     Visibility toggle on the Refresh button the way PayrollSummaryView's
+                     has - unlike that page, this one has no NotNullToVisibility converter
+                     already in scope, and every other command-bound button on this page
+                     (Set/Remove Schedule, Clear Selection, below) already relies on plain
+                     CanExecute-driven disabling rather than hiding outright, so
+                     RefreshOrCancelScheduleCommand's own CanExecute (see
+                     ScheduleCalendarViewModel.CanRefreshOrCancelSchedule) graying the button
+                     out for "no employee selected"/multi-select mode stays consistent with
+                     that.
+
+                     Doubles as a Cancel button while anything's running (see
+                     RefreshOrCancelScheduleCommand/RefreshOrCancelGlyph/
+                     RefreshOrCancelToolTip) - same in-place Refresh<->Cancel toggle as
+                     AttendanceSummaryView's own Period-row button and PayrollSummaryView's
+                     own payslip-header button, rather than just sitting disabled with no
+                     way to stop a recalculation once started. -->
                 <DockPanel Grid.Row="0"
+                           Margin="0,0,0,8"
+                           LastChildFill="False">
+                    <StackPanel DockPanel.Dock="Left"
+                                Orientation="Horizontal">
+                        <Button Content="Import Schedule (Excel)"
+                                Command="{Binding ImportScheduleCommand}" />
+                        <Button Content="Export Schedule (Excel)"
+                                Command="{Binding ExportScheduleCommand}"
+                                Margin="0" />
+                    </StackPanel>
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource IconHeaderActionButton}"
+                            Content="{Binding RefreshOrCancelGlyph}"
+                            Command="{Binding RefreshOrCancelScheduleCommand}"
+                            ToolTip="{Binding RefreshOrCancelToolTip}" />
+                </DockPanel>
+
+                <!-- CalendarHeaderText ("Select an employee"/employee name), now sharing
+                     this row with month navigation instead of its own row above - freed up
+                     by moving Import/Export Schedule into that row (see Grid.Row="0" above).
+                     Same DockPanel/LastChildFill="False" shape as that row: the title docks
+                     Left, month navigation docks Right, and the middle just stays empty. -->
+                <DockPanel Grid.Row="1"
                            Margin="0,0,0,8"
                            LastChildFill="False">
                     <TextBlock DockPanel.Dock="Left"
                                FontSize="18"
                                FontWeight="Bold"
-                               Text="{Binding CalendarHeaderText}" />
-                    <Button DockPanel.Dock="Right"
-                            Style="{StaticResource IconHeaderActionButton}"
-                            Content="&#xE72C;"
-                            Command="{Binding RecalculateScheduleCommand}"
-                            ToolTip="Recalculate this employee's schedule and attendance markers using the latest data." />
-                </DockPanel>
-
-                <StackPanel Grid.Row="1"
-                            Orientation="Horizontal"
-                            Margin="0,0,0,8">
-                    <Button Content="&lt;"
-                            Width="32"
-                            Command="{Binding PreviousMonthCommand}" />
-                    <TextBlock Text="{Binding DisplayedMonthText}"
-                               FontWeight="SemiBold"
                                VerticalAlignment="Center"
-                               Margin="12,0"
-                               Width="140"
-                               TextAlignment="Center" />
-                    <Button Content="&gt;"
-                            Width="32"
-                            Command="{Binding NextMonthCommand}" />
-                </StackPanel>
+                               Text="{Binding CalendarHeaderText}" />
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal">
+                        <Button Content="&lt;"
+                                Width="32"
+                                Command="{Binding PreviousMonthCommand}" />
+                        <TextBlock Text="{Binding DisplayedMonthText}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0"
+                                   Width="140"
+                                   TextAlignment="Center" />
+                        <Button Content="&gt;"
+                                Width="32"
+                                Command="{Binding NextMonthCommand}" />
+                    </StackPanel>
+                </DockPanel>
 
                 <DockPanel Grid.Row="2"
                            Margin="0,0,0,8"

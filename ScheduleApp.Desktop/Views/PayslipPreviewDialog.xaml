@@ -107,13 +107,13 @@
                     Margin="0,0,8,0"
                     IsEnabled="False"
                     Click="OpenButton_Click"
-                    ToolTip="Open the saved PDF in your default PDF viewer -- print from there for full control over the printer/copies/etc." />
+                    ToolTip="Open the saved PDF in your default viewer -- print from there for full control." />
             <Button x:Name="PrintButton"
                     Content="Print"
                     Width="80"
                     Margin="0,0,8,0"
                     Click="PrintButton_Click"
-                    ToolTip="Send straight to your default printer's PDF handler (e.g. the browser or PDF reader set as your default) without opening it first." />
+                    ToolTip="Send straight to your default PDF handler without opening it first." />
             <Button Content="Close"
                     Width="80"
                     IsCancel="True" />

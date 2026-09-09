@@ -198,6 +198,14 @@ public partial class PayrollSummaryViewModel : ObservableObject
                 case nameof(AttendanceBusyState.IsVisiblyRunning):
                     OnPropertyChanged(nameof(IsBusy));
                     NotifyEmptyStates();
+
+                    // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
+                    // this is what flips the payslip header's icon button between Refresh
+                    // and Cancel, same mechanism ReportViewModel's own analogous handler
+                    // uses for the Attendance Summary tab's Refresh/Cancel button.
+                    OnPropertyChanged(nameof(RefreshOrCancelGlyph));
+                    OnPropertyChanged(nameof(RefreshOrCancelToolTip));
+                    RefreshOrCancelPayslipCommand.NotifyCanExecuteChanged();
                     break;
 
                 // Every refresh this class runs (employee change, period edit, or an
@@ -380,6 +388,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
         NotifyEmptyStates();
         PrintCurrentPayslipCommand.NotifyCanExecuteChanged();
         RecalculatePayslipCommand.NotifyCanExecuteChanged();
+        RefreshOrCancelPayslipCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>SelectedEmployee changing only ever affects three things here:
@@ -1227,6 +1236,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
         DeleteAdjustmentCommand.NotifyCanExecuteChanged();
         PrintCurrentPayslipCommand.NotifyCanExecuteChanged();
         RecalculatePayslipCommand.NotifyCanExecuteChanged();
+        RefreshOrCancelPayslipCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanEditAdjustmentsNow));
     }
 
@@ -1296,4 +1306,44 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// loaded once, and this shouldn't be clickable while a refresh (or an Add/Edit/Delete
     /// round trip) is already using _busy.</summary>
     private bool CanRecalculatePayslip() => !_busy.IsRunning && Result is not null;
+
+    /// <summary>What PayrollSummaryView's payslip-header icon button is actually wired to
+    /// now -- same "one button, toggling in place" treatment as ReportViewModel.
+    /// RefreshOrCancelSummary on the Attendance Summary page (see that method's own doc
+    /// comment for the fuller reasoning): Content/ToolTip swap to Cancel and Command
+    /// switches to _busy.Cancel() while IsBusy, instead of RecalculatePayslipAsync just
+    /// sitting disabled with no way to stop it. This page never had a separate Cancel
+    /// button the way Attendance's pages do -- IsBusy only ever drove the progress bar --
+    /// so unlike that page's fix, this adds cancellability here for the first time rather
+    /// than replacing an existing Cancel button.
+    ///
+    /// CanExecute is IsBusy (always fine to try to cancel) OR CanRecalculatePayslip() --
+    /// needed because CanRecalculatePayslip() alone would leave the button disabled during
+    /// a run it didn't itself start (e.g. RequestRefresh's own automatic reload, or an
+    /// Add/Edit/Delete round trip) at exactly the moment IsBusy makes it look like a live
+    /// Cancel button.</summary>
+    private bool CanRefreshOrCancelPayslip() => IsBusy || CanRecalculatePayslip();
+
+    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelPayslip))]
+    private void RefreshOrCancelPayslip()
+    {
+        if (IsBusy)
+            _busy.Cancel();
+        else
+            _ = RecalculatePayslipAsync();
+    }
+
+    /// <summary>Segoe Fluent Icons glyphs for RefreshOrCancelPayslipCommand's button -- see
+    /// ReportViewModel.RefreshOrCancelGlyph's own doc comment for why these two specific
+    /// codepoints (Refresh/Cancel).</summary>
+    public string RefreshOrCancelGlyph => IsBusy ? "" : "";
+
+    /// <summary>Generic on purpose, not "Stop this recalculation" -- _busy is the one
+    /// AttendanceBusyState instance shared app-wide (Attendance, Schedule, and Payroll all
+    /// construct their children from the same DI-scoped instance -- see App.xaml.cs), so
+    /// IsBusy can be true because of literally anything currently running anywhere in the
+    /// app, not only a click on this same button.</summary>
+    public string RefreshOrCancelToolTip => IsBusy
+        ? "Stop whatever's currently running."
+        : "Recalculate this employee's payslip using the latest attendance and adjustments for this period.";
 }

@@ -185,17 +185,30 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         // property name, so a two-way XAML binding on (say) AttendanceViewModel.PeriodStart
         // -- which reads/writes through the forwarding property below -- still refreshes
         // when Report.PeriodStart changes for a reason other than that same binding
-        // setting it (e.g. after LoadEmployeeTreeAsync). No name collides across more
-        // than one child (each forwarded property belongs to exactly one of them; see
-        // the region below), so a blanket relay is safe.
+        // setting it (e.g. after LoadEmployeeTreeAsync). Most forwarded properties keep
+        // the child's own name, so the blanket relay reaches their bindings directly.
+        // The exceptions are the three pages' Refresh/Cancel glyph/tooltip pairs, which
+        // are forwarded under *prefixed* names (SummaryRefreshOrCancelGlyph etc.) because
+        // the child property name (RefreshOrCancelGlyph) would otherwise collide across
+        // all three -- the blanket relay re-raises "RefreshOrCancelGlyph", which no
+        // binding listens for, so those are re-raised explicitly in the _busy handler
+        // below off the one flag all three derive from.
         Report.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
         PunchRecords.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
         ManualEntriesTab.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
         ReportScope.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
         _busy.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
-                OnPropertyChanged(nameof(IsVisiblyRunning));
+            if (e.PropertyName != nameof(AttendanceBusyState.IsVisiblyRunning)) return;
+
+            OnPropertyChanged(nameof(IsVisiblyRunning));
+
+            OnPropertyChanged(nameof(SummaryRefreshOrCancelGlyph));
+            OnPropertyChanged(nameof(SummaryRefreshOrCancelToolTip));
+            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelGlyph));
+            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelToolTip));
+            OnPropertyChanged(nameof(ManualEntriesRefreshOrCancelGlyph));
+            OnPropertyChanged(nameof(ManualEntriesRefreshOrCancelToolTip));
         };
     }
 
@@ -292,13 +305,26 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         set => Report.IsSummaryTabSelected = value;
     }
 
-    public IRelayCommand OpenSummaryCommand => Report.OpenSummaryCommand;
     public IRelayCommand ExportSummaryCommand => Report.ExportSummaryCommand;
     public IRelayCommand<PunchStatus> ShowStatusDetailCommand => Report.ShowStatusDetailCommand;
     public IRelayCommand ClearStatusFilterCommand => Report.ClearStatusFilterCommand;
     public IRelayCommand ShowOrphanedDetailCommand => Report.ShowOrphanedDetailCommand;
     public IRelayCommand ShowUnscheduledDetailCommand => Report.ShowUnscheduledDetailCommand;
     public IAsyncRelayCommand RefreshSummaryCommand => Report.RefreshSummaryCommand;
+
+    /// <summary>What the Period row's icon button in AttendanceSummaryView.xaml is
+    /// actually wired to now -- see ReportViewModel.RefreshOrCancelSummary's own doc
+    /// comment for why this replaced a separate Cancel bar/button that used to appear
+    /// and disappear above that row.</summary>
+    public IRelayCommand RefreshOrCancelSummaryCommand => Report.RefreshOrCancelSummaryCommand;
+
+    /// <summary>Prefixed "Summary"/"PunchRecords"/"ManualEntries" (unlike the Payroll/
+    /// Schedule facades' plain RefreshOrCancelGlyph/RefreshOrCancelToolTip) -- this one
+    /// facade is shared by all three Attendance pages (see this class's own doc comment),
+    /// so each page's own icon/label pair needs its own name here to keep the three from
+    /// colliding on one class.</summary>
+    public string SummaryRefreshOrCancelGlyph => Report.RefreshOrCancelGlyph;
+    public string SummaryRefreshOrCancelToolTip => Report.RefreshOrCancelToolTip;
 
     /// <summary>Backs the Summary grid's own right-click "Add Manual Entry…" (see
     /// AttendanceView.xaml.cs's SummaryRow_MouseRightButtonDown) -- same forwarded-
@@ -354,7 +380,13 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     public ICollectionView StoredLogsView => PunchRecords.StoredLogsView;
     public IAsyncRelayCommand LoadStoredLogsCommand => PunchRecords.LoadStoredLogsCommand;
     public IAsyncRelayCommand ExportStoredLogsCommand => PunchRecords.ExportStoredLogsCommand;
-    public IRelayCommand OpenStoredLogsExportCommand => PunchRecords.OpenStoredLogsExportCommand;
+
+    /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
+    /// PunchRecordsViewModel.RefreshOrCancelStoredLogs's own doc comment. Named with the
+    /// "PunchRecords" prefix for the same reason SummaryRefreshOrCancelGlyph is.</summary>
+    public IRelayCommand RefreshOrCancelStoredLogsCommand => PunchRecords.RefreshOrCancelStoredLogsCommand;
+    public string PunchRecordsRefreshOrCancelGlyph => PunchRecords.RefreshOrCancelGlyph;
+    public string PunchRecordsRefreshOrCancelToolTip => PunchRecords.RefreshOrCancelToolTip;
 
     /// <summary>Named with the "LogView" prefix (unlike PreviousPeriodCommand/
     /// NextPeriodCommand above) for the same reason ReportScopeSearchText is -- both
@@ -386,8 +418,14 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     public ObservableCollection<StoredPunchLogRow> ManualEntries => ManualEntriesTab.ManualEntries;
     public IAsyncRelayCommand LoadManualEntriesCommand => ManualEntriesTab.LoadManualEntriesCommand;
     public IAsyncRelayCommand ExportManualEntriesCommand => ManualEntriesTab.ExportManualEntriesCommand;
-    public IRelayCommand OpenManualEntriesExportCommand => ManualEntriesTab.OpenManualEntriesExportCommand;
     public IAsyncRelayCommand ImportManualEntriesCommand => ManualEntriesTab.ImportManualEntriesCommand;
+
+    /// <summary>What ManualEntriesView's toolbar button is actually wired to now -- see
+    /// ManualEntriesViewModel.RefreshOrCancelManualEntries's own doc comment. Named with
+    /// the "ManualEntries" prefix for the same reason SummaryRefreshOrCancelGlyph is.</summary>
+    public IRelayCommand RefreshOrCancelManualEntriesCommand => ManualEntriesTab.RefreshOrCancelManualEntriesCommand;
+    public string ManualEntriesRefreshOrCancelGlyph => ManualEntriesTab.RefreshOrCancelGlyph;
+    public string ManualEntriesRefreshOrCancelToolTip => ManualEntriesTab.RefreshOrCancelToolTip;
 
     /// <summary>Named with the "ManualEntries" prefix for the same reason
     /// PreviousLogViewPeriodCommand/NextLogViewPeriodCommand are above -- keeps this

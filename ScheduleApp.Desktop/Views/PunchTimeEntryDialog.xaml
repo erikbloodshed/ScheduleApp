@@ -54,7 +54,7 @@
 
         <TextBlock Grid.Row="4" Text="Reason" Margin="0,0,0,4" />
         <TextBox x:Name="ReasonBox" Grid.Row="5" Margin="0,0,0,12"
-                 ToolTip="Why this punch couldn't come from the device, e.g. &quot;Forgot to badge out&quot;. Optional -- shown grayed-out is the default (matches the slot above); type over it for something more specific." />
+                 ToolTip="Why this punch couldn't come from the device (optional) -- grayed-out shows the default; type over it for something specific." />
 
         <TextBlock Grid.Row="6" Text="Entered by" Margin="0,0,0,4" />
         <TextBox x:Name="EnteredByBox" Grid.Row="7" Margin="0,0,0,4" />

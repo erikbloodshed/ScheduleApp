@@ -253,6 +253,18 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         // this class's own subscription to Tree below follows.
         _busy.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
+            {
+                // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
+                // this is what flips the calendar header's icon button between Refresh
+                // and Cancel, same mechanism PayrollSummaryViewModel's own analogous
+                // handler uses for the payslip header's button.
+                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
+                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
+                RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
+                return;
+            }
+
             if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
 
             // Disable RecalculateScheduleCommand the instant _busy.IsRunning goes true,
@@ -261,6 +273,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
             // _busy-gated command elsewhere in this app follows (see e.g.
             // PayrollSummaryViewModel's own _busy.PropertyChanged handler).
             RecalculateScheduleCommand.NotifyCanExecuteChanged();
+            RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
 
             if (!_busy.IsRunning && _scheduleRefreshPending)
             {
@@ -293,6 +306,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
 
             RequestScheduleRefresh();
             RecalculateScheduleCommand.NotifyCanExecuteChanged();
+            RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
         };
 
         // Goes through the generated property setter (not the backing field directly) so
@@ -540,6 +554,46 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// two checks).</summary>
     private bool CanRecalculateSchedule() =>
         !_busy.IsRunning && !_multiSelectMode.IsMultiSelectMode && _tree.SelectedEmployee is not null;
+
+    /// <summary>What SchedulePage's calendar-header icon button is actually wired to now --
+    /// same "one button, toggling in place" treatment as ReportViewModel.
+    /// RefreshOrCancelSummary/PayrollSummaryViewModel.RefreshOrCancelPayslip (see either
+    /// one's own doc comment for the fuller reasoning): Content/ToolTip swap to Cancel and
+    /// Command switches to _busy.Cancel() while _busy.IsVisiblyRunning, instead of
+    /// RecalculateScheduleAsync just sitting disabled with no way to stop it. This page
+    /// never had a Cancel button of its own either, the same "adds cancellability here for
+    /// the first time" situation as the payslip header's button.
+    ///
+    /// CanExecute is IsVisiblyRunning (always fine to try to cancel) OR
+    /// CanRecalculateSchedule() -- needed because CanRecalculateSchedule() alone would leave
+    /// the button disabled during a run it didn't itself start (e.g. an automatic
+    /// RequestScheduleRefresh/RequestCalendarStatusRefresh, or one of
+    /// ScheduleAssignmentViewModel's five schedule-write commands) at exactly the moment
+    /// IsVisiblyRunning makes it look like a live Cancel button.</summary>
+    private bool CanRefreshOrCancelSchedule() => _busy.IsVisiblyRunning || CanRecalculateSchedule();
+
+    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelSchedule))]
+    private void RefreshOrCancelSchedule()
+    {
+        if (_busy.IsVisiblyRunning)
+            _busy.Cancel();
+        else
+            _ = RecalculateScheduleAsync();
+    }
+
+    /// <summary>Segoe Fluent Icons glyphs for RefreshOrCancelScheduleCommand's button -- see
+    /// ReportViewModel.RefreshOrCancelGlyph's own doc comment for why these two specific
+    /// codepoints (Refresh/Cancel).</summary>
+    public string RefreshOrCancelGlyph => _busy.IsVisiblyRunning ? "" : "";
+
+    /// <summary>Generic on purpose, not "Stop this recalculation" -- _busy is the one
+    /// AttendanceBusyState instance shared app-wide (Attendance, Schedule, and Payroll all
+    /// construct their children from the same DI-scoped instance -- see App.xaml.cs), so
+    /// this can be true because of literally anything currently running anywhere in the
+    /// app, not only a click on this same button.</summary>
+    public string RefreshOrCancelToolTip => _busy.IsVisiblyRunning
+        ? "Stop whatever's currently running."
+        : "Recalculate this employee's schedule and attendance markers using the latest data.";
 
 
     /// <summary>Builds CalendarDayViewModel for every visible cell and kicks off the

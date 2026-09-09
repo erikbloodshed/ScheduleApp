@@ -167,7 +167,7 @@
 
         <TextBlock Text="Reason" Grid.Row="8" Margin="0,0,0,4" />
         <TextBox x:Name="ReasonBox" Grid.Row="9" Margin="0,0,0,12"
-                 ToolTip="Why this punch couldn't come from the device, e.g. &quot;Forgot to badge in&quot;. Optional -- shown grayed-out is the default (matches Type above); type over it for something more specific."
+                 ToolTip="Why this punch couldn't come from the device (optional) -- grayed-out shows the default; type over it for something specific."
                  TextWrapping="Wrap" AcceptsReturn="True" Height="50" VerticalScrollBarVisibility="Auto" />
 
         <TextBlock Text="Entered by" Grid.Row="10" Margin="0,0,0,4" />

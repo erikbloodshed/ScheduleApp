@@ -3,133 +3,80 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
       xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+      xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       ScrollViewer.CanContentScroll="False"
       Title="Employees">
-    <Page.Resources>
-        <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
-        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
-        <converters:NumberConverter x:Key="Number" />
+        <Page.Resources>
+                <converters:NullToVisibilityConverter x:Key="NullToVisibility"/>
+                <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility"/>
+                <converters:NumberConverter x:Key="Number"/>
 
-        <!-- Same "card" look as SchedulePage/AttendanceView's command rows, so
-             this reads as the same kind of Fluent surface as everywhere else,
-             see those files' own copies of this style for why it's
-             duplicated per-page rather than shared. -->
-        <Style x:Key="CardBorder"
-               TargetType="Border">
-            <Setter Property="Background"
-                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
-            <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
-            <Setter Property="BorderThickness"
-                    Value="1" />
-            <Setter Property="CornerRadius"
-                    Value="4" />
-            <Setter Property="Padding"
-                    Value="10,8" />
-            <Setter Property="Margin"
-                    Value="0,0,0,8" />
-        </Style>
+                <Style TargetType="{x:Type ui:Button}">
+                        <Setter Property="Margin"
+                                Value="0,0,6,0"/>
+                        <Setter Property="Appearance"
+                                Value="Secondary"/>
+                </Style>
 
-        <Style TargetType="{x:Type ui:Button}">
-            <Setter Property="Margin"
-                    Value="0,0,6,0" />
-            <Setter Property="Appearance"
-                    Value="Secondary" />
-        </Style>
+                <Style x:Key="GroupLabel"
+                       TargetType="TextBlock">
+                        <Setter Property="VerticalAlignment"
+                                Value="Center"/>
+                        <Setter Property="Margin"
+                                Value="0,0,8,0"/>
+                        <Setter Property="Foreground"
+                                Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <Setter Property="FontWeight"
+                                Value="SemiBold"/>
+                </Style>
 
-        <Style x:Key="GroupLabel"
-               TargetType="TextBlock">
-            <Setter Property="VerticalAlignment"
-                    Value="Center" />
-            <Setter Property="Margin"
-                    Value="0,0,8,0" />
-            <Setter Property="Foreground"
-                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
-            <Setter Property="FontWeight"
-                    Value="SemiBold" />
-        </Style>
-
-        <!-- Right-aligned numeric grid cell/header pair, same shape as the
+                <!-- Right-aligned numeric grid cell/header pair, same shape as the
              AttendanceStatusDetailDialog/EmployeeAttendancePanel/AttendanceView
-             copies of this style; see those files' own copies (and CardBorder
-             above) for why it's duplicated per-page rather than shared. Used by
-             the Daily Rate/SSS/PhilHealth/Pag-IBIG columns below. -->
-        <Style x:Key="RightAlignedCell"
-               TargetType="TextBlock">
-            <Setter Property="TextAlignment"
-                    Value="Right" />
-            <Setter Property="Margin"
-                    Value="0,0,8,0" />
-        </Style>
-        <Style x:Key="RightAlignedHeader"
-               TargetType="DataGridColumnHeader"
-               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
-            <Setter Property="HorizontalContentAlignment"
-                    Value="Right" />
-        </Style>
+             copies of this style; see those files' own copies for why it's
+             duplicated per-page rather than shared. Used by the Daily Rate/SSS/
+             PhilHealth/Pag-IBIG columns below. -->
+                <Style x:Key="RightAlignedCell"
+                       TargetType="TextBlock">
+                        <Setter Property="TextAlignment"
+                                Value="Right"/>
+                        <Setter Property="Margin"
+                                Value="0,0,8,0"/>
+                </Style>
+                <Style x:Key="RightAlignedHeader"
+                       TargetType="DataGridColumnHeader"
+                       BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+                        <Setter Property="HorizontalContentAlignment"
+                                Value="Right"/>
+                </Style>
 
-        <!-- Centered checkbox-column header, shared by all four DataGridCheckBoxColumns
+                <!-- Centered checkbox-column header, shared by all four DataGridCheckBoxColumns
              below instead of each repeating the same HeaderStyle inline (Overtime/Night
              Diff only needed one copy each before this page grew OT Premium/Leave w/ Pay,
              at which point four near-identical inline copies was worth factoring out). -->
-        <Style x:Key="CenteredCheckBoxHeader"
-               TargetType="{x:Type DataGridColumnHeader}"
-               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
-            <Setter Property="HorizontalContentAlignment"
-                    Value="Center" />
-        </Style>
-    </Page.Resources>
+                <Style x:Key="CenteredCheckBoxHeader"
+                       TargetType="{x:Type DataGridColumnHeader}"
+                       BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+                        <Setter Property="HorizontalContentAlignment"
+                                Value="Center"/>
+                </Style>
+        </Page.Resources>
 
-    <Grid Margin="8" RowDefinitions="Auto,*">
-        <!-- Add/Delete Department and Add/Edit/Delete Employee all act on
-             MainViewModel.SelectedDepartment/SelectedEmployee, which the tree and
-             grid below drive directly (see DepartmentTree_OnSelectedItemChanged/
-             EmployeesGrid_OnSelectionChanged in the code-behind), so there's no
-             more hopping to the Schedule tab to pick something first. -->
-        <Border Grid.Row="0"
-                Style="{StaticResource CardBorder}">
-            <WrapPanel Orientation="Horizontal">
-                <TextBlock Text="Departments:"
-                           Style="{StaticResource GroupLabel}" />
-                <Button Content="Add Department"
-                        Command="{Binding AddDepartmentCommand}" />
-                <Button Content="Delete Department"
-                        Command="{Binding DeleteDepartmentCommand}"
-                        Margin="0,0,16,0" />
+        <Grid Margin="8">
+                <!-- The Add/Delete Department and Add/Edit/Delete/Blacklist/Import Employee
+             buttons used to live in a page-level command card above this Grid; they now
+             sit in the tree's and grid's own header rows below. Either way they act on
+             MainViewModel.SelectedDepartment/SelectedEmployee, which the tree and grid
+             drive directly (see DepartmentTree_OnSelectedItemChanged/
+             EmployeesGrid_OnSelectionChanged in the code-behind), so there's no hopping
+             to the Schedule tab to pick something first. -->
+                <Grid>
+                        <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="280"/>
+                                <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-                <Separator Width="10" BorderThickness="2,0,0,0" />
-
-                <TextBlock Text="Employees:"
-                           Style="{StaticResource GroupLabel}" />
-                <Button Content="Add Employee"
-                        Command="{Binding AddEmployeeCommand}" />
-                <Button Content="Edit Employee"
-                        Command="{Binding EditEmployeeCommand}" />
-                <Button Content="Delete Employee"
-                        Command="{Binding DeleteEmployeeCommand}" />
-                <!-- Both bound to SelectedEmployee like Edit/Delete above - CanExecute
-                     (MainViewModel.CanBlacklistEmployee/CanUnblacklistEmployee) means only
-                     one of the two is ever enabled at a time for a given selection, so
-                     showing both rather than swapping one button's Content/Command in and
-                     out keeps the disabled one visible as a hint that the action exists. -->
-                <Button Content="Blacklist Employee"
-                        Command="{Binding BlacklistEmployeeCommand}" />
-                <Button Content="Unblacklist Employee"
-                        Command="{Binding UnblacklistEmployeeCommand}" />
-                <Button Content="Import Employees (Excel)"
-                        Command="{Binding ImportEmployeesCommand}"
-                        Margin="0" />
-            </WrapPanel>
-        </Border>
-
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Left: one row per department (+ a trailing "(Unassigned)" bucket),
+                        <!-- Left: one row per department (+ a trailing "(Unassigned)" bucket),
                  shown in a TreeView for the same Fluent look as the Schedule tab's
                  tree even though there's only one level here, since a department's
                  employees show in the grid on the right instead of as nested tree
@@ -140,75 +87,186 @@
                  see this page's code-behind), so a lingering search filter typed into
                  that tab's search box (EmployeeTreeSearchFilter) could leave some of
                  these DepartmentGroupViewModel/EmployeeNodeViewModel instances with
-                 IsVisible=false. Deliberately not wired up here, since this page has
-                 no search box of its own, and management shouldn't silently hide a
-                 department because of a filter left over from a different tab. -->
-            <DockPanel Grid.Column="0"
-                       Margin="0,0,8,0">
-                <TextBlock DockPanel.Dock="Top"
-                           Text="Departments"
-                           Style="{StaticResource GroupLabel}"
-                           Margin="0,0,0,4" />
+                 IsVisible=false. Deliberately not wired up here (this tree's own
+                 ItemsSource has no IsVisible-driven ItemContainerStyle the way the
+                 Schedule/Attendance trees do), since management shouldn't silently
+                 hide a department because of a filter left over from a different tab.
+                 The "Search employee" box below is a different, page-local feature
+                 built to avoid exactly that trap: see SearchEmployee's own doc
+                 comment in the code-behind for why it finds-and-jumps-to a match
+                 instead of filtering. -->
+                        <DockPanel Grid.Column="0"
+                                   Margin="0,0,8,0">
+                                <StackPanel DockPanel.Dock="Top"
+                                            Orientation="Horizontal"
+                                            Margin="0,0,0,4">
+                                        <TextBlock Text="Departments"
+                                                   Style="{StaticResource GroupLabel}"/>
+                                        <controls:IconButton Icon="&#xE710;"
+                                                             Content="Add"
+                                                             Command="{Binding AddDepartmentCommand}"
+                                                             Margin="0,0,6,0"/>
+                                        <controls:IconButton Icon="&#xE74D;"
+                                                             Content="Delete"
+                                                             Command="{Binding DeleteDepartmentCommand}"/>
+                                </StackPanel>
 
-                <TreeView x:Name="DepartmentTree"
-                          ItemsSource="{Binding Departments}"
-                          SelectedItemChanged="DepartmentTree_OnSelectedItemChanged">
-                    <TreeView.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Name}"
-                                           FontWeight="Bold" />
-                                <TextBlock Text="{Binding Employees.Count, StringFormat=' ({0})'}"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
-            </DockPanel>
+                                <!-- Find-and-jump-to search, not a live filter: see the tree's own
+                     doc comment above for why this page's tree deliberately never
+                     hides a department based on a search term. A match selects (and
+                     scrolls to) the employee's department here and their row in the
+                     grid on the right; nothing is ever hidden either way, so leaving
+                     a stale term in this box afterward can't make anything look
+                     missing. -->
+                                <DockPanel DockPanel.Dock="Top"
+                                           Margin="0,0,0,8">
+                                        <Button DockPanel.Dock="Right"
+                                                Content="Search"
+                                                Click="SearchEmployeeButton_Click"
+                                                Padding="8,3"
+                                                Margin="6,0,0,0"/>
+                                        <!-- TextBox + its autosuggest dropdown, same Popup-over-a-Grid shape
+                         as Punch Records' own search box (see PunchRecordsView.xaml).
+                         The list is populated straight from code-behind (no ViewModel of
+                         its own on this page); each row is an employee as
+                         "LastName, FirstName (PIN)", and picking one jumps straight to
+                         that person. -->
+                                        <Grid>
+                                                <TextBox x:Name="EmployeeSearchBox"
+                                                         TextChanged="EmployeeSearchBox_TextChanged"
+                                                         KeyDown="EmployeeSearchBox_KeyDown"
+                                                         ToolTip="A PIN, name, or department -- Enter or Search jumps to it; or pick a name from the list."/>
+                                                <Popup x:Name="EmployeeSuggestionsPopup"
+                                                       PlacementTarget="{Binding ElementName=EmployeeSearchBox}"
+                                                       Placement="Bottom"
+                                                       Width="{Binding ActualWidth, ElementName=EmployeeSearchBox}"
+                                                       StaysOpen="False"
+                                                       AllowsTransparency="True">
+                                                        <Border Background="{DynamicResource ApplicationBackgroundBrush}"
+                                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="4"
+                                                                Padding="2"
+                                                                Margin="0,2,0,0">
+                                                                <Border.Effect>
+                                                                        <DropShadowEffect BlurRadius="8"
+                                                                                          ShadowDepth="1"
+                                                                                          Opacity="0.2"/>
+                                                                </Border.Effect>
+                                                                <ListBox x:Name="EmployeeSuggestionList"
+                                                                         BorderThickness="0"
+                                                                         MaxHeight="200"
+                                                                         PreviewMouseLeftButtonUp="EmployeeSuggestionList_PreviewMouseLeftButtonUp">
+                                                                        <ListBox.ItemContainerStyle>
+                                                                                <Style TargetType="ListBoxItem">
+                                                                                        <Setter Property="Padding"
+                                                                                                Value="8,4"/>
+                                                                                        <Setter Property="Cursor"
+                                                                                                Value="Hand"/>
+                                                                                </Style>
+                                                                        </ListBox.ItemContainerStyle>
+                                                                </ListBox>
+                                                        </Border>
+                                                </Popup>
+                                        </Grid>
+                                </DockPanel>
 
-            <!-- Right: employees of whichever department is selected on the left.
+                                <TreeView x:Name="DepartmentTree"
+                                          ItemsSource="{Binding Departments}"
+                                          SelectedItemChanged="DepartmentTree_OnSelectedItemChanged">
+                                        <TreeView.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           FontWeight="Bold"/>
+                                                                <TextBlock Text="{Binding Employees.Count, StringFormat=' ({0})'}"
+                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                        </StackPanel>
+                                                </DataTemplate>
+                                        </TreeView.ItemTemplate>
+                                </TreeView>
+                        </DockPanel>
+
+                        <!-- Right: employees of whichever department is selected on the left.
                  EmployeesGrid's ItemsSource reads straight off DepartmentTree's own
                  SelectedItem. TreeView has no settable SelectedItem dependency
                  property, so an ElementName binding only works one-way, as a source.
                  EmployeesGrid_OnSelectionChanged (code-behind) is what pushes a row
                  selection back into MainViewModel.SelectedEmployee/SelectedDepartment,
                  the same way DepartmentTree_OnSelectedItemChanged does for the tree. -->
-            <DockPanel Grid.Column="1">
-                <TextBlock DockPanel.Dock="Top"
-                           Margin="0,0,0,8"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Text="Select a department on the left to view its employees."
-                           Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NullToVisibility}}" />
+                        <DockPanel Grid.Column="1">
+                                <!-- Employee action buttons (moved here from the page-level command
+                     card) pinned to the rightmost of this row; the status text sits at the
+                     left - the "select a department" prompt while nothing's picked, the
+                     department name + employee count once one is. Blacklist and Unblacklist
+                     are both shown rather than swapped - CanExecute
+                     (MainViewModel.CanBlacklistEmployee/CanUnblacklistEmployee) keeps only
+                     the one that applies to the current selection enabled, so the disabled
+                     one still hints the action exists. -->
+                                <DockPanel DockPanel.Dock="Top"
+                                           LastChildFill="False"
+                                           Margin="0,0,0,8">
+                                        <StackPanel DockPanel.Dock="Right"
+                                                    Orientation="Horizontal">
+                                                <controls:IconButton Icon="&#xE710;"
+                                                                     Content="Add"
+                                                                     Command="{Binding AddEmployeeCommand}"
+                                                                     Margin="0,0,6,0"/>
+                                                <controls:IconButton Icon="&#xE70F;"
+                                                                     Content="Edit"
+                                                                     Command="{Binding EditEmployeeCommand}"
+                                                                     Margin="0,0,6,0"/>
+                                                <controls:IconButton Icon="&#xE74D;"
+                                                                     Content="Delete"
+                                                                     Command="{Binding DeleteEmployeeCommand}"
+                                                                     Margin="0,0,6,0"/>
+                                                <controls:IconButton Icon="&#xE8F8;"
+                                                                     Content="Blacklist"
+                                                                     Command="{Binding BlacklistEmployeeCommand}"
+                                                                     Margin="0,0,6,0"/>
+                                                <controls:IconButton Icon="&#xE8FA;"
+                                                                     Content="Unblacklist"
+                                                                     Command="{Binding UnblacklistEmployeeCommand}"
+                                                                     Margin="0,0,6,0"/>
+                                                <controls:IconButton Icon="&#xE8B5;"
+                                                                     Content="Import"
+                                                                     Command="{Binding ImportEmployeesCommand}"/>
+                                        </StackPanel>
 
-                <StackPanel DockPanel.Dock="Top"
-                            Orientation="Horizontal"
-                            Margin="0,0,0,8"
-                            Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NotNullToVisibility}}">
-                    <TextBlock FontWeight="SemiBold"
-                               Text="{Binding SelectedItem.Name, ElementName=DepartmentTree}" />
-                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Margin="6,0,0,0">
-                        <Run Text="{Binding SelectedItem.Employees.Count, ElementName=DepartmentTree, Mode=OneWay}" />
-                        <Run Text=" employee(s)" />
-                    </TextBlock>
-                </StackPanel>
+                                        <TextBlock VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Text="Select a department on the left to view its employees."
+                                                   Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NullToVisibility}}"/>
 
-                <DataGrid x:Name="EmployeesGrid"
-                          ItemsSource="{Binding SelectedItem.Employees, ElementName=DepartmentTree}"
-                          SelectionChanged="EmployeesGrid_OnSelectionChanged"
-                          MouseDoubleClick="EmployeesGrid_OnMouseDoubleClick"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          CanUserReorderColumns="False"
-                          CanUserResizeColumns="False"
-                          SelectionMode="Single"
-                          SelectionUnit="FullRow"
-                          GridLinesVisibility="Horizontal"
-                          HeadersVisibility="Column">
-                    <!-- Grays out a blacklisted employee's row rather than hiding it -
+                                        <StackPanel Orientation="Horizontal"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NotNullToVisibility}}">
+                                                <TextBlock FontWeight="SemiBold"
+                                                           Text="{Binding SelectedItem.Name, ElementName=DepartmentTree}"/>
+                                                <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                           Margin="6,0,0,0">
+                                <Run Text="{Binding SelectedItem.Employees.Count, ElementName=DepartmentTree, Mode=OneWay}"/>
+                                <Run Text=" employee(s)"/>
+                                                </TextBlock>
+                                        </StackPanel>
+                                </DockPanel>
+
+                                <DataGrid x:Name="EmployeesGrid"
+                                          ItemsSource="{Binding SelectedItem.Employees, ElementName=DepartmentTree}"
+                                          SelectionChanged="EmployeesGrid_OnSelectionChanged"
+                                          MouseDoubleClick="EmployeesGrid_OnMouseDoubleClick"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          CanUserAddRows="False"
+                                          CanUserDeleteRows="False"
+                                          CanUserReorderColumns="False"
+                                          CanUserResizeColumns="False"
+                                          SelectionMode="Single"
+                                          SelectionUnit="FullRow"
+                                          GridLinesVisibility="Horizontal"
+                                          HeadersVisibility="Column">
+                                        <!-- Grays out a blacklisted employee's row rather than hiding it -
                          unlike the Schedule/Attendance trees (EmployeeTreeSearchFilter),
                          this grid is the one place a blacklisted employee should still be
                          visible, so they can be found and unblacklisted later (see
@@ -218,84 +276,84 @@
                          doc comment for why {StaticResource DefaultDataGridRowStyle} (WPF-UI's
                          named style) has to be the BasedOn target instead of the more usual
                          implicit {x:Type DataGridRow} key. -->
-                    <DataGrid.RowStyle>
-                        <Style TargetType="DataGridRow"
-                               BasedOn="{StaticResource DefaultDataGridRowStyle}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Employee.IsBlacklisted}"
-                                             Value="True">
-                                    <Setter Property="Foreground"
-                                            Value="{DynamicResource TextFillColorSecondaryBrush}" />
-                                    <Setter Property="FontStyle"
-                                            Value="Italic" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGrid.RowStyle>
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="PIN"
-                                            Binding="{Binding Employee.Pin}"
-                                            Width="150" />
-                        <DataGridTextColumn Header="Last Name"
-                                            Binding="{Binding Employee.LastName}"
-                                            Width="220" />
-                        <DataGridTextColumn Header="First Name"
-                                            Binding="{Binding Employee.FirstName}"
-                                            Width="220" />
+                                        <DataGrid.RowStyle>
+                                                <Style TargetType="DataGridRow"
+                                                       BasedOn="{StaticResource DefaultDataGridRowStyle}">
+                                                        <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Employee.IsBlacklisted}"
+                                                                             Value="True">
+                                                                        <Setter Property="Foreground"
+                                                                                Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                                        <Setter Property="FontStyle"
+                                                                                Value="Italic"/>
+                                                                </DataTrigger>
+                                                        </Style.Triggers>
+                                                </Style>
+                                        </DataGrid.RowStyle>
+                                        <DataGrid.Columns>
+                                                <DataGridTextColumn Header="PIN"
+                                                                    Binding="{Binding Employee.Pin}"
+                                                                    Width="150"/>
+                                                <DataGridTextColumn Header="Last Name"
+                                                                    Binding="{Binding Employee.LastName}"
+                                                                    Width="220"/>
+                                                <DataGridTextColumn Header="First Name"
+                                                                    Binding="{Binding Employee.FirstName}"
+                                                                    Width="220"/>
 
-                        <!-- Department itself is deliberately not a column here: this
+                                                <!-- Department itself is deliberately not a column here: this
                              grid is always scoped to whichever department is selected on
                              the left (or the Unassigned bucket), so a per-row Department
                              value would just repeat what the header above the grid
                              already says. -->
 
-                        <DataGridTextColumn Header="Daily Rate"
-                                            Binding="{Binding Employee.DailyRate, Converter={StaticResource Number}}"
-                                            ElementStyle="{StaticResource RightAlignedCell}"
-                                            HeaderStyle="{StaticResource RightAlignedHeader}"
-                                            Width="120" />
-                        <DataGridCheckBoxColumn Header="Overtime"
-                                                Binding="{Binding Employee.QualifiesForOvertime}"
-                                                HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
-                                                Width="150" />
-                        <DataGridCheckBoxColumn Header="OT Premium"
-                                                Binding="{Binding Employee.ApplyOvertimeRatePercentageByDefault}"
-                                                HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
-                                                Width="150" />
-                        <DataGridCheckBoxColumn Header="Night Diff"
-                                                Binding="{Binding Employee.QualifiesForNightDiff}"
-                                                HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
-                                                Width="150" />
-                        <DataGridTextColumn Header="SSS"
-                                            Binding="{Binding Employee.DefaultSss, Converter={StaticResource Number}}"
-                                            ElementStyle="{StaticResource RightAlignedCell}"
-                                            HeaderStyle="{StaticResource RightAlignedHeader}"
-                                            Width="110" />
-                        <DataGridTextColumn Header="PhilHealth"
-                                            Binding="{Binding Employee.DefaultPhilHealth, Converter={StaticResource Number}}"
-                                            ElementStyle="{StaticResource RightAlignedCell}"
-                                            HeaderStyle="{StaticResource RightAlignedHeader}"
-                                            Width="110" />
-                        <DataGridTextColumn Header="Pag-IBIG"
-                                            Binding="{Binding Employee.DefaultPagIbig, Converter={StaticResource Number}}"
-                                            ElementStyle="{StaticResource RightAlignedCell}"
-                                            HeaderStyle="{StaticResource RightAlignedHeader}"
-                                            Width="110" />
-                        <DataGridCheckBoxColumn Header="Leave w/ Pay"
-                                                Binding="{Binding Employee.DefaultLeaveIsPaid}"
-                                                HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
-                                                Width="150" />
-                        <!-- Read-only like every other column here (DataGrid.IsReadOnly="True"
+                                                <DataGridTextColumn Header="Daily Rate"
+                                                                    Binding="{Binding Employee.DailyRate, Converter={StaticResource Number}}"
+                                                                    ElementStyle="{StaticResource RightAlignedCell}"
+                                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
+                                                                    Width="120"/>
+                                                <DataGridCheckBoxColumn Header="Overtime"
+                                                                        Binding="{Binding Employee.QualifiesForOvertime}"
+                                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
+                                                                        Width="150"/>
+                                                <DataGridCheckBoxColumn Header="OT Premium"
+                                                                        Binding="{Binding Employee.ApplyOvertimeRatePercentageByDefault}"
+                                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
+                                                                        Width="150"/>
+                                                <DataGridCheckBoxColumn Header="Night Diff"
+                                                                        Binding="{Binding Employee.QualifiesForNightDiff}"
+                                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
+                                                                        Width="150"/>
+                                                <DataGridTextColumn Header="SSS"
+                                                                    Binding="{Binding Employee.DefaultSss, Converter={StaticResource Number}}"
+                                                                    ElementStyle="{StaticResource RightAlignedCell}"
+                                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
+                                                                    Width="110"/>
+                                                <DataGridTextColumn Header="PhilHealth"
+                                                                    Binding="{Binding Employee.DefaultPhilHealth, Converter={StaticResource Number}}"
+                                                                    ElementStyle="{StaticResource RightAlignedCell}"
+                                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
+                                                                    Width="110"/>
+                                                <DataGridTextColumn Header="Pag-IBIG"
+                                                                    Binding="{Binding Employee.DefaultPagIbig, Converter={StaticResource Number}}"
+                                                                    ElementStyle="{StaticResource RightAlignedCell}"
+                                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
+                                                                    Width="110"/>
+                                                <DataGridCheckBoxColumn Header="Leave w/ Pay"
+                                                                        Binding="{Binding Employee.DefaultLeaveIsPaid}"
+                                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
+                                                                        Width="150"/>
+                                                <!-- Read-only like every other column here (DataGrid.IsReadOnly="True"
                              above) - shown as its own column, on top of the RowStyle graying
                              the whole row, so a blacklisted employee reads as blacklisted even
                              wherever the grid gets scrolled horizontally past the gray fill. -->
-                        <DataGridCheckBoxColumn Header="Blacklisted"
-                                                Binding="{Binding Employee.IsBlacklisted}"
-                                                HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
-                                                Width="150" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
+                                                <DataGridCheckBoxColumn Header="Blacklisted"
+                                                                        Binding="{Binding Employee.IsBlacklisted}"
+                                                                        HeaderStyle="{StaticResource CenteredCheckBoxHeader}"
+                                                                        Width="150"/>
+                                        </DataGrid.Columns>
+                                </DataGrid>
+                        </DockPanel>
+                </Grid>
         </Grid>
-    </Grid>
 </Page>

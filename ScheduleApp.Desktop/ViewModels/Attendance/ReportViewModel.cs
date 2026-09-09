@@ -119,6 +119,7 @@ public partial class ReportViewModel : ObservableObject
                 ShowOrphanedDetailCommand.NotifyCanExecuteChanged();
                 ShowUnscheduledDetailCommand.NotifyCanExecuteChanged();
                 RefreshSummaryCommand.NotifyCanExecuteChanged();
+                RefreshOrCancelSummaryCommand.NotifyCanExecuteChanged();
                 AddManualEntryForRowCommand.NotifyCanExecuteChanged();
                 EditPunchPairingForRowCommand.NotifyCanExecuteChanged();
 
@@ -134,6 +135,16 @@ public partial class ReportViewModel : ObservableObject
                 // (the just-finished run already brought _loadedSnapshot up to date).
                 if (!_busy.IsRunning)
                     TryAutoRun();
+            }
+            else if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
+            {
+                // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
+                // this is what actually flips the Period row's icon button between
+                // Refresh and Cancel the moment anything on the Attendance page starts
+                // or stops being visibly busy, not just a click on this button itself.
+                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
+                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
+                RefreshOrCancelSummaryCommand.NotifyCanExecuteChanged();
             }
         };
 
@@ -159,6 +170,7 @@ public partial class ReportViewModel : ObservableObject
                 SummaryRowsView.Refresh();
                 TryAutoRun();
                 RefreshSummaryCommand.NotifyCanExecuteChanged();
+                RefreshOrCancelSummaryCommand.NotifyCanExecuteChanged();
             }
         };
     }
@@ -285,19 +297,11 @@ public partial class ReportViewModel : ObservableObject
 
     public bool HasSummaryRows => HasResults && SummaryRows.Count > 0;
 
-    /// <summary>Set by ExportSummary once a save succeeds -- lets OpenSummaryCommand
-    /// point at the file that was actually written, rather than needing its own separate
-    /// "remember the last export path" bookkeeping.</summary>
-    [ObservableProperty]
-    private string? outputSummaryPath;
-
-    partial void OnOutputSummaryPathChanged(string? value) => OpenSummaryCommand.NotifyCanExecuteChanged();
-
-    [RelayCommand(CanExecute = nameof(CanOpenSummary))]
-    private void OpenSummary() => Process.Start(new ProcessStartInfo(OutputSummaryPath!) { UseShellExecute = true });
-
-    private bool CanOpenSummary() => OutputSummaryPath is not null;
-
+    /// <summary>Saves the attendance summary to Excel, then opens it immediately --
+    /// there's no separate "Open" button anymore (see this method's own doc history:
+    /// it used to just stash the written path in OutputSummaryPath for a person to click
+    /// Open afterward). Same Process.Start/UseShellExecute call that button used to make,
+    /// just fired right after a successful write instead of waiting for a second click.</summary>
     [RelayCommand(CanExecute = nameof(CanExportSummary))]
     private void ExportSummary()
     {
@@ -314,7 +318,7 @@ public partial class ReportViewModel : ObservableObject
         try
         {
             AttendanceExcelExporter.ExportSummaryToExcel(dialog.FileName, _lastResult!.Summaries, _policy);
-            OutputSummaryPath = dialog.FileName;
+            Process.Start(new ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
 
             var message = $"Saved attendance summary to {dialog.FileName}.";
             _statusBarService.ShowSuccess(message);
@@ -549,6 +553,53 @@ public partial class ReportViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRun))]
     private Task RefreshSummaryAsync() => RunCoreAsync(showFeedback: true);
 
+    /// <summary>The Period row's icon button's actual Content/Command/ToolTip binding
+    /// target (see AttendanceSummaryView.xaml) -- this, not RefreshSummaryCommand
+    /// directly, is what the button is wired to now, so the same button reads Refresh
+    /// when idle and Cancel while anything on the Attendance page is visibly running
+    /// (_busy.IsVisiblyRunning -- not just a run started by this button; see
+    /// RefreshOrCancelToolTip). This replaces a separate Cancel button that used to
+    /// appear in its own CardBorder above the Report Scope tree/Period row whenever
+    /// IsVisiblyRunning flipped true, shifting both down for as long as it was visible
+    /// and back up the moment it cleared -- an explicit Refresh click was the most common
+    /// way to see that happen, since (unlike a Period edit or a tree check, which are
+    /// already busy doing something else on screen) clicking Refresh has nothing else
+    /// to look at while it runs. Reusing this same button in place avoids the shift
+    /// entirely instead of just moving it somewhere smaller.
+    ///
+    /// CanExecute is IsVisiblyRunning (always fine to try to cancel) OR CanRun() (the
+    /// same gate RefreshSummaryCommand already uses) -- needed because CanRun() alone
+    /// would leave the button disabled during a run it didn't itself start (_busy.
+    /// IsRunning is true, so CanRun() is false) at exactly the moment IsVisiblyRunning
+    /// makes it look like a live Cancel button.</summary>
+    private bool CanRefreshOrCancelSummary() => _busy.IsVisiblyRunning || CanRun();
+
+    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelSummary))]
+    private void RefreshOrCancelSummary()
+    {
+        if (_busy.IsVisiblyRunning)
+            _busy.Cancel();
+        else
+            _ = RunCoreAsync(showFeedback: true);
+    }
+
+    /// <summary>Segoe Fluent Icons glyphs for RefreshOrCancelSummaryCommand's button --
+    /// the ordinary Refresh glyph this button always showed, or the same "Cancel" (X)
+    /// glyph AttendanceBusyState.CancelCommand's own button used to show, swapped in
+    /// while _busy.IsVisiblyRunning is true. See the _busy.PropertyChanged handler in
+    /// this class's constructor for what raises this on every flip.</summary>
+    public string RefreshOrCancelGlyph => _busy.IsVisiblyRunning ? "" : "";
+
+    /// <summary>Generic on purpose, not "Stop this report" -- IsVisiblyRunning can be
+    /// true because of literally anything on the Attendance page (an Import/Fetch
+    /// started from Punch Records, a manual entry save/delete, or this tab's own
+    /// report run), not only a click on this same button, and there's no way to tell
+    /// which one from here. Same wording the old Cancel-bar button's own ToolTip used
+    /// for exactly that reason.</summary>
+    public string RefreshOrCancelToolTip => _busy.IsVisiblyRunning
+        ? "Stop whatever's currently running."
+        : "Re-run this report -- useful after editing the schedule elsewhere.";
+
     /// <summary>Called by AttendanceViewModel.RecheckActiveTabOnReturn every time
     /// AttendancePage.OnNavigatedToAsync fires -- not just the first time (see that
     /// page's own _loaded guard, which only wraps InitializeAsync/ActivateInitialTabAsync).
@@ -665,8 +716,6 @@ public partial class ReportViewModel : ObservableObject
                 _statusBarService.ShowCaution(string.Join(" ", validationErrors));
             return;
         }
-
-        OutputSummaryPath = null;
 
         // Only a direct change the person made (showFeedback: true, from TryAutoRun) should
         // bring up the progress bar -- the silent re-run that fires every time this tab is
