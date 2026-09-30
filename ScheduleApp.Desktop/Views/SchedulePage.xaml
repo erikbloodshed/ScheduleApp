@@ -250,11 +250,26 @@
                            LastChildFill="False">
                     <StackPanel DockPanel.Dock="Left"
                                 Orientation="Horizontal">
+                        <Button Content="&lt;"
+                                Width="32"
+                                Command="{Binding PreviousMonthCommand}" />
+                        <TextBlock Text="{Binding DisplayedMonthText}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0"
+                                   Width="140"
+                                   TextAlignment="Center" />
+                        <Button Content="&gt;"
+                                Width="32"
+                                Command="{Binding NextMonthCommand}" />
                         <Button Content="Import Schedule (Excel)"
-                                Command="{Binding ImportScheduleCommand}" />
+                                Command="{Binding ImportScheduleCommand}"
+                                Margin="12,0,0,0"
+                                Padding="8,3"/>
                         <Button Content="Export Schedule (Excel)"
                                 Command="{Binding ExportScheduleCommand}"
-                                Margin="0" />
+                                Margin="6,0,0,0"
+                                Padding="8,3"/>
                     </StackPanel>
                     <Button DockPanel.Dock="Right"
                             Style="{StaticResource IconHeaderActionButton}"
@@ -276,21 +291,6 @@
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Text="{Binding CalendarHeaderText}" />
-                    <StackPanel DockPanel.Dock="Right"
-                                Orientation="Horizontal">
-                        <Button Content="&lt;"
-                                Width="32"
-                                Command="{Binding PreviousMonthCommand}" />
-                        <TextBlock Text="{Binding DisplayedMonthText}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"
-                                   Margin="12,0"
-                                   Width="140"
-                                   TextAlignment="Center" />
-                        <Button Content="&gt;"
-                                Width="32"
-                                Command="{Binding NextMonthCommand}" />
-                    </StackPanel>
                 </DockPanel>
 
                 <DockPanel Grid.Row="2"

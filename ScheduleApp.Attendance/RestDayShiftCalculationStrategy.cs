@@ -147,20 +147,20 @@ internal sealed class RestDayShiftCalculationStrategy : IShiftCalculationStrateg
         var scheduledTimeOut = schedule.TimeOut!.Value; // derived from TimeIn + WorkTimeHours, so non-null here
         var workTimeHours = schedule.WorkTimeHours!.Value;
 
-        DateTime targetTimeInStart = schedule.Date.ToDateTime(scheduledTimeIn);
-        DateTime targetTimeOutStart = schedule.CrossesMidnight
-            ? schedule.Date.AddDays(1).ToDateTime(scheduledTimeOut)
-            : schedule.Date.ToDateTime(scheduledTimeOut);
+        // Byte-for-byte the window pair Normal builds, including the same
+        // three-tier day/employee/policy buffer cascade -- both go through
+        // PunchCandidateWindows.SingleWindow so there's one definition for the two
+        // of them and for the Day Punch Pairing editor's greying (see that class's
+        // own doc comment). Non-null here: this method only runs in the windowed
+        // mode, i.e. TimeIn and WorkTimeHours are both set (see Calculate).
+        var bounds = PunchCandidateWindows.SingleWindow(schedule, policy)!.Value;
+        DateTime targetTimeInStart = bounds.TargetTimeIn;
+        DateTime targetTimeOutStart = bounds.TargetTimeOut;
 
-        // Same three-tier day/employee/policy cascade Normal uses -- see
-        // NormalBufferResolver, shared with SingleWindowShiftCalculationStrategy.
-        var (clockInBufferBefore, clockInBufferAfter, clockOutBufferBefore, clockOutBufferAfter) =
-            NormalBufferResolver.Resolve(schedule, policy);
-
-        DateTime minTimeIn = targetTimeInStart.AddHours(-clockInBufferBefore);
-        DateTime maxTimeIn = targetTimeInStart.AddHours(clockInBufferAfter);
-        DateTime minTimeOut = targetTimeOutStart.AddHours(-clockOutBufferBefore);
-        DateTime maxTimeOut = targetTimeOutStart.AddHours(clockOutBufferAfter);
+        DateTime minTimeIn = bounds.In.Start;
+        DateTime maxTimeIn = bounds.In.End;
+        DateTime minTimeOut = bounds.Out.Start;
+        DateTime maxTimeOut = bounds.Out.End;
 
         // Device punches preferred; a manual entry only used when the window
         // has no device punch at all -- see PunchMatching. The exclude on

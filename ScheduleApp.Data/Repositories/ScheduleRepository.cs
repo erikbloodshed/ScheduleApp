@@ -140,23 +140,58 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
     }
 
     /// <summary>
-    /// Finds a department by exact name match, or creates one (appended to the end of
-    /// the sort order, same as AddDepartmentAsync) if none exists yet. Shared by
-    /// ImportAsync and ImportEmployeeRosterAsync, which both need "get this department,
-    /// creating it on first mention" rather than AddDepartmentAsync's simpler always-create
-    /// behavior.
+    /// Resolves every department named by an import in one pass: one query for the ones
+    /// that already exist, then one MaxAsync (only when at least one is genuinely new) to
+    /// find the sort order to append the rest after, incrementing locally from there the
+    /// same way AddDepartmentAsync appends a single one. Replaces the per-name
+    /// GetOrCreateDepartmentAsync this used to be, which cost a FirstOrDefaultAsync per
+    /// department plus a MaxAsync AND a SaveChangesAsync per new one -- a roster workbook
+    /// naming twenty departments paid forty-plus round trips before importing a single row.
+    ///
+    /// Newly-created departments are Added but deliberately NOT saved: the caller's own
+    /// single SaveChangesAsync is what commits them, which is what lets a brand-new
+    /// department, the employees being created in it, and their schedule entries all land
+    /// in one atomic write (EF fills each new Employee.DepartmentId from the Department's
+    /// generated Id at save time via the Employee.Department navigation -- same new-parent-
+    /// plus-new-children graph PayrollRunRepository.CreateAsync already relies on). The
+    /// corollary is that a caller must not return between calling this and its own save, or
+    /// it leaves Added departments in the app-lifetime change tracker for some later,
+    /// unrelated save to commit by accident.
+    ///
+    /// The returned dictionary is OrdinalIgnoreCase, and that is load-bearing, not tidiness:
+    /// SQL Server's default collation is case-insensitive, so the existing-name query below
+    /// matches a workbook's "kitchen" against a stored "Kitchen" and hands back the row
+    /// spelled "Kitchen". An ordinal dictionary would then miss on "kitchen", create a
+    /// second department, and be rejected by Department.Name's own unique index (see
+    /// ScheduleDbContext) -- failing the whole import over a capital letter.
     /// </summary>
-    private async Task<Department> GetOrCreateDepartmentAsync(string name, CancellationToken cancellationToken)
+    private async Task<Dictionary<string, Department>> ResolveDepartmentsAsync(
+        IReadOnlyCollection<string> names, CancellationToken cancellationToken)
     {
-        var department = await db.Departments.FirstOrDefaultAsync(d => d.Name == name, cancellationToken);
-        if (department is not null)
-            return department;
+        var requestedNames = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
+        if (requestedNames.Count == 0) return result;
 
-        var maxOrder = await db.Departments.Select(d => (int?)d.SortOrder).MaxAsync(cancellationToken) ?? 0;
-        department = new Department { Name = name, SortOrder = maxOrder + 1 };
-        db.Departments.Add(department);
-        await db.SaveChangesAsync(cancellationToken);
-        return department;
+        var existing = await db.Departments
+            .Where(d => requestedNames.Contains(d.Name))
+            .ToListAsync(cancellationToken);
+
+        foreach (var department in existing)
+            result[department.Name] = department;
+
+        var missingNames = requestedNames.Where(name => !result.ContainsKey(name)).ToList();
+        if (missingNames.Count == 0) return result;
+
+        var nextSortOrder = await db.Departments.Select(d => (int?)d.SortOrder).MaxAsync(cancellationToken) ?? 0;
+
+        foreach (var name in missingNames)
+        {
+            var department = new Department { Name = name, SortOrder = ++nextSortOrder };
+            db.Departments.Add(department);
+            result[name] = department;
+        }
+
+        return result;
     }
 
     public async Task DeleteDepartmentAsync(int departmentId, CancellationToken cancellationToken = default)
@@ -326,6 +361,38 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
         ex.InnerException is SqlException { Number: 2601 or 2627 } sql &&
         sql.Message.Contains("IX_Employees_Pin", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Composite key for the (LastName, FirstName) tier of ImportAsync's employee
+    /// matching, as one OrdinalIgnoreCase-comparable string. Uses U+0001 (a non-printable
+    /// control character) as the separator, rather than a printable one like a comma, so a
+    /// surname containing the separator can't collide with a different name pair. Matched
+    /// case-insensitively to stay equivalent to the SQL comparison this replaced (SQL
+    /// Server's default collation is case-insensitive) -- see ResolveDepartmentsAsync's own
+    /// doc comment for the same reasoning applied to department names.</summary>
+    private static string NameKey(string lastName, string firstName) => $"{lastName}{firstName}";
+
+    /// <summary>Returns the change tracker to a clean state after a failed import.
+    /// SaveChangesAsync failing does NOT revert entity state, and ScheduleDbContext lives
+    /// for the whole app session (see App.xaml.cs) -- without this, a failed import's
+    /// still-Added departments/employees/entries/segments would be re-sent, and fail again,
+    /// on every later unrelated save for the rest of the session. Same reasoning as
+    /// AddEmployeeAsync's own single-entity detach above and
+    /// SqlAttendanceLogRepository.AddLogsAsync's batch detach, just scoped to the four
+    /// entity types an import touches so that unrelated tracked entities (payroll rows,
+    /// punch logs) are left alone the way a blanket ChangeTracker.Clear() would not. Detach
+    /// rather than Reload: every read path in this app is either AsNoTracking or a fresh
+    /// Find/query, so a detached entity is simply re-materialized on next use, at a
+    /// fraction of Reload's per-row round trip.</summary>
+    private void DetachImportEntities()
+    {
+        foreach (var entry in db.ChangeTracker.Entries().ToList())
+        {
+            if (entry.State == EntityState.Unchanged) continue;
+
+            if (entry.Entity is Department or Employee or ScheduleEntry or FlexibleSegment)
+                entry.State = EntityState.Detached;
+        }
+    }
+
     /// <summary>Deletes an employee, and (by cascade -- the real FK is back, see
     /// ScheduleDbContext's own remarks on ScheduleEntry) every ScheduleEntry keyed to
     /// their Pin. AttendanceLog/ManualAttendanceLog rows for this Pin are deliberately
@@ -418,8 +485,10 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
     /// <paramref name="existing"/> is null -- shared by SetScheduleForDatesAsync above and
     /// the per-entry import loop in ImportAsync below, which both apply this same
     /// clear-and-rebuild-segments logic against two differently-shaped "does this date
-    /// already have an entry" lookups. As with those callers' own existingByDate
-    /// dictionaries, FlexibleSegments must already be loaded on <paramref name="existing"/>
+    /// already have an entry" lookups: SetScheduleForDatesAsync's own existingByDate is
+    /// scoped to one employee, while ImportAsync's entriesByEmployeeDate is one dictionary
+    /// for the entire workbook, keyed by (EmployeeId, Date). Either way, FlexibleSegments
+    /// must already be loaded on <paramref name="existing"/>
     /// (via Include, not AsNoTracking) or clearing it here won't be recognized by EF as
     /// deleting the old rows. clockInBufferBeforeHours/clockInBufferAfterHours/
     /// clockOutBufferBeforeHours/clockOutBufferAfterHours are the Normal-only per-day
@@ -568,114 +637,316 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
     /// ID cell before ever building one -- see that class's own parsing loop -- and
     /// Employee.Pin is a plain, non-nullable int now regardless), so unlike the brief
     /// stretch where Pin could be optional, there's no "create the employee anyway, skip
-    /// just their schedule" fallback needed here anymore.</summary>
-    public async Task ImportAsync(IEnumerable<Department> departmentsWithData,
+    /// just their schedule" fallback needed here anymore.
+    ///
+    /// Three SELECTs (departments, employees, schedule entries) and one SaveChangesAsync for
+    /// the whole workbook, not one round trip per department/employee/entry the way this
+    /// used to work -- a one-month sheet for 100 employees is ~3,000 transient entries,
+    /// which cost ~300 round trips plus 100 unbounded full-history fetches before this (see
+    /// SqlAttendanceLogRepository.AddLogsAsync's own doc comment for the same "load once
+    /// into a dictionary, save once" shape applied to a different table). All-or-nothing: if
+    /// anything below throws -- including a Pin that turns out to belong to an employee
+    /// outside this sheet's own department, see the DuplicateEmployeeIdException check below
+    /// -- nothing from this call is persisted, and the change tracker is cleaned up (see
+    /// DetachImportEntities) so a failed import doesn't poison every later unrelated save
+    /// for the rest of the app session.
+    ///
+    /// <paramref name="departmentsWithData"/> is enumerated more than once now (each
+    /// Department's Employees, and each Employee's ScheduleEntries), so it must be a
+    /// materialized collection, not a lazily-evaluated sequence.</summary>
+    public async Task ImportAsync(IReadOnlyCollection<Department> departmentsWithData,
         CancellationToken cancellationToken = default)
     {
-        foreach (var incomingDept in departmentsWithData)
+        if (departmentsWithData.Count == 0) return;
+
+        var departmentsByName = await ResolveDepartmentsAsync(
+            [.. departmentsWithData.Select(d => d.Name)], cancellationToken);
+
+        var incomingPins = departmentsWithData
+            .SelectMany(d => d.Employees)
+            .Select(e => e.Pin)
+            .Distinct()
+            .ToList();
+
+        var incomingEntries = departmentsWithData
+            .SelectMany(d => d.Employees)
+            .SelectMany(e => e.ScheduleEntries)
+            .ToList();
+
+        // Every department this workbook resolved to a real, already-saved row -- a
+        // department this import is creating has no employees to preload (see
+        // ResolveDepartmentsAsync's own doc comment on why newly-created departments
+        // aren't saved yet).
+        var departmentsById = departmentsByName.Values
+            .Where(d => d.Id != 0)
+            .ToDictionary(d => d.Id);
+        var existingDepartmentIds = departmentsById.Keys.ToList();
+
+        // Every employee this import could possibly need to match against: tier 1 (Pin,
+        // wherever they currently live -- including unassigned or a different department,
+        // so a collision is caught below instead of surfacing as a raw unique-index
+        // failure at SaveChangesAsync) or tier 2 (already in one of the departments this
+        // workbook touches, matched by name -- see IScheduleRepository.ImportAsync's own
+        // doc comment on match precedence).
+        List<Employee> candidates;
+        if (incomingPins.Count == 0)
         {
-            var department = await GetOrCreateDepartmentAsync(incomingDept.Name, cancellationToken);
+            candidates = [];
+        }
+        else
+        {
+            candidates = await db.Employees
+                .Where(e => incomingPins.Contains(e.Pin)
+                         || (e.DepartmentId != null && existingDepartmentIds.Contains(e.DepartmentId.Value)))
+                .OrderBy(e => e.Id)
+                .ToListAsync(cancellationToken);
+        }
 
-            foreach (var incomingEmployee in incomingDept.Employees)
+        var employeesByPin = new Dictionary<int, Employee>();
+
+        // Tracks which resolved Department each known Pin is currently associated with --
+        // null for a real, already-saved employee with no department -- so a same-Pin
+        // collision can be detected by reference regardless of whether the department in
+        // question is one this import just resolved (a brand-new employee created a few
+        // lines down has no saved DepartmentId yet to compare against). See
+        // employeesByNameInDept below for why keying by Department object rather than Id
+        // is the same story one level down.
+        var departmentByPin = new Dictionary<int, Department?>();
+
+        // Keyed by the resolved Department object, not its Id: a department this import is
+        // creating still has Id 0 until the single save at the end, so an Id-keyed lookup
+        // would collapse every new department into one bucket and let a same-named
+        // employee in new department A satisfy the name-fallback for new department B.
+        var employeesByNameInDept = new Dictionary<Department, Dictionary<string, Employee>>();
+
+        foreach (var candidate in candidates)
+        {
+            if (!employeesByPin.TryAdd(candidate.Pin, candidate)) continue;
+
+            var candidateDepartment = candidate.DepartmentId is { } deptId
+                ? departmentsById.GetValueOrDefault(deptId)
+                : null;
+            departmentByPin[candidate.Pin] = candidateDepartment;
+
+            if (candidateDepartment is null) continue;
+
+            if (!employeesByNameInDept.TryGetValue(candidateDepartment, out var byName))
+                employeesByNameInDept[candidateDepartment] = byName = new Dictionary<string, Employee>(StringComparer.OrdinalIgnoreCase);
+            byName.TryAdd(NameKey(candidate.LastName, candidate.FirstName), candidate);
+        }
+
+        // One dictionary for the whole workbook, not one per employee -- see this method's
+        // own doc comment. Re-seeded as each row resolves below (same double duty
+        // SqlAttendanceLogRepository.AddLogsAsync's seenKeys does), so a later row in the
+        // sheet for the same date overwrites an earlier one within this same import, and
+        // two worksheets that resolve to the same department (e.g. differing only by case)
+        // can't each stage a competing insert for the same (EmployeeId, Date) the way two
+        // separate, per-employee database queries used to risk.
+        var entriesByEmployeeDate = new Dictionary<(int EmployeeId, DateOnly Date), ScheduleEntry>();
+
+        if (incomingEntries.Count > 0)
+        {
+            var minDate = incomingEntries.Min(e => e.Date);
+            var maxDate = incomingEntries.Max(e => e.Date);
+
+            // FlexibleSegments must be loaded here (not AsNoTracking) so that clearing an
+            // existing entry's segments in UpsertScheduleEntry is recognized by EF as
+            // deleting the old rows, not just detaching them in memory -- see that
+            // method's own doc comment.
+            var existingEntries = await db.ScheduleEntries
+                .Where(s => incomingPins.Contains(s.EmployeeId) && s.Date >= minDate && s.Date <= maxDate)
+                .Include(s => s.FlexibleSegments)
+                .ToListAsync(cancellationToken);
+
+            foreach (var entry in existingEntries)
+                entriesByEmployeeDate[(entry.EmployeeId, entry.Date)] = entry;
+        }
+
+        try
+        {
+            foreach (var incomingDept in departmentsWithData)
             {
-                var employee = await db.Employees.FirstOrDefaultAsync(
-                    e => e.DepartmentId == department.Id && e.Pin == incomingEmployee.Pin, cancellationToken);
+                var department = departmentsByName[incomingDept.Name];
 
-                employee ??= await db.Employees.FirstOrDefaultAsync(e =>
-                    e.DepartmentId == department.Id &&
-                    e.LastName == incomingEmployee.LastName &&
-                    e.FirstName == incomingEmployee.FirstName, cancellationToken);
+                foreach (var incomingEmployee in incomingDept.Employees)
+                {
+                    var isNewEmployee = false;
+                    Employee? employee;
 
-                if (employee is null)
+                    if (employeesByPin.TryGetValue(incomingEmployee.Pin, out var pinMatch))
+                    {
+                        // A real match exists, just not in this sheet's own department --
+                        // department-scoped tier 1/2 matching (see
+                        // IScheduleRepository.ImportAsync's own doc comment) can't reach
+                        // them, and creating a second Employee row with the same Pin
+                        // would fail Employee.Pin's own unique index (see
+                        // ScheduleDbContext) with a raw SQL error instead of this.
+                        // Pre-existing outcome (the import already failed here before
+                        // this rewrite) -- the only change is that it now fails
+                        // atomically instead of leaving earlier departments/employees in
+                        // this same run already committed.
+                        if (!ReferenceEquals(departmentByPin[incomingEmployee.Pin], department))
+                            throw new DuplicateEmployeeIdException(incomingEmployee.Pin);
+
+                        employee = pinMatch;
+                    }
+                    else if (employeesByNameInDept.TryGetValue(department, out var byName) &&
+                             byName.TryGetValue(NameKey(incomingEmployee.LastName, incomingEmployee.FirstName), out var nameMatch))
+                    {
+                        employee = nameMatch;
+                    }
+                    else
+                    {
+                        employee = null;
+                    }
+
+                    if (employee is null)
+                    {
+                        employee = new Employee
+                        {
+                            LastName = incomingEmployee.LastName,
+                            FirstName = incomingEmployee.FirstName,
+                            Pin = incomingEmployee.Pin,
+                            Department = department,
+                        };
+                        db.Employees.Add(employee);
+                        isNewEmployee = true;
+
+                        employeesByPin[employee.Pin] = employee;
+                        departmentByPin[employee.Pin] = department;
+
+                        if (!employeesByNameInDept.TryGetValue(department, out var byNameNew))
+                            employeesByNameInDept[department] = byNameNew = new Dictionary<string, Employee>(StringComparer.OrdinalIgnoreCase);
+                        byNameNew[NameKey(employee.LastName, employee.FirstName)] = employee;
+                    }
+
+                    // Seeded once per employee, then updated in-memory as we go, so a
+                    // later row in the sheet for the same date overwrites an earlier one
+                    // within this same import -- not just against what was already in
+                    // the database.
+                    foreach (var incomingEntry in incomingEmployee.ScheduleEntries)
+                    {
+                        entriesByEmployeeDate.TryGetValue((employee.Pin, incomingEntry.Date), out var existingEntry);
+
+                        var entry = UpsertScheduleEntry(
+                            existingEntry,
+                            employee.Pin,
+                            incomingEntry.Date,
+                            incomingEntry.ScheduleType,
+                            incomingEntry.WorkTimeHours,
+                            incomingEntry.TimeIn,
+                            incomingEntry.FlexibleSegments.Select(s =>
+                                (s.TimeIn, s.TimeOut, s.ClockInBufferHours, s.ClockOutBufferHours)),
+                            incomingEntry.ClockInBufferBeforeHours,
+                            incomingEntry.ClockInBufferAfterHours,
+                            incomingEntry.ClockOutBufferBeforeHours,
+                            incomingEntry.ClockOutBufferAfterHours,
+                            incomingEntry.IsPaidLeave,
+                            restrictedTimeIn: incomingEntry.RestrictedTimeIn,
+                            restrictedTimeOut: incomingEntry.RestrictedTimeOut);
+
+                        // Belt-and-braces for a brand-new employee only: EF orders the
+                        // Employee INSERT before this entry's from the EmployeeId value
+                        // alone (the FK targets Employee.Pin as an alternate key -- see
+                        // ScheduleDbContext's own remarks on ScheduleEntry -- and Pin is
+                        // client-assigned here, so EF's insert-ordering graph matches
+                        // the two commands up by value with no navigation involved).
+                        // Setting it anyway makes that dependency explicit rather than
+                        // implicit, at the cost of one assignment. Only for new
+                        // employees: an existing one has nothing left to order.
+                        if (isNewEmployee) entry.Employee = employee;
+
+                        // Re-seed the map with whatever this row resolved to (existing
+                        // or newly-added) -- see the comment above entriesByEmployeeDate
+                        // for why.
+                        entriesByEmployeeDate[(employee.Pin, incomingEntry.Date)] = entry;
+                    }
+                }
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            DetachImportEntities();
+            throw;
+        }
+    }
+
+    /// <summary>Inserts or updates employees from a roster workbook -- see this method's
+    /// own doc comment on IScheduleRepository. Matched globally by Pin, deliberately
+    /// unlike ImportAsync's department-scoped two-tier match -- a roster row carries no
+    /// per-department context to scope against, and this is the authoritative employee
+    /// record, not a per-department view of one (see IScheduleRepository's own doc comment
+    /// on this asymmetry). One department-name resolve (ResolveDepartmentsAsync), one
+    /// employee SELECT, and one SaveChangesAsync for the whole file, not one round trip
+    /// per row. All-or-nothing on failure, same DetachImportEntities cleanup and reasoning
+    /// as ImportAsync above.</summary>
+    public async Task ImportEmployeeRosterAsync(IReadOnlyCollection<EmployeeImportRow> rows,
+        CancellationToken cancellationToken = default)
+    {
+        if (rows.Count == 0) return;
+
+        var departmentNames = rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.DepartmentName))
+            .Select(r => r.DepartmentName!)
+            .ToList();
+        var departmentsByName = await ResolveDepartmentsAsync(departmentNames, cancellationToken);
+
+        var pins = rows.Select(r => r.Pin).Distinct().ToList();
+        var existingEmployees = await db.Employees
+            .Where(e => pins.Contains(e.Pin))
+            .ToListAsync(cancellationToken);
+
+        var employeesByPin = new Dictionary<int, Employee>();
+        foreach (var employee in existingEmployees)
+            employeesByPin[employee.Pin] = employee;
+
+        try
+        {
+            foreach (var row in rows)
+            {
+                Department? department = null;
+                if (!string.IsNullOrWhiteSpace(row.DepartmentName))
+                    department = departmentsByName[row.DepartmentName];
+
+                if (!employeesByPin.TryGetValue(row.Pin, out var employee))
                 {
                     employee = new Employee
                     {
-                        LastName = incomingEmployee.LastName,
-                        FirstName = incomingEmployee.FirstName,
-                        Pin = incomingEmployee.Pin,
-                        DepartmentId = department.Id
+                        Pin = row.Pin,
+                        LastName = row.LastName,
+                        FirstName = row.FirstName,
+                        Department = department,
                     };
+                    ApplyOptionalImportFields(employee, row);
                     db.Employees.Add(employee);
-                    await db.SaveChangesAsync(cancellationToken);
+
+                    // EmployeeRosterImporter already rejects duplicate Pins within one
+                    // file (see that class's own doc comment) -- re-seeding here anyway
+                    // makes this loop's own correctness independent of that upstream
+                    // guarantee, same "seenKeys does double duty" reasoning
+                    // SqlAttendanceLogRepository.AddLogsAsync applies to its own
+                    // batch-plus-database dictionary.
+                    employeesByPin[employee.Pin] = employee;
                 }
-
-                var employeePin = employee.Pin;
-
-                // Seeded once per employee, then updated in-memory as we go, so a later
-                // row in the sheet for the same date overwrites an earlier one within
-                // this same import -- not just against what was already in the database.
-                // FlexibleSegments must be loaded here (not just the entry) so that
-                // clearing an existing entry's segments below is recognized by EF as a
-                // delete of the old rows, not just an in-memory detach -- see
-                // SetScheduleForDatesAsync above for the same pattern.
-                var existingByDate = await db.ScheduleEntries
-                    .Where(s => s.EmployeeId == employeePin)
-                    .Include(s => s.FlexibleSegments)
-                    .ToDictionaryAsync(s => s.Date, cancellationToken);
-
-                foreach (var incomingEntry in incomingEmployee.ScheduleEntries)
+                else
                 {
-                    existingByDate.TryGetValue(incomingEntry.Date, out var existingEntry);
-                    var entry = UpsertScheduleEntry(
-                        existingEntry,
-                        employeePin,
-                        incomingEntry.Date,
-                        incomingEntry.ScheduleType,
-                        incomingEntry.WorkTimeHours,
-                        incomingEntry.TimeIn,
-                        incomingEntry.FlexibleSegments.Select(s =>
-                            (s.TimeIn, s.TimeOut, s.ClockInBufferHours, s.ClockOutBufferHours)),
-                        incomingEntry.ClockInBufferBeforeHours,
-                        incomingEntry.ClockInBufferAfterHours,
-                        incomingEntry.ClockOutBufferBeforeHours,
-                        incomingEntry.ClockOutBufferAfterHours,
-                        incomingEntry.IsPaidLeave,
-                        restrictedTimeIn: incomingEntry.RestrictedTimeIn,
-                        restrictedTimeOut: incomingEntry.RestrictedTimeOut);
-
-                    // Re-seed the map with whatever this row resolved to (existing or
-                    // newly-added) -- see the comment above existingByDate for why.
-                    existingByDate[incomingEntry.Date] = entry;
+                    employee.LastName = row.LastName;
+                    employee.FirstName = row.FirstName;
+                    if (department is not null)
+                        employee.Department = department;
+                    ApplyOptionalImportFields(employee, row);
                 }
             }
+
+            await db.SaveChangesAsync(cancellationToken);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task ImportEmployeeRosterAsync(IEnumerable<EmployeeImportRow> rows, CancellationToken cancellationToken = default)
-    {
-        foreach (var row in rows)
+        catch
         {
-            Department? department = null;
-
-            if (!string.IsNullOrWhiteSpace(row.DepartmentName))
-                department = await GetOrCreateDepartmentAsync(row.DepartmentName, cancellationToken);
-
-            var employee = await db.Employees.FirstOrDefaultAsync(e => e.Pin == row.Pin, cancellationToken);
-            if (employee is null)
-            {
-                employee = new Employee
-                {
-                    Pin = row.Pin,
-                    LastName = row.LastName,
-                    FirstName = row.FirstName,
-                    DepartmentId = department?.Id
-                };
-                ApplyOptionalImportFields(employee, row);
-                db.Employees.Add(employee);
-            }
-            else
-            {
-                employee.LastName = row.LastName;
-                employee.FirstName = row.FirstName;
-                if (department is not null)
-                    employee.DepartmentId = department.Id;
-                ApplyOptionalImportFields(employee, row);
-            }
+            DetachImportEntities();
+            throw;
         }
-
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

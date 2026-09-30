@@ -65,71 +65,18 @@ internal sealed class SplitShiftCalculationStrategy : IShiftCalculationStrategy
         // to compute), rather than guessing a window the way SingleWindow's
         // missing-TimeIn case reports Absent instead -- there's no single
         // "the day" summary shape for SplitShift to fall back to.
-        var segments = schedule.FlexibleSegments.OrderBy(s => s.TimeIn).ToList();
-        var results = new List<AttendanceSummary>(segments.Count);
-
         // Two independent +/-buffer windows per segment -- one around its own
         // start (for finding its clock-in), one around its own end (for
         // finding its clock-out) -- instead of one combined window spanning
         // the whole segment. See CalculateSegment for why that distinction
-        // matters. Computed for every segment up front (unclamped) so the
-        // neighbor-overlap pass below can compare each segment's real window
-        // against its neighbor's real window, instead of guessing from the
-        // raw, unbuffered segment boundaries.
-        var segStarts = new DateTime[segments.Count];
-        var segEnds = new DateTime[segments.Count];
-        var inWindowStarts = new DateTime[segments.Count];
-        var inWindowEnds = new DateTime[segments.Count];
-        var outWindowStarts = new DateTime[segments.Count];
-        var outWindowEnds = new DateTime[segments.Count];
-
-        for (int i = 0; i < segments.Count; i++)
-        {
-            // A segment's own ClockInBufferHours/ClockOutBufferHours (see
-            // FlexibleSegment) take priority over the policy-wide default --
-            // null on the segment (the common case) falls back to it. This is
-            // what lets one unusually tight or loose segment (e.g. a short
-            // lunch-return window that shouldn't tolerate a +/-1h policy
-            // default) be tuned without changing every other segment/day.
-            double clockInBuffer = segments[i].ClockInBufferHours ?? policy.FlexibleSegmentClockInBuffer;
-            double clockOutBuffer = segments[i].ClockOutBufferHours ?? policy.FlexibleSegmentClockOutBuffer;
-
-            // A segment that crosses midnight (TimeOut <= TimeIn -- see
-            // FlexibleSegment.CrossesMidnight) actually ends on the calendar day
-            // after schedule.Date, e.g. a 22:00-06:00 night segment's real end is
-            // tomorrow 06:00, not today 06:00 (which would be *before* its own
-            // start). Same AddDays(1) adjustment SingleWindowShiftCalculationStrategy
-            // already makes for an overnight Normal shift (see schedule.CrossesMidnight
-            // there) -- this is the per-segment equivalent, since a SplitShift day can
-            // have several segments and only some of them might wrap.
-            segStarts[i] = schedule.Date.ToDateTime(segments[i].TimeIn);
-            segEnds[i] = segments[i].CrossesMidnight
-                ? schedule.Date.AddDays(1).ToDateTime(segments[i].TimeOut)
-                : schedule.Date.ToDateTime(segments[i].TimeOut);
-            inWindowStarts[i] = segStarts[i].AddHours(-clockInBuffer);
-            inWindowEnds[i] = segStarts[i].AddHours(clockInBuffer);
-            outWindowStarts[i] = segEnds[i].AddHours(-clockOutBuffer);
-            outWindowEnds[i] = segEnds[i].AddHours(clockOutBuffer);
-        }
-
-        // Only clip a segment's out-window / the next segment's in-window when
-        // they actually overlap -- i.e. this segment's out-buffer reaches past
-        // where the next segment's in-buffer already starts -- and then split
-        // only the overlapping region down the middle, so a punch sitting in
-        // a genuine gap between two segments (e.g. a lunch break) can't be
-        // claimed by both sides. Windows that don't reach each other -- e.g.
-        // because the clock-in and clock-out buffers differ in size -- are
-        // left untouched.
-        for (int i = 0; i < segments.Count - 1; i++)
-        {
-            if (outWindowEnds[i] > inWindowStarts[i + 1])
-            {
-                DateTime midpoint = inWindowStarts[i + 1] +
-                    TimeSpan.FromTicks((outWindowEnds[i] - inWindowStarts[i + 1]).Ticks / 2);
-                outWindowEnds[i] = midpoint;
-                inWindowStarts[i + 1] = midpoint;
-            }
-        }
+        // matters. Built (with the per-segment buffer overrides, the
+        // midnight-crossing adjustment, and the neighbour-overlap clamp all
+        // already applied) by PunchCandidateWindows.ForSegments, so the Day Punch
+        // Pairing editor can grey out exactly the punches these windows won't
+        // consider without keeping a second copy of this arithmetic -- see that
+        // class's own doc comment. Segments come back ordered by TimeIn.
+        var segmentWindows = PunchCandidateWindows.ForSegments(schedule, policy);
+        var results = new List<AttendanceSummary>(segmentWindows.Count);
 
         // Aggregated across every segment before computing the final unclaimed
         // set -- a punch that's an unclaimed candidate in one segment's window
@@ -141,11 +88,12 @@ internal sealed class SplitShiftCalculationStrategy : IShiftCalculationStrategy
         var claimed = new List<AttendanceLog>();
         var considered = new List<AttendanceLog>();
 
-        for (int i = 0; i < segments.Count; i++)
+        for (int i = 0; i < segmentWindows.Count; i++)
         {
             var (segmentSummary, clockInPunch, clockOutPunch, segmentConsidered) = CalculateSegment(
-                schedule, segments[i], segStarts[i], segEnds[i],
-                inWindowStarts[i], inWindowEnds[i], outWindowStarts[i], outWindowEnds[i],
+                schedule, segmentWindows[i].Segment, segmentWindows[i].SegmentStart, segmentWindows[i].SegmentEnd,
+                segmentWindows[i].In.Start, segmentWindows[i].In.End,
+                segmentWindows[i].Out.Start, segmentWindows[i].Out.End,
                 employeePunches, policy, employeeId, employeeName, departmentName);
 
             results.Add(segmentSummary);

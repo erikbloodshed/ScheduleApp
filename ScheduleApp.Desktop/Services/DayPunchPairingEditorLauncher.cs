@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
@@ -80,13 +81,38 @@ public sealed class DayPunchPairingEditorLauncher(
         // IsReadOnly, and PairingNote.
         var pairingAffectsResult = schedule.ScheduleType == ScheduleType.Flexible;
 
+        // Which punches this day's schedule could actually match -- the buffered
+        // clock-in/clock-out windows for Normal and a windowed RestDay, the
+        // per-segment windows for SplitShift, the restricted search boundary for
+        // Flexible, and none at all for Leave/OfficialBusiness/an unscheduled
+        // RestDay. Built by the same helper the strategies themselves now use (see
+        // PunchCandidateWindows), so what the editor greys out is by construction
+        // what the calculation ignores.
+        var candidateWindows = PunchCandidateWindows.For(schedule, _policy);
+
         // The day's punch pool, merged exactly the way AttendanceWorkflowService
         // merges it (device rows plus manual entries projected through
         // ToAttendanceLog) so the editor is looking at the same punches the
-        // calculation will. Fetched over the schedule's own search window rather
-        // than a bare calendar day, so a RestrictedTimeOut reaching past midnight
-        // brings its punches along.
-        var (searchStart, searchEnd) = ScheduleApp.Attendance.FlexiblePairingBuilder.SearchWindow(schedule);
+        // calculation will. Fetched over the calendar day *widened to cover every
+        // candidate window*, not the day alone and not the windows alone:
+        //  * wider than the day, because an overnight shift's clock-out window sits
+        //    on the following morning -- fetching only the calendar day used to
+        //    leave that punch out of the editor entirely, even though the
+        //    calculation claims it;
+        //  * wider than the windows, because a punch outside them is still shown
+        //    (greyed, see DayPunchPairingCellViewModel.IsOutsideScheduleWindow)
+        //    rather than hidden -- someone looking at a Partial day needs to see
+        //    the stray 2 AM tap that explains it.
+        var dayStart = date.ToDateTime(TimeOnly.MinValue);
+        var dayEnd = date.ToDateTime(TimeOnly.MaxValue);
+        var searchStart = dayStart;
+        var searchEnd = dayEnd;
+        if (PunchCandidateWindows.Bounds(candidateWindows) is { } windowBounds)
+        {
+            if (windowBounds.Start < searchStart) searchStart = windowBounds.Start;
+            if (windowBounds.End > searchEnd) searchEnd = windowBounds.End;
+        }
+
         int[] pins = [employee.Pin];
         var deviceLogs = await attendanceLogRepository.GetLogsAsync(searchStart, searchEnd, pins, cancellationToken);
         var manualLogs = await manualAttendanceLogRepository.GetLogsAsync(searchStart, searchEnd, pins, cancellationToken);
@@ -98,8 +124,8 @@ public sealed class DayPunchPairingEditorLauncher(
         var existing = await dayPunchPairingRepository.GetAsync(employee.Pin, date, cancellationToken);
 
         var editor = new DayPunchPairingEditorViewModel(
-            employee, schedule, dayPunches, _policy, existing, manualAttendanceLogRepository,
-            attendanceStatus);
+            employee, schedule, dayPunches, candidateWindows, new PunchWindow(searchStart, searchEnd),
+            _policy, existing, manualAttendanceLogRepository, attendanceStatus);
         var dialog = new DayPunchPairingDialog(editor) { Owner = Application.Current.MainWindow };
 
         var dialogResult = dialog.ShowDialog();

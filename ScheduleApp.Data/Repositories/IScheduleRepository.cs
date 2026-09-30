@@ -249,17 +249,36 @@ public interface IScheduleRepository
     /// same date as an earlier one wins -- this is how legacy "Temporary override" rows
     /// (now just a second Normal row with different hours) still take effect after the
     /// baseline row for the same day.
+    ///
+    /// A Pin that already belongs to an employee outside this sheet's own department (a
+    /// different department, or none at all) can't be reached by either matching tier
+    /// above -- rather than silently creating a second Employee row and failing
+    /// Employee.Pin's own unique index with a raw SQL error, this throws
+    /// DuplicateEmployeeIdException instead. Same outcome (the import fails), a clearer
+    /// message.
+    ///
+    /// All-or-nothing: everything is staged in memory and written in one SaveChangesAsync,
+    /// so a failure partway through (including the collision above) leaves the database
+    /// completely untouched rather than a mix of already-committed departments/employees
+    /// and missing schedules. <paramref name="departmentsWithData"/> is enumerated more
+    /// than once (each Department's Employees, and each Employee's ScheduleEntries), so it
+    /// must be a materialized collection.
     /// </summary>
-    Task ImportAsync(IEnumerable<Department> departmentsWithData, CancellationToken cancellationToken = default);
+    Task ImportAsync(IReadOnlyCollection<Department> departmentsWithData, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Inserts or updates employees from a roster workbook (Employees.xlsx-style,
     /// header-named columns -- see EmployeeRosterImporter for the recognized set).
-    /// Matched by Pin. For each optional field on EmployeeImportRow (Department,
-    /// DailyRate, IsOvertimeEligible, HasOvertimePremium, HasNightDiff, SSS,
-    /// PhilHealth, PagIBIG, HasLeaveWithPay), a null value leaves a matched
-    /// existing employee's own field unchanged, or leaves a new employee at that
-    /// field's normal class default.
+    /// Matched by Pin, globally -- deliberately unlike ImportAsync's department-scoped
+    /// two-tier match above, since a roster row carries no per-department context to scope
+    /// against and this is the authoritative employee record, not a per-department view of
+    /// one. For each optional field on EmployeeImportRow (Department, DailyRate,
+    /// IsOvertimeEligible, HasOvertimePremium, HasNightDiff, SSS, PhilHealth, PagIBIG,
+    /// HasLeaveWithPay), a null value leaves a matched existing employee's own field
+    /// unchanged, or leaves a new employee at that field's normal class default.
+    ///
+    /// All-or-nothing, same reasoning as ImportAsync above: one SaveChangesAsync for the
+    /// whole file, so a failure partway through leaves the database untouched.
     /// </summary>
-    Task ImportEmployeeRosterAsync(IEnumerable<EmployeeImportRow> rows, CancellationToken cancellationToken = default);
+    Task ImportEmployeeRosterAsync(IReadOnlyCollection<EmployeeImportRow> rows, CancellationToken cancellationToken = default);
 }

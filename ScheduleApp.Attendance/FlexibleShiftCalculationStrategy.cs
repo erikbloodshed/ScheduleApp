@@ -142,11 +142,13 @@ internal sealed class FlexibleShiftCalculationStrategy : IShiftCalculationStrate
             summary.CheckIn = restrictedTimeInForDisplay;
         }
 
-        // RestrictedTimeIn never narrows this search -- an early punch still
-        // needs to be seen and paired, just not credited (see
-        // FlexibleWorkedHours.Populate's capping). RestrictedTimeOut does narrow
-        // it: it's a hard boundary, so a punch after it is excluded here rather
-        // than merely left uncredited. Same crosstime convention as
+        // Both RestrictedTimeIn and RestrictedTimeOut are hard boundaries: a punch
+        // outside the restricted window is excluded from the day here rather than
+        // being paired and then merely left uncredited. (RestrictedTimeIn used to
+        // be the softer of the two -- see FlexiblePairingBuilder.SearchWindow's own
+        // doc comment for what changed and why.) FlexibleWorkedHours.Populate still
+        // caps each pair against RestrictedTimeIn, which is now a no-op for
+        // everything this search admits. Same crosstime convention as
         // FlexibleSegment.CrossesMidnight -- see the class doc comment -- so
         // the boundary can reach into the day after schedule.Date when
         // RestrictedTimeOut is at or before RestrictedTimeIn. Shared with

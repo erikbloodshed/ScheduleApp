@@ -1053,10 +1053,11 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// <summary>Opens a department/employee checkbox tree (same PayrollWizardDialog Step 2
     /// shape) pre-seeded with the current group's members already checked, so the person can
     /// pick additional employees to add. Only the newly-checked employees (those not already in
-    /// BatchScopeEmployees) are written to the database, computed, and appended as new
-    /// PayrollGroupRows -- existing members' rows are left untouched and NOT recomputed (see
-    /// _suppressGroupRefreshOnScopeChange's own doc comment), so their NetPay values stay
-    /// on-screen exactly as they were.
+    /// BatchScopeEmployees) are written to the database -- as one batch via
+    /// IPayrollRunRepository.AddEmployeesAsync, not one call per employee -- computed, and
+    /// appended as new PayrollGroupRows -- existing members' rows are left untouched and NOT
+    /// recomputed (see _suppressGroupRefreshOnScopeChange's own doc comment), so their NetPay
+    /// values stay on-screen exactly as they were.
     ///
     /// Blocked while _busy.IsRunning and when there is no active saved run (same guards as
     /// RemoveEmployeeFromGroupAsync). Opens the tree dialog outside the busy window, same
@@ -1123,8 +1124,16 @@ public partial class PayrollGroupViewModel : ObservableObject
 
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
-            foreach (var emp in toAdd)
-                await _payrollRunRepository.AddEmployeeAsync(runId, emp.Pin, cancellationToken);
+            // One call, not one per employee: three round trips instead of 3N, and --
+            // more importantly -- one atomic write. The loop this replaced could commit
+            // some rows and then be cancelled or throw partway, and
+            // AttendanceBusyState.RunAsync swallows OperationCanceledException without
+            // invoking onError, so the run's membership could silently gain employees
+            // that never made it into addedEmployees/BatchScopeEmployees below, with
+            // nothing shown to the person. Either the whole set lands and
+            // addedEmployees is set on the very next line, or nothing lands and it
+            // stays null.
+            await _payrollRunRepository.AddEmployeesAsync(runId, [.. toAdd.Select(e => e.Pin)], cancellationToken);
 
             addedEmployees = toAdd;
 

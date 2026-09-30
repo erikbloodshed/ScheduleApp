@@ -211,6 +211,17 @@ public partial class ScheduleImportExportViewModel : ObservableObject
             // fixes -- see BumpScheduleForEmployees' own doc comment.
             _dataVersion.BumpScheduleForEmployees([.. departments.SelectMany(d => d.Employees).Select(e => e.Pin)]);
         }
+        catch (DuplicateEmployeeIdException ex)
+        {
+            // A sheet named someone whose Pin already belongs to an employee outside
+            // that sheet's own department (a different department, or none at all) --
+            // see IScheduleRepository.ImportAsync's own doc comment. Not a column-
+            // layout problem, so it gets its own message rather than the generic
+            // catch's "Check that it matches the expected column layout" below, which
+            // would be actively misleading here.
+            _statusBarService.ShowError(ex.Message, "Import failed");
+            return;
+        }
         catch (Exception ex)
         {
             // Most likely cause: a cell that doesn't match the expected layout --

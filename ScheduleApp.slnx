@@ -3,6 +3,7 @@
   <Project Path="ScheduleApp.Desktop/ScheduleApp.Desktop.csproj" DefaultStartup="true"/>
   <Project Path="ScheduleApp.ZkTeco/ScheduleApp.ZkTeco.csproj" />
   <Project Path="ScheduleApp.Data/ScheduleApp.Data.csproj" />
+  <Project Path="ScheduleApp.Data.Tests/ScheduleApp.Data.Tests.csproj" />
   <Project Path="ScheduleApp.Excel/ScheduleApp.Excel.csproj" />
   <Project Path="ScheduleApp.Payroll/ScheduleApp.Payroll.csproj" />
   <Project Path="ScheduleApp.Payroll.Tests/ScheduleApp.Payroll.Tests.csproj" />

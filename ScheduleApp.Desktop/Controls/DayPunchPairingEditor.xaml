@@ -78,11 +78,40 @@
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"
                                Visibility="Collapsed" />
+                    <!-- A punch the day's schedule never searches for: outside the
+                         buffered clock-in/clock-out windows, outside every split-shift
+                         segment's windows, or outside a Flexible day's restricted
+                         punching window (and, on Leave/Official Business/an unscheduled
+                         Rest Day, every punch, since those never look at punches at
+                         all). Shown rather than hidden so a Partial day still explains
+                         itself, but never counted. See
+                         DayPunchPairingCellViewModel.IsOutsideScheduleWindow. -->
+                    <TextBlock x:Name="OutsideWindowBadge"
+                               Text="not counted"
+                               FontSize="10"
+                               FontStyle="Italic"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               VerticalAlignment="Center"
+                               Margin="6,0,0,0"
+                               Visibility="Collapsed" />
                 </StackPanel>
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsManual}" Value="True">
                     <Setter TargetName="SourceBadge" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                </DataTrigger>
+                <!-- Before the IsUnpaired/IsBeingDragged triggers below on purpose:
+                     where they set the same property, the later trigger wins, so an
+                     out-of-window card being dragged still picks up the drag
+                     treatment rather than staying at this opacity. ToolTipService is
+                     force-enabled because the card's tooltip is normally suppressed
+                     for a device punch, and an ignored device punch is precisely
+                     the one that most needs to say why it is greyed. -->
+                <DataTrigger Binding="{Binding IsOutsideScheduleWindow}" Value="True">
+                    <Setter TargetName="Card" Property="Opacity" Value="0.55" />
+                    <Setter TargetName="Card" Property="Background" Value="{DynamicResource ControlFillColorDisabledBrush}" />
+                    <Setter TargetName="Card" Property="ToolTipService.IsEnabled" Value="True" />
+                    <Setter TargetName="OutsideWindowBadge" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsUnpaired}" Value="True">
                     <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource SystemFillColorCautionBrush}" />

@@ -81,6 +81,39 @@ public class PayrollRunRepository(ScheduleDbContext db) : IPayrollRunRepository
         return row.Id;
     }
 
+    public async Task<int> AddEmployeesAsync(int runId, IReadOnlyCollection<int> employeePins,
+        CancellationToken cancellationToken = default)
+    {
+        if (employeePins.Count == 0) return 0;
+
+        var distinctPins = employeePins.Distinct().ToList();
+
+        // Run-exists checked first here, unlike AddEmployeeAsync above (which checks
+        // membership first, since the common single-employee case is a hit and that
+        // saves the guard query) -- a batch's own membership query can't short-circuit
+        // the FK risk the way a single hit does, so the guard has to come first.
+        if (!await db.PayrollRuns.AnyAsync(r => r.Id == runId, cancellationToken)) return 0;
+
+        // Narrowed to the requested set, not every member of the run -- same "derive
+        // the bound from the batch itself" shape SqlAttendanceLogRepository.
+        // AddLogsAsync applies to its own existing-keys query.
+        var existingPins = await db.PayrollRunEmployees
+            .Where(e => e.PayrollRunId == runId && distinctPins.Contains(e.EmployeeId))
+            .Select(e => e.EmployeeId)
+            .ToListAsync(cancellationToken);
+
+        var toInsert = distinctPins
+            .Except(existingPins)
+            .Select(pin => new PayrollRunEmployee { PayrollRunId = runId, EmployeeId = pin })
+            .ToList();
+
+        if (toInsert.Count == 0) return 0;
+
+        db.PayrollRunEmployees.AddRange(toInsert);
+        await db.SaveChangesAsync(cancellationToken);
+        return toInsert.Count;
+    }
+
     public async Task RemoveEmployeeAsync(int runId, int employeePin, CancellationToken cancellationToken = default)
     {
         // ExecuteDeleteAsync mirrors DeleteAsync's own one-round-trip, no-op-if-missing

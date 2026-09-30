@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>ScheduleApp.Data.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Test project, not something anyone else references, same shape as
+         ScheduleApp.Attendance.Tests/ScheduleApp.Payroll.Tests. Exercises
+         ScheduleRepository's import methods and PayrollRunRepository's bulk-add
+         against a real relational database (SQLite, not EF's InMemory provider,
+         which doesn't enforce the unique indexes or the Employee.Pin alternate-key
+         FK these tests specifically check, see TestDbContext.cs's own doc
+         comment). -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bump these if they don't resolve against your local NuGet feed,
+         same caveat ScheduleApp.Payroll.Tests' own .csproj gives. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ScheduleApp.Data\ScheduleApp.Data.csproj" />
+  </ItemGroup>
+
+</Project>

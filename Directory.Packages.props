@@ -6,6 +6,11 @@
     <!-- EF Core - ScheduleApp.Data, ScheduleApp.Desktop, ScheduleApp.PushListener -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <!-- ScheduleApp.Data.Tests only, SQLite (not the real SQL Server provider) so
+         repository tests run against a real, in-memory relational database with no
+         external server needed. Same EF Core version pin as the SqlServer/Design
+         packages above. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <!-- ScheduleApp.Data -->
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
     <!-- ScheduleApp.Desktop -->

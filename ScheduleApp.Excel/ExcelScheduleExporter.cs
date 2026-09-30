@@ -8,12 +8,13 @@ namespace ScheduleApp.Excel;
 /// <summary>
 /// Writes departments/employees/schedule entries to an .xlsx workbook using the
 /// same "one worksheet per department" layout as the original spreadsheet:
-/// Id, FirstName, ScheduleType, StartDate, EndDate, WorkTime, TimeIn, TimeOut.
+/// Id, FirstName, ScheduleType, StartDate, EndDate, WorkTime, TimeIn, TimeOut,
+/// ClockInBufferBefore, ClockInBufferAfter, ClockOutBufferBefore, ClockOutBufferAfter.
 /// Internally each day is stored separately (ScheduleEntry.Date), but consecutive
-/// days with an identical type/hours/time-in/restricted-window/segment-set are
-/// collapsed back into a single StartDate-EndDate run here, purely so the export
-/// stays compact and readable -- this has no bearing on how the data is stored or
-/// edited in the app.
+/// days with an identical type/hours/time-in/restricted-window/segment-set/buffer
+/// overrides are collapsed back into a single StartDate-EndDate run here, purely so
+/// the export stays compact and readable -- this has no bearing on how the data is
+/// stored or edited in the app.
 ///
 /// Columns 7/8 (TimeIn/TimeOut) carry a different meaning per ScheduleType rather
 /// than adding new columns for Flexible/SplitShift's own fields (see the
@@ -36,14 +37,46 @@ namespace ScheduleApp.Excel;
 ///   from, unlike Normal. A SplitShift run with zero segments still emits exactly
 ///   one row, with both cells left blank.
 ///
+/// Columns 9-12 (the clock-in/clock-out buffer overrides, in hours) follow that
+/// same per-ScheduleType reuse. They are blank whenever the day carries no override
+/// of its own, and blank means "inherit" -- fall back to the employee's own default
+/// and then to the app-wide AttendancePolicy (see NormalBufferResolver) -- which is
+/// the common case, so most exported rows leave all four empty:
+/// - Normal/OfficialBusiness/RestDay: the entry's own four per-day overrides
+///   (ScheduleEntry.ClockInBufferBeforeHours/ClockInBufferAfterHours/
+///   ClockOutBufferBeforeHours/ClockOutBufferAfterHours), each independently
+///   optional, in that column order.
+/// - SplitShift: buffers are per-segment and symmetric there -- one
+///   FlexibleSegment.ClockInBufferHours covers both sides of the segment's start,
+///   and one ClockOutBufferHours both sides of its end (see
+///   SplitShiftCalculationStrategy). So each segment row writes its clock-in value
+///   into BOTH columns 9 and 10, and its clock-out value into BOTH columns 11 and
+///   12, rather than leaving the "After" halves blank and implying a one-sided
+///   window. ExcelScheduleImporter reads the "Before" half back, falling back to
+///   the "After" half only when the "Before" one is blank.
+/// - Flexible/Leave: all four blank. Flexible matches punches across the whole day
+///   (optionally bounded by RestrictedTimeIn/RestrictedTimeOut) rather than against
+///   a scheduled window, so it has no buffer to override; Leave has no punch window
+///   at all.
+///
 /// Unassigned employees (no department) get their own sheet.
 /// </summary>
 public static class ExcelScheduleExporter
 {
     private static readonly string[] Headers =
-        { "Id", "FirstName", "ScheduleType", "StartDate", "EndDate", "WorkTime", "TimeIn", "TimeOut" };
+    {
+        "Id", "FirstName", "ScheduleType", "StartDate", "EndDate", "WorkTime", "TimeIn", "TimeOut",
+        "ClockInBufferBefore", "ClockInBufferAfter", "ClockOutBufferBefore", "ClockOutBufferAfter"
+    };
 
     private const string WorkTimeNumberFormat = "_-* #,##0.0_-;\\-* #,##0.0_-;_-* \"-\"?_-;_-@_-";
+
+    /// <summary>Plain up-to-two-decimals, unlike WorkTime's accounting-style format
+    /// above: a buffer cell is blank far more often than not (blank = inherit, see
+    /// the class doc comment), and the accounting format's "-" placeholder branch
+    /// would render those blanks as a dash, reading like a real, deliberately-zero
+    /// override rather than an absent one.</summary>
+    private const string BufferNumberFormat = "0.##";
 
     public static void Export(IEnumerable<Department> departments, IEnumerable<Employee> unassignedEmployees, string filePath)
     {
@@ -81,7 +114,7 @@ public static class ExcelScheduleExporter
                 // the class doc comment's per-ScheduleType column table.
                 var segmentsToEmit = run.ScheduleType == ScheduleType.SplitShift && run.Segments.Count > 0
                     ? run.Segments
-                    : new List<(TimeOnly TimeIn, TimeOnly TimeOut)> { default };
+                    : new List<RunSegment> { default };
 
                 foreach (var segment in segmentsToEmit)
                 {
@@ -111,6 +144,14 @@ public static class ExcelScheduleExporter
 
                             ws.Cells[row, 8].Value = new DateTime(1899, 12, 30).Add(segment.TimeOut.ToTimeSpan());
                             ws.Cells[row, 8].Style.Numberformat.Format = "h:mm";
+
+                            // This segment's own symmetric buffer overrides, written to
+                            // both halves of each pair -- see the class doc comment's
+                            // columns 9-12 table.
+                            WriteBuffer(ws, row, 9, segment.ClockInBufferHours);
+                            WriteBuffer(ws, row, 10, segment.ClockInBufferHours);
+                            WriteBuffer(ws, row, 11, segment.ClockOutBufferHours);
+                            WriteBuffer(ws, row, 12, segment.ClockOutBufferHours);
                         }
                     }
                     else if (run.ScheduleType == ScheduleType.Flexible)
@@ -130,6 +171,9 @@ public static class ExcelScheduleExporter
                             ws.Cells[row, 8].Value = new DateTime(1899, 12, 30).Add(restrictedTimeOut.ToTimeSpan());
                             ws.Cells[row, 8].Style.Numberformat.Format = "h:mm";
                         }
+
+                        // Columns 9-12 stay blank for Flexible -- it has no scheduled
+                        // window to buffer against, see the class doc comment.
                     }
                     else
                     {
@@ -151,6 +195,18 @@ public static class ExcelScheduleExporter
                         ws.Cells[row, 8].Formula =
                             $"IF(OR(ISBLANK(F{row}),ISBLANK(G{row})),\"\",G{row}+TIME(F{row},0,0))";
                         ws.Cells[row, 8].Style.Numberformat.Format = "h:mm";
+
+                        // The entry's own four per-day overrides, each independently
+                        // optional -- see the class doc comment's columns 9-12 table.
+                        // Written for Leave too, where they're always null (so always
+                        // blank), for the same reason columns 6/7 are: this branch is the
+                        // single-TimeIn/WorkTime-window shape, and Leave simply has
+                        // nothing in any of those fields rather than needing a branch of
+                        // its own.
+                        WriteBuffer(ws, row, 9, run.ClockInBufferBeforeHours);
+                        WriteBuffer(ws, row, 10, run.ClockInBufferAfterHours);
+                        WriteBuffer(ws, row, 11, run.ClockOutBufferBeforeHours);
+                        WriteBuffer(ws, row, 12, run.ClockOutBufferAfterHours);
                     }
 
                     row++;
@@ -171,16 +227,45 @@ public static class ExcelScheduleExporter
         ws.View.FreezePanes(2, 1);
     }
 
+    /// <summary>Writes one buffer-override cell, leaving it genuinely empty (not a
+    /// zero) when the override is null -- blank is what tells both a reader and
+    /// ExcelScheduleImporter "inherit the employee/policy default", so a null must
+    /// never round-trip as 0, which is itself a real override meaning "no buffer at
+    /// all". The number format is applied either way, so a value typed into a blank
+    /// cell by hand later still displays like the rest of the column.</summary>
+    private static void WriteBuffer(ExcelWorksheet ws, int row, int column, double? hours)
+    {
+        if (hours is { } value)
+            ws.Cells[row, column].Value = value;
+
+        ws.Cells[row, column].Style.Numberformat.Format = BufferNumberFormat;
+    }
+
+    /// <summary>One emitted SplitShift segment row's window plus that segment's own
+    /// optional symmetric buffer overrides (see FlexibleSegment.ClockInBufferHours/
+    /// ClockOutBufferHours). A named struct rather than the bare (TimeIn, TimeOut)
+    /// tuple this used to be, now that it carries two pairs of fields that read
+    /// nothing alike.</summary>
+    private readonly record struct RunSegment(
+        TimeOnly TimeIn, TimeOnly TimeOut, double? ClockInBufferHours, double? ClockOutBufferHours);
+
     private readonly record struct EntryRun(
         DateOnly Start, DateOnly End, ScheduleType ScheduleType, decimal? WorkTimeHours, TimeOnly? TimeIn,
         TimeOnly? RestrictedTimeIn, TimeOnly? RestrictedTimeOut,
-        List<(TimeOnly TimeIn, TimeOnly TimeOut)> Segments);
+        double? ClockInBufferBeforeHours, double? ClockInBufferAfterHours,
+        double? ClockOutBufferBeforeHours, double? ClockOutBufferAfterHours,
+        List<RunSegment> Segments);
 
     /// <summary>
     /// Groups an employee's per-day entries (sorted by date) into runs of consecutive
-    /// days that all share the same type/hours/time-in/restricted-window/segment-set,
-    /// so the export reads like the original range-based workbook instead of one row
-    /// per single day.
+    /// days that all share the same type/hours/time-in/restricted-window/segment-set/
+    /// buffer overrides, so the export reads like the original range-based workbook
+    /// instead of one row per single day. The buffer overrides are part of that
+    /// sameness test rather than just carried along from the run's last day: two
+    /// otherwise identical consecutive days differing only in, say,
+    /// ClockOutBufferAfterHours are genuinely different schedules now that the export
+    /// carries those columns, and collapsing them would silently apply one day's
+    /// override to the other.
     /// </summary>
     private static IEnumerable<EntryRun> CollapseIntoRuns(IEnumerable<ScheduleEntry> entries)
     {
@@ -199,6 +284,10 @@ public static class ExcelScheduleExporter
                                   current.TimeIn == previous.TimeIn &&
                                   current.RestrictedTimeIn == previous.RestrictedTimeIn &&
                                   current.RestrictedTimeOut == previous.RestrictedTimeOut &&
+                                  current.ClockInBufferBeforeHours == previous.ClockInBufferBeforeHours &&
+                                  current.ClockInBufferAfterHours == previous.ClockInBufferAfterHours &&
+                                  current.ClockOutBufferBeforeHours == previous.ClockOutBufferBeforeHours &&
+                                  current.ClockOutBufferAfterHours == previous.ClockOutBufferAfterHours &&
                                   SameSegments(current.FlexibleSegments, previous.FlexibleSegments);
 
             if (isContiguous && isSameSchedule)
@@ -218,11 +307,20 @@ public static class ExcelScheduleExporter
     private static EntryRun ToRun(DateOnly runStart, ScheduleEntry entry) => new(
         runStart, entry.Date, entry.ScheduleType, entry.WorkTimeHours, entry.TimeIn,
         entry.RestrictedTimeIn, entry.RestrictedTimeOut,
-        entry.FlexibleSegments.OrderBy(s => s.TimeIn).Select(s => (s.TimeIn, s.TimeOut)).ToList());
+        entry.ClockInBufferBeforeHours, entry.ClockInBufferAfterHours,
+        entry.ClockOutBufferBeforeHours, entry.ClockOutBufferAfterHours,
+        entry.FlexibleSegments
+            .OrderBy(s => s.TimeIn)
+            .Select(s => new RunSegment(s.TimeIn, s.TimeOut, s.ClockInBufferHours, s.ClockOutBufferHours))
+            .ToList());
 
     /// <summary>Order-independent equality between two entries' segment sets --
     /// both are sorted by TimeIn first so a day whose segments were saved/loaded
-    /// in a different order still collapses into the same run as an identical day.</summary>
+    /// in a different order still collapses into the same run as an identical day.
+    /// Each segment's own buffer overrides count toward that equality, same
+    /// reasoning as the entry-level buffers in CollapseIntoRuns above: they're
+    /// exported per segment row now, so two days whose segments share every window
+    /// but differ in a buffer are not the same run.</summary>
     private static bool SameSegments(List<FlexibleSegment> a, List<FlexibleSegment> b)
     {
         if (a.Count != b.Count) return false;
@@ -232,8 +330,13 @@ public static class ExcelScheduleExporter
 
         for (var i = 0; i < sortedA.Count; i++)
         {
-            if (sortedA[i].TimeIn != sortedB[i].TimeIn || sortedA[i].TimeOut != sortedB[i].TimeOut)
+            if (sortedA[i].TimeIn != sortedB[i].TimeIn ||
+                sortedA[i].TimeOut != sortedB[i].TimeOut ||
+                sortedA[i].ClockInBufferHours != sortedB[i].ClockInBufferHours ||
+                sortedA[i].ClockOutBufferHours != sortedB[i].ClockOutBufferHours)
+            {
                 return false;
+            }
         }
 
         return true;

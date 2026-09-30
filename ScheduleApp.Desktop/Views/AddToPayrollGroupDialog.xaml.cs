@@ -13,13 +13,13 @@ namespace ScheduleApp.Desktop.Views;
 /// convention LoadPayrollGroupDialog follows.
 ///
 /// Employees already in the group are pre-checked so the person can see who's already a
-/// member -- but PayrollViewModel.AddEmployeesToGroupAsync filters those out before
-/// calling AddEmployeeAsync, so clicking Add with only existing members checked is a
-/// no-op rather than an error.
+/// member -- but PayrollGroupViewModel.AddEmployeesToGroupAsync filters those out before
+/// calling IPayrollRunRepository.AddEmployeesAsync, so clicking Add with only existing
+/// members checked is a no-op rather than an error.
 ///
 /// SelectedEmployees is the full set of checked employees on OK (existing members
-/// included); PayrollViewModel.AddEmployeesToGroupAsync is responsible for filtering to
-/// only the genuinely new ones. That keeps this dialog's own job simple: show the tree,
+/// included); PayrollGroupViewModel.AddEmployeesToGroupAsync is responsible for filtering
+/// to only the genuinely new ones. That keeps this dialog's own job simple: show the tree,
 /// return whoever's checked.
 /// </summary>
 public partial class AddToPayrollGroupDialog : Wpf.Ui.Controls.FluentWindow

@@ -54,11 +54,22 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// only *where it sits* is part of the pairing.</summary>
     private readonly IManualAttendanceLogRepository _manualLogRepository;
 
-    /// <summary>The day's punch-search boundary, used to date a newly typed punch
-    /// (see <see cref="ResolveTimestamp"/>) -- a Flexible day whose
-    /// RestrictedTimeOut crosses midnight legitimately reaches into the next
-    /// calendar day.</summary>
-    private readonly (DateTime Start, DateTime End) _searchWindow;
+    /// <summary>The span the grid's punches were fetched over, used to date a newly
+    /// typed punch (see <see cref="ResolveTimestamp"/>) -- the calendar day widened
+    /// to cover every candidate window, so an overnight shift's next-morning
+    /// clock-out, or a Flexible day whose RestrictedTimeOut crosses midnight, both
+    /// land on the right side of midnight. Wider than
+    /// <see cref="_candidateWindows"/>: it's what's *shown*, not what counts.</summary>
+    private readonly PunchWindow _displayWindow;
+
+    /// <summary>Every window this day's schedule actually searches for a punch --
+    /// see <see cref="PunchCandidateWindows"/>, which the strategies themselves now
+    /// build from too. Empty for Leave, Official Business, and an unscheduled
+    /// RestDay, none of which look at punches at all, so every punch on such a day
+    /// reads as outside. A punch outside all of these is shown greyed and still
+    /// draggable, but is left out of the pairing and the preview, exactly as the
+    /// calculation leaves it out.</summary>
+    private readonly IReadOnlyList<PunchWindow> _candidateWindows;
 
     /// <summary>Grid-arrangement history for <see cref="UndoCommand"/> -- one entry
     /// per drop, Add Segment, or Remove Empty, captured just before the change. A
@@ -83,6 +94,8 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         Employee employee,
         ScheduleEntry schedule,
         IReadOnlyList<AttendanceLog> dayPunches,
+        IReadOnlyList<PunchWindow> candidateWindows,
+        PunchWindow displayWindow,
         AttendancePolicy policy,
         DayPunchPairing? existingPairing,
         IManualAttendanceLogRepository manualLogRepository,
@@ -91,7 +104,8 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         _schedule = schedule;
         _policy = policy;
         _manualLogRepository = manualLogRepository;
-        _searchWindow = FlexiblePairingBuilder.SearchWindow(schedule);
+        _candidateWindows = candidateWindows;
+        _displayWindow = displayWindow;
         _dayPunches = dayPunches.OrderBy(p => p.Timestamp).ToList();
 
         EmployeeName = employee.DisplayName;
@@ -225,7 +239,18 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     {
         var cells = _dayPunches.ToDictionary(
             PunchKey.Of,
-            p => new DayPunchPairingCellViewModel { Punch = p });
+            p => new DayPunchPairingCellViewModel
+            {
+                Punch = p,
+                IsOutsideScheduleWindow = !IsWithinScheduleWindow(p),
+            });
+
+        // Only the punches the day's schedule actually searches take part in the
+        // layout below -- the rest are appended, one per row, at the end (see
+        // AppendOutOfWindowRows). Laying an out-of-window punch into a pair would
+        // claim it as half of a work interval the calculation never sees, which is
+        // exactly the mismatch this whole change exists to remove.
+        var eligiblePunches = EligiblePunches();
 
         if (existingPairing is not null)
         {
@@ -234,7 +259,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
                 .ToDictionary(g => g.Key, g => (g.Last().SegmentIndex, g.Last().Role));
 
             foreach (var segment in FlexiblePairingBuilder
-                         .PlaceFromOverride(_dayPunches, savedMap)
+                         .PlaceFromOverride(eligiblePunches, savedMap)
                          .GroupBy(p => p.SegmentIndex)
                          .OrderBy(g => g.Key))
             {
@@ -262,7 +287,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         else
         {
             var defaultPairing = FlexiblePairingBuilder.BuildDefault(
-                _dayPunches, _policy.FlexibleMinimumBreakGap);
+                eligiblePunches, _policy.FlexibleMinimumBreakGap);
 
             foreach (var pair in defaultPairing.Pairs)
             {
@@ -281,10 +306,40 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
                 Rows.Add(new DayPunchPairingRowViewModel { InPunch = cells[PunchKey.Of(orphan)] });
         }
 
+        AppendOutOfWindowRows(cells);
+
         // Always leave one empty row at the bottom to drag into, so splitting a
         // segment never needs an Add Row click first.
         OnRowsChanged();
     }
+
+    /// <summary>
+    /// Parks every punch the schedule's windows don't admit in a row of its own,
+    /// after the paired ones, in timestamp order. They sit in the In column purely
+    /// because a row needs somewhere to put them -- nothing reads that position:
+    /// they're excluded from the pairing, the preview, and the saved
+    /// <see cref="DayPunchPairing"/> alike. Kept in the grid, rather than dropped,
+    /// so a Partial day still shows the stray tap that explains it; kept out of the
+    /// pairs so the layout can't imply the calculation counted it.
+    /// </summary>
+    private void AppendOutOfWindowRows(Dictionary<PunchKey, DayPunchPairingCellViewModel> cells)
+    {
+        foreach (var punch in _dayPunches.Where(p => !IsWithinScheduleWindow(p)))
+            Rows.Add(new DayPunchPairingRowViewModel { InPunch = cells[PunchKey.Of(punch)] });
+    }
+
+    /// <summary>True when the day's schedule would actually search the window this
+    /// punch falls in -- see <see cref="_candidateWindows"/>. The single place the
+    /// editor decides what counts, so the grid, the preview, and
+    /// <see cref="BuildPairing"/> can never disagree with each other about it.</summary>
+    private bool IsWithinScheduleWindow(AttendanceLog punch) =>
+        PunchCandidateWindows.IsCandidate(punch, _candidateWindows);
+
+    /// <summary>The punches the calculation will consider, in timestamp order --
+    /// the pool every pairing and preview here is computed over, mirroring the
+    /// filtered list the Flexible strategies build before pairing.</summary>
+    private List<AttendanceLog> EligiblePunches() =>
+        _dayPunches.Where(IsWithinScheduleWindow).ToList();
 
     private void EnsureTrailingEmptyRow()
     {
@@ -515,7 +570,15 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         _dayPunches.Add(punch);
         _dayPunches.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
 
-        row[slot] = new DayPunchPairingCellViewModel { Punch = punch };
+        row[slot] = new DayPunchPairingCellViewModel
+        {
+            Punch = punch,
+            // Typed into a slot that may itself sit outside the schedule's windows
+            // -- ResolveTimestamp dates the punch against the whole displayed span,
+            // not just the part that counts -- so this is worked out the same way
+            // as for a device punch rather than assumed true.
+            IsOutsideScheduleWindow = !IsWithinScheduleWindow(punch),
+        };
         ManualPunchesChanged = true;
 
         // A new punch in the pool: earlier snapshots don't mention it, so an undo
@@ -570,6 +633,14 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         cell.Punch.EnteredBy = existing.EnteredBy;
         cell.NotifyPunchChanged();
 
+        // The corrected time can cross a window boundary either way -- that's a
+        // common reason to correct one at all (a punch typed against the wrong
+        // hour, landing outside the shift's buffer) -- so this is re-evaluated
+        // rather than left at whatever it was when the cell was built. The card
+        // greys or un-greys in place; Recompute below then picks the punch up in,
+        // or drops it from, the preview pool to match.
+        cell.IsOutsideScheduleWindow = !IsWithinScheduleWindow(cell.Punch);
+
         _dayPunches.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
         ManualPunchesChanged = true;
         Recompute();
@@ -623,20 +694,23 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     }
 
     /// <summary>Which calendar day a typed time belongs to. Normally the schedule's
-    /// own date, but a Flexible day whose RestrictedTimeOut crosses midnight has a
-    /// search window reaching into the next day -- so a 2:00 AM badge-out for a
-    /// shift that started the previous evening lands there instead. Decided by
-    /// asking which of the two candidates the window actually admits, rather than
-    /// by a separate rule that could drift from
-    /// <see cref="FlexiblePairingBuilder.SearchWindow"/>.</summary>
+    /// own date, but a day whose span reaches past midnight -- an overnight Normal
+    /// or SplitShift shift whose clock-out window sits on the following morning, or
+    /// a Flexible day whose RestrictedTimeOut crosses midnight -- takes a 2:00 AM
+    /// badge-out onto the next day instead. Decided by asking which of the two
+    /// candidates <see cref="_displayWindow"/> actually admits, rather than by a
+    /// separate rule that could drift from it. Deliberately the displayed span
+    /// rather than <see cref="_candidateWindows"/>: someone typing a time the
+    /// schedule won't count should still get the punch they asked for, on the
+    /// sensible date, greyed like any other out-of-window punch.</summary>
     private DateTime ResolveTimestamp(TimeOnly time)
     {
         var sameDay = Date.ToDateTime(time);
-        if (sameDay >= _searchWindow.Start && sameDay <= _searchWindow.End)
+        if (_displayWindow.Contains(sameDay))
             return sameDay;
 
         var nextDay = Date.AddDays(1).ToDateTime(time);
-        return nextDay >= _searchWindow.Start && nextDay <= _searchWindow.End ? nextDay : sameDay;
+        return _displayWindow.Contains(nextDay) ? nextDay : sameDay;
     }
 
     // ---- Live preview -------------------------------------------------------
@@ -648,16 +722,28 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// </summary>
     private void Recompute()
     {
-        var pairing = FlexiblePairingBuilder.BuildFromOverride(_dayPunches, BuildOverrideMap());
+        // Over the eligible punches only -- the same list the strategies pair over,
+        // so a greyed-out punch can't move the footer here when it wouldn't move
+        // the Summary grid. An out-of-window punch dragged into a slot is simply
+        // absent from this pool, so BuildFromOverride never places it.
+        var eligiblePunches = EligiblePunches();
+        var pairing = FlexiblePairingBuilder.BuildFromOverride(eligiblePunches, BuildOverrideMap());
 
         // Set before the no-punch short circuit below -- it's the whole of the
-        // footer on a day where PairingAffectsResult is false, empty or not.
+        // footer on a day where PairingAffectsResult is false, empty or not. Counts
+        // every punch on the grid, with the ignored ones called out separately
+        // rather than quietly left out of the total: someone reading "2 punches
+        // recorded" on a day they can see four cards on would reasonably think the
+        // editor had lost two.
+        var outOfWindowCount = _dayPunches.Count - eligiblePunches.Count;
         PunchCountText = _dayPunches.Count switch
         {
             0 => "No punches recorded",
             1 => "1 punch recorded",
             var count => $"{count} punches recorded",
         };
+        if (outOfWindowCount > 0)
+            PunchCountText += $" — {outOfWindowCount} outside this day's schedule window";
 
         var unpairedKeys = pairing.Unpaired.Select(PunchKey.Of).ToHashSet();
         foreach (var row in Rows)
@@ -669,11 +755,13 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         UnpairedCount = pairing.Unpaired.Count;
         HasUnpairedPunches = UnpairedCount > 0;
 
-        if (_dayPunches.Count == 0)
+        if (eligiblePunches.Count == 0)
         {
             // Matches OverriddenFlexibleShiftCalculationStrategy's own no-punch
             // short circuit -- a day with nothing on it is Absent, not an empty
-            // Partial.
+            // Partial. Keyed off the eligible pool, not the grid: a day whose only
+            // punches fall outside the schedule's windows computes Absent too, and
+            // that's exactly what the strategy will report for it.
             WorkedText = "—";
             RemainderText = "—";
             RemainderLabel = "Remaining";
@@ -682,7 +770,7 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         }
 
         var preview = new AttendanceSummary { Span = _schedule.WorkTimeHours };
-        FlexibleWorkedHours.Populate(preview, pairing, _schedule, _policy, _dayPunches);
+        FlexibleWorkedHours.Populate(preview, pairing, _schedule, _policy, eligiblePunches);
 
         WorkedText = FormatDuration(preview.WorkedDuration);
         if (preview.OvertimeDuration > TimeSpan.Zero)
@@ -755,9 +843,16 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// reference.</summary>
     private void RestoreGrid(GridSnapshot snapshot)
     {
+        // Rebuilt, not reused, so the flag has to be re-derived here too -- an undo
+        // that quietly un-greyed every ignored punch would leave the grid claiming
+        // they count.
         var cells = _dayPunches.ToDictionary(
             PunchKey.Of,
-            p => new DayPunchPairingCellViewModel { Punch = p });
+            p => new DayPunchPairingCellViewModel
+            {
+                Punch = p,
+                IsOutsideScheduleWindow = !IsWithinScheduleWindow(p),
+            });
 
         Rows.Clear();
         for (int i = 0; i < snapshot.RowCount; i++)
@@ -821,7 +916,16 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// fully empty rows drop out. Nothing is merged.</summary>
     public DayPunchPairing BuildPairing(string editedBy)
     {
-        var map = BuildOverrideMap();
+        // Out-of-window punches never make it into a saved slot. The strategy
+        // filters them out before it consults the pairing at all (see
+        // OverriddenFlexibleShiftCalculationStrategy), so a slot naming one would
+        // be dead weight -- and worse, would come back to life as a real placement
+        // if the schedule's restricted window or buffers were later widened to
+        // admit it, resurrecting a position nobody chose.
+        var eligibleKeys = EligiblePunches().Select(PunchKey.Of).ToHashSet();
+        var map = BuildOverrideMap()
+            .Where(entry => eligibleKeys.Contains(entry.Key))
+            .ToDictionary(entry => entry.Key, entry => entry.Value);
 
         var denseIndex = map.Values
             .Select(v => v.Segment)

@@ -60,7 +60,7 @@ dotnet_code_quality.CA1822.api_surface = private, internal
 
 # Test method names follow the xUnit Method_Scenario_Expectation convention,
 # which CA1707 (no underscores in member names) flags on every single test.
-[ScheduleApp.{Attendance,Payroll}.Tests/**.cs]
+[ScheduleApp.{Attendance,Payroll,Data}.Tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
 
 # EF Core scaffolds these; they are never hand-edited, so CA1861's advice to

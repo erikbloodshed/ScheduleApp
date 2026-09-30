@@ -56,26 +56,24 @@ internal sealed class SingleWindowShiftCalculationStrategy : IShiftCalculationSt
         var scheduledTimeOut = schedule.TimeOut!.Value; // derived from TimeIn + WorkTimeHours, so non-null here
         double scheduledWorkHours = (double)workTimeHours;
 
-        DateTime targetTimeInStart = schedule.Date.ToDateTime(scheduledTimeIn);
-        DateTime targetTimeOutStart = schedule.CrossesMidnight
-            ? schedule.Date.AddDays(1).ToDateTime(scheduledTimeOut)
-            : schedule.Date.ToDateTime(scheduledTimeOut);
+        // The scheduled targets and the two buffered search windows, including the
+        // AddDays(1) an overnight shift's clock-out needs. Built by
+        // PunchCandidateWindows rather than here so the Day Punch Pairing editor
+        // can grey out exactly the punches this window pair won't consider -- see
+        // that class's own doc comment. The entry's own ClockInBufferBeforeHours/
+        // .../ClockOutBufferAfterHours (see ScheduleEntry) take priority there over
+        // the employee's own default (see Employee.ClockInBufferBeforeHours), which
+        // in turn takes priority over the policy-wide defaults -- null at each tier
+        // falls through to the next, one field at a time (see NormalBufferResolver).
+        // Non-null here: the TimeIn/WorkTimeHours guard above already returned.
+        var bounds = PunchCandidateWindows.SingleWindow(schedule, policy)!.Value;
+        DateTime targetTimeInStart = bounds.TargetTimeIn;
+        DateTime targetTimeOutStart = bounds.TargetTimeOut;
 
-        // The entry's own ClockInBufferBeforeHours/.../ClockOutBufferAfterHours
-        // (see ScheduleEntry) take priority over the employee's own default (see
-        // Employee.ClockInBufferBeforeHours), which in turn takes priority over
-        // the policy-wide defaults -- null at each tier falls through to the
-        // next, one field at a time. Same pattern as FlexibleSegment's
-        // per-segment buffer overrides, just scoped to the whole entry instead
-        // of a child row, since Normal has no segments to hang them off of. See
-        // NormalBufferResolver for the shared three-tier resolution itself.
-        var (clockInBufferBefore, clockInBufferAfter, clockOutBufferBefore, clockOutBufferAfter) =
-            NormalBufferResolver.Resolve(schedule, policy);
-
-        DateTime minTimeIn = targetTimeInStart.AddHours(-clockInBufferBefore);
-        DateTime maxTimeIn = targetTimeInStart.AddHours(clockInBufferAfter);
-        DateTime minTimeOut = targetTimeOutStart.AddHours(-clockOutBufferBefore);
-        DateTime maxTimeOut = targetTimeOutStart.AddHours(clockOutBufferAfter);
+        DateTime minTimeIn = bounds.In.Start;
+        DateTime maxTimeIn = bounds.In.End;
+        DateTime minTimeOut = bounds.Out.Start;
+        DateTime maxTimeOut = bounds.Out.End;
 
         // Device punches are preferred; a manual entry (AttendanceLogSource.Manual,
         // see ManualAttendanceLog) is only used when the window has no device

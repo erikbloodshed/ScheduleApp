@@ -187,14 +187,30 @@ public static class FlexiblePairingBuilder
     }
 
     /// <summary>The [start, end] the day's punches are searched over -- midnight
-    /// to midnight, unless <see cref="ScheduleEntry.RestrictedTimeOut"/> narrows
-    /// the end (reaching into the next calendar day when it's at or before
-    /// <see cref="ScheduleEntry.RestrictedTimeIn"/>, the crosses-midnight
-    /// convention). Extracted from FlexibleShiftCalculationStrategy so the
-    /// overridden path uses the identical boundary.</summary>
+    /// to midnight, narrowed on each side by whichever of
+    /// <see cref="ScheduleEntry.RestrictedTimeIn"/>/
+    /// <see cref="ScheduleEntry.RestrictedTimeOut"/> is set. The end reaches into
+    /// the next calendar day when RestrictedTimeOut is at or before
+    /// RestrictedTimeIn, the crosses-midnight convention. Extracted from
+    /// FlexibleShiftCalculationStrategy so the overridden path uses the identical
+    /// boundary.
+    ///
+    /// RestrictedTimeIn is a hard bound here, the same way RestrictedTimeOut
+    /// always has been: a punch before the restricted window opens is excluded
+    /// from the day outright rather than being paired and then merely left
+    /// uncredited. It used not to be -- the search started at midnight regardless
+    /// and FlexibleWorkedHours.Populate capped such a punch's pair down to the
+    /// boundary (which it still does, harmlessly, for a pair that starts exactly
+    /// at it). The old shape meant an early punch could still consume a partner
+    /// and turn the day Partial, and made the Day Punch Pairing editor show
+    /// punches it then had no way to explain; both windows now mean the same
+    /// thing. A Flexible day with neither field set is unaffected -- still the
+    /// whole calendar day.</summary>
     public static (DateTime Start, DateTime End) SearchWindow(ScheduleEntry schedule)
     {
-        DateTime start = schedule.Date.ToDateTime(TimeOnly.MinValue);
+        DateTime start = schedule.RestrictedTimeIn is { } restrictedTimeIn
+            ? schedule.Date.ToDateTime(restrictedTimeIn)
+            : schedule.Date.ToDateTime(TimeOnly.MinValue);
         DateTime end = schedule.RestrictedTimeOut is { } restrictedTimeOut
             ? (schedule.RestrictedTimeIn is { } inBoundForCrossing && restrictedTimeOut <= inBoundForCrossing
                 ? schedule.Date.AddDays(1).ToDateTime(restrictedTimeOut)

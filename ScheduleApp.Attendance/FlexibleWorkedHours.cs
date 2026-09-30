@@ -23,7 +23,11 @@ public static class FlexibleWorkedHours
     /// <see cref="AttendancePolicy.CapEarlyClockIn"/>, the same "no credit before
     /// the window opens" idea the windowed strategies apply) -- an unrestricted
     /// Flexible day can have several independent intervals and only the ones
-    /// actually starting early need capping. RestrictedTimeOut never caps here; it
+    /// actually starting early need capping. That cap is defensive now rather than
+    /// load-bearing: RestrictedTimeIn became a hard search bound (see
+    /// <see cref="FlexiblePairingBuilder.SearchWindow"/>), so no caller should be
+    /// handing this a pair that starts before it in the first place.
+    /// RestrictedTimeOut never caps here; it
     /// only filters the search (see
     /// <see cref="FlexiblePairingBuilder.SearchWindow"/>). Night diff is summed
     /// per capped pair for the same reason -- there's no single scheduled window

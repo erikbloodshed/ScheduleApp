@@ -34,9 +34,49 @@ public partial class DayPunchPairingCellViewModel : ObservableObject
     /// (same signal as the Summary grid's trailing " *").</summary>
     public string SourceText => IsManual ? "Manual" : "Device";
 
+    /// <summary>
+    /// True when this punch falls outside every window the day's schedule
+    /// actually searches -- see <see cref="ScheduleApp.Attendance.PunchCandidateWindows"/>
+    /// for what those are per ScheduleType. The calculation will not consider it:
+    /// for Normal or a windowed RestDay it's outside the buffered clock-in/
+    /// clock-out windows, for SplitShift outside every segment's pair of windows,
+    /// for Flexible outside the RestrictedTimeIn/RestrictedTimeOut boundary. On a
+    /// Leave, Official Business, or unscheduled RestDay this is true for *every*
+    /// punch, because those types never look at punches at all.
+    ///
+    /// Drives nothing but presentation: the card greys out and explains itself,
+    /// and stays fully draggable. Dragging one into a slot is allowed and simply
+    /// doesn't move the preview -- the punch is not in the pool the preview is
+    /// computed from, exactly as it isn't in the one the calculation uses (see
+    /// DayPunchPairingEditorViewModel.IsWithinScheduleWindow).
+    ///
+    /// Settable rather than init-only because correcting a manual punch's time can
+    /// carry it across a window boundary in either direction -- see
+    /// DayPunchPairingEditorViewModel.EditManualPunchAsync, which re-evaluates this
+    /// the same way it refreshes TimeText.
+    /// </summary>
+    [ObservableProperty]
+    private bool isOutsideScheduleWindow;
+
+    /// <summary>ReasonText folds the out-of-window note in, so it has to be
+    /// re-read whenever that flag moves.</summary>
+    partial void OnIsOutsideScheduleWindowChanged(bool value) => OnPropertyChanged(nameof(ReasonText));
+
     /// <summary>Why a manual entry was needed, shown as the card's tooltip. Null
-    /// for a real device punch (the tooltip is suppressed there).</summary>
-    public string? ReasonText => Punch.Reason;
+    /// for a real device punch with nothing else to say about it -- the tooltip is
+    /// suppressed entirely then. An out-of-window punch always has something to
+    /// say, so it explains itself here even when it's a device punch with no
+    /// reason of its own.</summary>
+    public string? ReasonText => IsOutsideScheduleWindow
+        ? string.IsNullOrWhiteSpace(Punch.Reason)
+            ? OutsideWindowNote
+            : $"{Punch.Reason}\n\n{OutsideWindowNote}"
+        : Punch.Reason;
+
+    private const string OutsideWindowNote =
+        "Outside this day's schedule window, so the calculation ignores it. " +
+        "Widen the clock-in/clock-out buffer on the day, or the restricted " +
+        "punching window, to bring it in.";
 
     /// <summary>Set by the editor control while this cell is the one being
     /// dragged, so its card can dim. Reset in the drag source's finally block
