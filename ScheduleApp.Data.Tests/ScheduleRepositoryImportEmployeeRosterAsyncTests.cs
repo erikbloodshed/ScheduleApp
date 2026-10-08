@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
+using ScheduleApp.Data.Tests.Fixtures;
 using Xunit;
 
 namespace ScheduleApp.Data.Tests;
@@ -12,13 +13,13 @@ namespace ScheduleApp.Data.Tests;
 /// smaller and don't need the name-fallback/collision coverage
 /// ScheduleRepositoryImportAsyncTests has.
 /// </summary>
-public class ScheduleRepositoryImportEmployeeRosterAsyncTests
+[Collection(DatabaseCollection.Name)]
+public class ScheduleRepositoryImportEmployeeRosterAsyncTests(DatabaseFixture fixture) : PersistenceTestBase(fixture)
 {
     [Fact]
     public async Task NewEmployee_IsCreatedInTheNamedDepartment()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var row = new EmployeeImportRow
         {
@@ -31,7 +32,7 @@ public class ScheduleRepositoryImportEmployeeRosterAsyncTests
 
         await repository.ImportEmployeeRosterAsync([row]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         var employee = await readDb.Employees.Include(e => e.Department).SingleAsync();
         Assert.Equal("Kitchen", employee.Department!.Name);
         Assert.Equal(500m, employee.DailyRate);
@@ -40,14 +41,13 @@ public class ScheduleRepositoryImportEmployeeRosterAsyncTests
     [Fact]
     public async Task ExistingEmployee_MatchedGloballyByPin_IgnoresDepartmentScoping()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var deptA = new Department { Name = "Kitchen" };
         var deptB = new Department { Name = "Housekeeping" };
-        database.Db.Departments.AddRange(deptA, deptB);
-        database.Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = deptA });
-        await database.Db.SaveChangesAsync();
+        Db.Departments.AddRange(deptA, deptB);
+        Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = deptA });
+        await Db.SaveChangesAsync();
 
         // Unlike ImportAsync, a roster row carries no per-department scoping at all --
         // this must find the Pin 1001 row and move it into Housekeeping, not create a
@@ -56,7 +56,7 @@ public class ScheduleRepositoryImportEmployeeRosterAsyncTests
 
         await repository.ImportEmployeeRosterAsync([row]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.Employees.CountAsync());
         var employee = await readDb.Employees.Include(e => e.Department).SingleAsync();
         Assert.Equal("Housekeeping", employee.Department!.Name);
@@ -65,19 +65,18 @@ public class ScheduleRepositoryImportEmployeeRosterAsyncTests
     [Fact]
     public async Task BlankDepartmentCell_OnAnExistingEmployee_LeavesTheirDepartmentUnchanged()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var dept = new Department { Name = "Kitchen" };
-        database.Db.Departments.Add(dept);
-        database.Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = dept });
-        await database.Db.SaveChangesAsync();
+        Db.Departments.Add(dept);
+        Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = dept });
+        await Db.SaveChangesAsync();
 
         var row = new EmployeeImportRow { Pin = 1001, LastName = "Cruz", FirstName = "Juan", DepartmentName = null };
 
         await repository.ImportEmployeeRosterAsync([row]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         var employee = await readDb.Employees.Include(e => e.Department).SingleAsync();
         Assert.Equal("Kitchen", employee.Department!.Name);
     }
@@ -85,14 +84,13 @@ public class ScheduleRepositoryImportEmployeeRosterAsyncTests
     [Fact]
     public async Task OptionalFieldsLeftNull_OnANewEmployee_KeepClassDefaults()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var row = new EmployeeImportRow { Pin = 1001, LastName = "Cruz", FirstName = "Juan" };
 
         await repository.ImportEmployeeRosterAsync([row]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         var employee = await readDb.Employees.SingleAsync();
         Assert.True(employee.QualifiesForOvertime); // class field-initializer default.
         Assert.Equal(0m, employee.DailyRate);
@@ -102,12 +100,11 @@ public class ScheduleRepositoryImportEmployeeRosterAsyncTests
     [Fact]
     public async Task EmptyInput_IsANoOp()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         await repository.ImportEmployeeRosterAsync([]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(0, await readDb.Employees.CountAsync());
     }
 }

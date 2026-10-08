@@ -5,19 +5,19 @@
     <RootNamespace>ScheduleApp.Data.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <!-- Test project, not something anyone else references, same shape as
-         ScheduleApp.Attendance.Tests/ScheduleApp.Payroll.Tests. Exercises
-         ScheduleRepository's import methods and PayrollRunRepository's bulk-add
-         against a real relational database (SQLite, not EF's InMemory provider,
-         which doesn't enforce the unique indexes or the Employee.Pin alternate-key
-         FK these tests specifically check, see TestDbContext.cs's own doc
-         comment). -->
+         ScheduleApp.Attendance.Tests/ScheduleApp.Payroll.Tests. Exercises the repositories
+         against a real SQL Server Express database of its own (ScheduleAppDb_Test_Data, see
+         Fixtures/DatabaseFixture.cs), migrated once per run and reset between tests with
+         Respawn, so the unique indexes, the Employee.Pin alternate-key FK and the
+         case-insensitive collation the repositories rely on are all the real thing. -->
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Bump these if they don't resolve against your local NuGet feed,
          same caveat ScheduleApp.Payroll.Tests' own .csproj gives. -->
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Respawn" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -27,6 +27,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ScheduleApp.Data\ScheduleApp.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The server the test database lives on; DatabaseFixture swaps in its own database name. -->
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

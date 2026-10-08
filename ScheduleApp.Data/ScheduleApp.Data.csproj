@@ -7,12 +7,19 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <!-- Reads; EF Core does the writes. See Queries/DapperReads.cs. -->
+    <PackageReference Include="Dapper" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <!-- Only used by Attendance/AttendanceLogReader.cs to parse the ZKTeco .dat punch export. -->
     <PackageReference Include="CsvHelper" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ColumnsTests checks Queries/Columns.cs (internal) against the EF model. -->
+    <InternalsVisibleTo Include="ScheduleApp.Data.Tests" />
   </ItemGroup>
 
   <ItemGroup>

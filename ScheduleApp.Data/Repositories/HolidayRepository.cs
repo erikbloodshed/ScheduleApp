@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Repositories;
 
@@ -11,19 +12,15 @@ namespace ScheduleApp.Data.Repositories;
 public class HolidayRepository(ScheduleDbContext db) : IHolidayRepository
 {
     public Task<List<Holiday>> ListAsync(CancellationToken cancellationToken = default) =>
-        db.Holidays
-            .OrderBy(h => h.Date)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<Holiday>(
+            $"SELECT {Columns.Of<Holiday>("h")} FROM Holidays h ORDER BY h.Date",
+            null, cancellationToken);
 
     public Task<List<DateOnly>> ListDatesForPeriodAsync(
         DateOnly periodStart, DateOnly periodEnd, CancellationToken cancellationToken = default) =>
-        db.Holidays
-            .Where(h => h.Date >= periodStart && h.Date <= periodEnd)
-            .OrderBy(h => h.Date)
-            .AsNoTracking()
-            .Select(h => h.Date)
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<DateOnly>(
+            "SELECT h.Date FROM Holidays h WHERE h.Date >= @periodStart AND h.Date <= @periodEnd ORDER BY h.Date",
+            new { periodStart, periodEnd }, cancellationToken);
 
     public async Task<Holiday> AddAsync(Holiday holiday, CancellationToken cancellationToken = default)
     {

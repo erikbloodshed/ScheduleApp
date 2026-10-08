@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
+using ScheduleApp.Data.Tests.Fixtures;
 using Xunit;
 
 namespace ScheduleApp.Data.Tests;
@@ -10,7 +11,8 @@ namespace ScheduleApp.Data.Tests;
 /// AddEmployeeAsync that PayrollGroupViewModel.AddEmployeesToGroupAsync's own foreach
 /// loop used to be (see that method's own doc comment on why one call replaced it).
 /// </summary>
-public class PayrollRunRepositoryAddEmployeesAsyncTests
+[Collection(DatabaseCollection.Name)]
+public class PayrollRunRepositoryAddEmployeesAsyncTests(DatabaseFixture fixture) : PersistenceTestBase(fixture)
 {
     private static async Task<int> CreateRunAsync(ScheduleDbContext db)
     {
@@ -28,81 +30,75 @@ public class PayrollRunRepositoryAddEmployeesAsyncTests
     [Fact]
     public async Task InsertsEveryRequestedEmployee()
     {
-        using var database = TestDbContext.Create();
-        var runId = await CreateRunAsync(database.Db);
-        var repository = new PayrollRunRepository(database.Db);
+        var runId = await CreateRunAsync(Db);
+        var repository = new PayrollRunRepository(Db);
 
         var inserted = await repository.AddEmployeesAsync(runId, [1001, 1002, 1003]);
 
         Assert.Equal(3, inserted);
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(3, await readDb.PayrollRunEmployees.CountAsync(e => e.PayrollRunId == runId));
     }
 
     [Fact]
     public async Task SkipsPinsAlreadyInTheRun_InsertsOnlyTheNewOnes()
     {
-        using var database = TestDbContext.Create();
-        var runId = await CreateRunAsync(database.Db);
-        var repository = new PayrollRunRepository(database.Db);
+        var runId = await CreateRunAsync(Db);
+        var repository = new PayrollRunRepository(Db);
 
         await repository.AddEmployeeAsync(runId, 1001);
 
         var inserted = await repository.AddEmployeesAsync(runId, [1001, 1002]);
 
         Assert.Equal(1, inserted); // only 1002 was new.
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(2, await readDb.PayrollRunEmployees.CountAsync(e => e.PayrollRunId == runId));
     }
 
     [Fact]
     public async Task DuplicatePinsInTheRequestedSet_InsertOnlyOnce()
     {
-        using var database = TestDbContext.Create();
-        var runId = await CreateRunAsync(database.Db);
-        var repository = new PayrollRunRepository(database.Db);
+        var runId = await CreateRunAsync(Db);
+        var repository = new PayrollRunRepository(Db);
 
         var inserted = await repository.AddEmployeesAsync(runId, [1001, 1001, 1001]);
 
         Assert.Equal(1, inserted);
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.PayrollRunEmployees.CountAsync(e => e.PayrollRunId == runId));
     }
 
     [Fact]
     public async Task EveryRequestedPinAlreadyAMember_ReturnsZero_WritesNothing()
     {
-        using var database = TestDbContext.Create();
-        var runId = await CreateRunAsync(database.Db);
-        var repository = new PayrollRunRepository(database.Db);
+        var runId = await CreateRunAsync(Db);
+        var repository = new PayrollRunRepository(Db);
         await repository.AddEmployeeAsync(runId, 1001);
 
         var inserted = await repository.AddEmployeesAsync(runId, [1001]);
 
         Assert.Equal(0, inserted);
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.PayrollRunEmployees.CountAsync(e => e.PayrollRunId == runId));
     }
 
     [Fact]
     public async Task UnknownRunId_ReturnsZero_WritesNothing()
     {
-        using var database = TestDbContext.Create();
-        var repository = new PayrollRunRepository(database.Db);
+        var repository = new PayrollRunRepository(Db);
 
         var inserted = await repository.AddEmployeesAsync(runId: 999, [1001, 1002]);
 
         Assert.Equal(0, inserted);
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(0, await readDb.PayrollRunEmployees.CountAsync());
     }
 
     [Fact]
     public async Task EmptyInput_IsANoOp()
     {
-        using var database = TestDbContext.Create();
-        var runId = await CreateRunAsync(database.Db);
-        var repository = new PayrollRunRepository(database.Db);
+        var runId = await CreateRunAsync(Db);
+        var repository = new PayrollRunRepository(Db);
 
         var inserted = await repository.AddEmployeesAsync(runId, []);
 

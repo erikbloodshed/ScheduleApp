@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Payroll;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Repositories;
 
@@ -11,24 +12,28 @@ namespace ScheduleApp.Data.Repositories;
 /// </summary>
 public class PayrollAdjustmentRepository(ScheduleDbContext db) : IPayrollAdjustmentRepository
 {
+    // Type is stored by name (see ScheduleDbContext), so ORDER BY a.Type sorts alphabetically by
+    // name, as the EF queries these replaced did.
+
     public Task<List<PayrollAdjustment>> GetForEmployeePeriodAsync(int employeeId, DateOnly periodStart, DateOnly periodEnd,
         CancellationToken cancellationToken = default) =>
-        db.PayrollAdjustments
-            .Where(a => a.EmployeeId == employeeId && a.PeriodStart == periodStart && a.PeriodEnd == periodEnd)
-            .OrderBy(a => a.Type)
-            .ThenBy(a => a.CreatedAt)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<PayrollAdjustment>(
+            $"""
+            SELECT {Columns.Of<PayrollAdjustment>("a")} FROM PayrollAdjustments a
+            WHERE a.EmployeeId = @employeeId AND a.PeriodStart = @periodStart AND a.PeriodEnd = @periodEnd
+            ORDER BY a.Type, a.CreatedAt
+            """,
+            new { employeeId, periodStart, periodEnd }, cancellationToken);
 
     public Task<List<PayrollAdjustment>> GetForEmployeesPeriodAsync(IReadOnlyCollection<int> employeeIds,
         DateOnly periodStart, DateOnly periodEnd, CancellationToken cancellationToken = default) =>
-        db.PayrollAdjustments
-            .Where(a => employeeIds.Contains(a.EmployeeId) && a.PeriodStart == periodStart && a.PeriodEnd == periodEnd)
-            .OrderBy(a => a.EmployeeId)
-            .ThenBy(a => a.Type)
-            .ThenBy(a => a.CreatedAt)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<PayrollAdjustment>(
+            $"""
+            SELECT {Columns.Of<PayrollAdjustment>("a")} FROM PayrollAdjustments a
+            WHERE a.EmployeeId IN ({DapperReads.IdsTable}) AND a.PeriodStart = @periodStart AND a.PeriodEnd = @periodEnd
+            ORDER BY a.EmployeeId, a.Type, a.CreatedAt
+            """,
+            new { ids = DapperReads.IdList(employeeIds), periodStart, periodEnd }, cancellationToken);
 
     public async Task<PayrollAdjustment> AddAsync(PayrollAdjustment adjustment, CancellationToken cancellationToken = default)
     {

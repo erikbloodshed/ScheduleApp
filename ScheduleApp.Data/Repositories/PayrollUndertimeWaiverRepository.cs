@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Payroll;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Repositories;
 
@@ -12,20 +13,23 @@ public class PayrollUndertimeWaiverRepository(ScheduleDbContext db) : IPayrollUn
 {
     public Task<bool> IsWaivedAsync(int employeeId, DateOnly periodStart, DateOnly periodEnd,
         CancellationToken cancellationToken = default) =>
-        db.PayrollUndertimeWaivers.AnyAsync(w =>
-            w.EmployeeId == employeeId && w.PeriodStart == periodStart && w.PeriodEnd == periodEnd,
-            cancellationToken);
+        db.QuerySingleAsync<bool>(
+            """
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM PayrollUndertimeWaivers w
+                WHERE w.EmployeeId = @employeeId AND w.PeriodStart = @periodStart AND w.PeriodEnd = @periodEnd
+            ) THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END
+            """,
+            new { employeeId, periodStart, periodEnd }, cancellationToken);
 
     public async Task<HashSet<int>> GetWaivedPinsAsync(IReadOnlyCollection<int> employeeIds,
         DateOnly periodStart, DateOnly periodEnd, CancellationToken cancellationToken = default) =>
-        // No AsNoTracking() -- Select() below already projects down to a bare int, so
-        // there's no entity for EF Core to track either way (same reasoning
-        // PayrollAdjustmentRepository.GetForEmployeesPeriodAsync's own AsNoTracking() doesn't
-        // apply to a projected scalar).
-        [.. await db.PayrollUndertimeWaivers
-            .Where(w => employeeIds.Contains(w.EmployeeId) && w.PeriodStart == periodStart && w.PeriodEnd == periodEnd)
-            .Select(w => w.EmployeeId)
-            .ToListAsync(cancellationToken)];
+        [.. await db.QueryAsync<int>(
+            $"""
+            SELECT w.EmployeeId FROM PayrollUndertimeWaivers w
+            WHERE w.EmployeeId IN ({DapperReads.IdsTable}) AND w.PeriodStart = @periodStart AND w.PeriodEnd = @periodEnd
+            """,
+            new { ids = DapperReads.IdList(employeeIds), periodStart, periodEnd }, cancellationToken)];
 
     public async Task SetWaivedAsync(int employeeId, DateOnly periodStart, DateOnly periodEnd, bool waived,
         CancellationToken cancellationToken = default)

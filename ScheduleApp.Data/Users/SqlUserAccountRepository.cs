@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Users;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Users;
 
@@ -13,18 +14,22 @@ namespace ScheduleApp.Data.Users;
 public class SqlUserAccountRepository(ScheduleDbContext db) : IUserAccountRepository
 {
     public Task<bool> AnyAsync(CancellationToken cancellationToken = default) =>
-        db.UserAccounts.AnyAsync(cancellationToken);
+        db.QuerySingleAsync<bool>(
+            "SELECT CASE WHEN EXISTS (SELECT 1 FROM UserAccounts) THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END",
+            null, cancellationToken);
 
+    /// <summary>Matched by the column's collation, which is case-insensitive by default, so
+    /// "Admin" finds "admin" -- the same comparison the unique index on Username makes (see
+    /// ScheduleDbContext).</summary>
     public Task<UserAccount?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default) =>
-        db.UserAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+        db.QueryFirstOrDefaultAsync<UserAccount>(
+            $"SELECT {Columns.Of<UserAccount>("u")} FROM UserAccounts u WHERE u.Username = @username",
+            new { username }, cancellationToken);
 
     public Task<List<UserAccount>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        db.UserAccounts
-            .OrderByDescending(u => u.CreatedAtUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<UserAccount>(
+            $"SELECT {Columns.Of<UserAccount>("u")} FROM UserAccounts u ORDER BY u.CreatedAtUtc DESC",
+            null, cancellationToken);
 
     public async Task<UserAccount> AddAsync(UserAccount account, CancellationToken cancellationToken = default)
     {

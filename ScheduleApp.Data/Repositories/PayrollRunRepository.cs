@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Payroll;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Repositories;
 
@@ -31,18 +32,42 @@ public class PayrollRunRepository(ScheduleDbContext db) : IPayrollRunRepository
         return entry;
     }
 
-    public Task<PayrollRun?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
-        db.PayrollRuns
-            .Include(r => r.Employees)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+    public async Task<PayrollRun?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
+        (await ListWhereAsync("WHERE r.Id = @id", new { id }, cancellationToken)).FirstOrDefault();
 
     public Task<List<PayrollRun>> ListAsync(CancellationToken cancellationToken = default) =>
-        db.PayrollRuns
-            .Include(r => r.Employees)
-            .OrderByDescending(r => r.CreatedAt)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        ListWhereAsync("ORDER BY r.CreatedAt DESC", null, cancellationToken);
+
+    /// <summary>The runs <paramref name="filterAndOrder"/> (a WHERE and/or ORDER BY over
+    /// <c>r</c>) selects, each with its membership rows (in Id order) stitched on by a second
+    /// query.</summary>
+    private Task<List<PayrollRun>> ListWhereAsync(string filterAndOrder, object? parameters,
+        CancellationToken cancellationToken) =>
+        db.ReadAsync(async () =>
+        {
+            var runs = await db.QueryAsync<PayrollRun>(
+                $"SELECT {Columns.Of<PayrollRun>("r")} FROM PayrollRuns r {filterAndOrder}",
+                parameters, cancellationToken);
+            if (runs.Count == 0) return runs;
+
+            var members = await db.QueryAsync<PayrollRunEmployee>(
+                $"""
+                SELECT {Columns.Of<PayrollRunEmployee>("m")} FROM PayrollRunEmployees m
+                WHERE m.PayrollRunId IN ({DapperReads.IdsTable})
+                ORDER BY m.Id
+                """,
+                new { ids = DapperReads.IdList(runs.Select(r => r.Id)) }, cancellationToken);
+
+            var byRun = members.ToLookup(m => m.PayrollRunId);
+            foreach (var run in runs)
+            {
+                run.Employees = [.. byRun[run.Id]];
+                foreach (var member in run.Employees)
+                    member.PayrollRun = run;
+            }
+
+            return runs;
+        }, cancellationToken);
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {

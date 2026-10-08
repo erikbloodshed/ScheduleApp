@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Attendance;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Attendance;
 
@@ -16,12 +17,13 @@ public class SqlAttendanceLogRepository(ScheduleDbContext db) : IAttendanceLogRe
 {
     public Task<List<AttendanceLog>> GetLogsAsync(DateTime rangeStart, DateTime rangeEnd,
         IReadOnlyCollection<int>? pins = null, CancellationToken cancellationToken = default) =>
-        db.AttendanceLogs
-            .Where(a => a.Timestamp >= rangeStart && a.Timestamp <= rangeEnd)
-            .Where(a => pins == null || pins.Contains(a.EmployeeId))
-            .OrderBy(a => a.Timestamp)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<AttendanceLog>(
+            $"""
+            SELECT {Columns.Of<AttendanceLog>("a")} FROM AttendanceLogs a
+            WHERE a.Timestamp >= @rangeStart AND a.Timestamp <= @rangeEnd{(pins is null ? "" : $" AND a.EmployeeId IN ({DapperReads.IdsTable})")}
+            ORDER BY a.Timestamp
+            """,
+            new { rangeStart, rangeEnd, ids = pins is null ? null : DapperReads.IdList(pins) }, cancellationToken);
 
     public async Task<PunchRecordImportResult> AddLogsAsync(IReadOnlyList<AttendanceLog> logs,
         CancellationToken cancellationToken = default)

@@ -3,20 +3,21 @@ using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
+using ScheduleApp.Data.Tests.Fixtures;
 using Xunit;
 
 namespace ScheduleApp.Data.Tests;
 
 /// <summary>
-/// Covers the batched ScheduleRepository.ImportAsync rewrite against a real relational
-/// database (see TestDbContext's own doc comment for why SQLite, not EF's InMemory
-/// provider) -- specifically the traps the batching itself introduced risk for, not a
+/// Covers the batched ScheduleRepository.ImportAsync rewrite against a real SQL Server
+/// database (see Fixtures/DatabaseFixture.cs) -- specifically the traps the batching itself introduced risk for, not a
 /// full re-test of every ScheduleEntry field ImportAsync happens to carry through
 /// unchanged from the workbook (UpsertScheduleEntry, which does that mapping, is
 /// unchanged by this refactor and untested here for the same reason
 /// SetScheduleForDatesAsync -- its other caller -- isn't).
 /// </summary>
-public class ScheduleRepositoryImportAsyncTests
+[Collection(DatabaseCollection.Name)]
+public class ScheduleRepositoryImportAsyncTests(DatabaseFixture fixture) : PersistenceTestBase(fixture)
 {
     private static Department BuildDepartment(string name, params Employee[] employees)
     {
@@ -59,8 +60,7 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task NewDepartmentAndEmployee_LandInOneSave()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
         var date = new DateOnly(2026, 1, 5);
 
         // Proves the alternate-key FK insert ordering (ScheduleEntry.EmployeeId ->
@@ -70,7 +70,7 @@ public class ScheduleRepositoryImportAsyncTests
 
         await repository.ImportAsync([department]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         var savedDept = await readDb.Departments.SingleAsync(d => d.Name == "Kitchen");
         var savedEmployee = await readDb.Employees.SingleAsync(e => e.Pin == 1001);
         var savedEntry = await readDb.ScheduleEntries.SingleAsync(s => s.EmployeeId == 1001);
@@ -83,21 +83,20 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task ExistingEmployee_MatchedByPinInSameDepartment_IsReused()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var seedDept = new Department { Name = "Kitchen" };
         var seedEmployee = new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = seedDept };
-        database.Db.Departments.Add(seedDept);
-        database.Db.Employees.Add(seedEmployee);
-        await database.Db.SaveChangesAsync();
+        Db.Departments.Add(seedDept);
+        Db.Employees.Add(seedEmployee);
+        await Db.SaveChangesAsync();
 
         var date = new DateOnly(2026, 1, 5);
         var department = BuildDepartment("Kitchen", BuildEmployee(1001, "Cruz", "Juan", NormalDay(date)));
 
         await repository.ImportAsync([department]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.Employees.CountAsync(e => e.Pin == 1001));
         Assert.Equal(1, await readDb.ScheduleEntries.CountAsync(s => s.EmployeeId == 1001));
     }
@@ -105,14 +104,13 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task ExistingEmployee_MatchedByNameAfterPinChange_KeepsWritingUnderTheExistingPin()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var seedDept = new Department { Name = "Kitchen" };
         var seedEmployee = new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = seedDept };
-        database.Db.Departments.Add(seedDept);
-        database.Db.Employees.Add(seedEmployee);
-        await database.Db.SaveChangesAsync();
+        Db.Departments.Add(seedDept);
+        Db.Employees.Add(seedEmployee);
+        await Db.SaveChangesAsync();
 
         // The workbook now shows a different Pin for the same person -- tier 1 (Pin)
         // misses (5001 doesn't exist anywhere yet), tier 2 (name, within this
@@ -124,7 +122,7 @@ public class ScheduleRepositoryImportAsyncTests
 
         await repository.ImportAsync([department]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.Employees.CountAsync());
         var employee = await readDb.Employees.SingleAsync();
         Assert.Equal(1001, employee.Pin); // Pin is NOT overwritten by the workbook's value.
@@ -134,15 +132,14 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task NameFallback_TwoExistingCandidatesWithSameName_PicksLowestIdDeterministically()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var seedDept = new Department { Name = "Kitchen" };
-        database.Db.Departments.Add(seedDept);
+        Db.Departments.Add(seedDept);
         var first = new Employee { Pin = 100, LastName = "Cruz", FirstName = "Juan", Department = seedDept };
         var second = new Employee { Pin = 200, LastName = "Cruz", FirstName = "Juan", Department = seedDept };
-        database.Db.Employees.AddRange(first, second);
-        await database.Db.SaveChangesAsync();
+        Db.Employees.AddRange(first, second);
+        await Db.SaveChangesAsync();
 
         var lowerId = first.Id < second.Id ? first : second;
 
@@ -154,7 +151,7 @@ public class ScheduleRepositoryImportAsyncTests
 
         await repository.ImportAsync([department]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(2, await readDb.Employees.CountAsync()); // no third employee created
         var entry = await readDb.ScheduleEntries.SingleAsync();
         Assert.Equal(lowerId.Pin, entry.EmployeeId);
@@ -163,8 +160,7 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task LaterRowForSameDate_OverwritesTheEarlierOne()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
         var date = new DateOnly(2026, 1, 5);
 
         var employee = new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan" };
@@ -173,7 +169,7 @@ public class ScheduleRepositoryImportAsyncTests
 
         await repository.ImportAsync([BuildDepartment("Kitchen", employee)]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         var entry = await readDb.ScheduleEntries.SingleAsync(s => s.EmployeeId == 1001 && s.Date == date);
         Assert.Equal(10m, entry.WorkTimeHours);
         Assert.Equal(Time(6), entry.TimeIn);
@@ -182,8 +178,7 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task SamePin_OnTwoSheetsResolvingToTheSameDepartment_DoesNotThrowAndDedupsEntries()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
         var date = new DateOnly(2026, 1, 5);
 
         // Two sheets differing only by case, both brand new -- ResolveDepartmentsAsync's
@@ -196,7 +191,7 @@ public class ScheduleRepositoryImportAsyncTests
 
         await repository.ImportAsync([sheet1, sheet2]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.Departments.CountAsync());
         Assert.Equal(1, await readDb.Employees.CountAsync());
         var entry = await readDb.ScheduleEntries.SingleAsync();
@@ -206,13 +201,12 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task Pin_BelongingToEmployeeInADifferentDepartment_ThrowsAndCommitsNothing()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var otherDept = new Department { Name = "Accounting" };
-        database.Db.Departments.Add(otherDept);
-        database.Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = otherDept });
-        await database.Db.SaveChangesAsync();
+        Db.Departments.Add(otherDept);
+        Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = otherDept });
+        await Db.SaveChangesAsync();
 
         var date = new DateOnly(2026, 1, 5);
         // A brand-new department that happens to also introduce Pin 1001 -- both
@@ -223,7 +217,7 @@ public class ScheduleRepositoryImportAsyncTests
         var ex = await Assert.ThrowsAsync<DuplicateEmployeeIdException>(() => repository.ImportAsync([newDept]));
         Assert.Equal(1001, ex.EmployeeId);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(1, await readDb.Departments.CountAsync()); // "Kitchen" was never committed.
         Assert.Equal(1, await readDb.Employees.CountAsync()); // no second employee for Pin 1001.
         Assert.Equal(0, await readDb.ScheduleEntries.CountAsync());
@@ -232,13 +226,12 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task FailedImport_LeavesTheContextUsableForALaterUnrelatedSave()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var otherDept = new Department { Name = "Accounting" };
-        database.Db.Departments.Add(otherDept);
-        database.Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = otherDept });
-        await database.Db.SaveChangesAsync();
+        Db.Departments.Add(otherDept);
+        Db.Employees.Add(new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = otherDept });
+        await Db.SaveChangesAsync();
 
         var date = new DateOnly(2026, 1, 5);
         var newDept = BuildDepartment("Kitchen", BuildEmployee(1001, "Reyes", "Ana", NormalDay(date)));
@@ -252,7 +245,7 @@ public class ScheduleRepositoryImportAsyncTests
         // ScheduleDbContext would misbehave for the rest of the run.
         await repository.AddDepartmentAsync("Housekeeping");
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(2, await readDb.Departments.CountAsync()); // Accounting + Housekeeping only.
         Assert.Equal(1, await readDb.Employees.CountAsync());
     }
@@ -260,16 +253,15 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task EntriesOutsideTheWorkbookDateRange_AreLeftUntouched()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         var untouchedDate = new DateOnly(2020, 6, 1);
         var seedDept = new Department { Name = "Kitchen" };
         var seedEmployee = new Employee { Pin = 1001, LastName = "Cruz", FirstName = "Juan", Department = seedDept };
         seedEmployee.ScheduleEntries.Add(NormalDay(untouchedDate, hours: 9m));
-        database.Db.Departments.Add(seedDept);
-        database.Db.Employees.Add(seedEmployee);
-        await database.Db.SaveChangesAsync();
+        Db.Departments.Add(seedDept);
+        Db.Employees.Add(seedEmployee);
+        await Db.SaveChangesAsync();
 
         // This import's own date range is nowhere near untouchedDate -- the entry
         // preload is scoped to [min, max] of the incoming entries, so the 2020 row
@@ -279,7 +271,7 @@ public class ScheduleRepositoryImportAsyncTests
 
         await repository.ImportAsync([department]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         var untouchedEntry = await readDb.ScheduleEntries.SingleAsync(s => s.Date == untouchedDate);
         Assert.Equal(9m, untouchedEntry.WorkTimeHours);
         Assert.Equal(2, await readDb.ScheduleEntries.CountAsync());
@@ -288,15 +280,14 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task ReplacingSplitShiftSegments_DeletesTheOldRows()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
         var date = new DateOnly(2026, 1, 5);
 
         var department1 = BuildDepartment("Kitchen", BuildEmployee(1001, "Cruz", "Juan",
             SplitShiftDay(date, (Time(5), Time(9)), (Time(13), Time(17)))));
         await repository.ImportAsync([department1]);
 
-        using (var readDb1 = database.NewContext())
+        using (var readDb1 = NewContext())
             Assert.Equal(2, await readDb1.FlexibleSegments.CountAsync());
 
         // Re-import the same employee/date with a single, different segment -- the old
@@ -306,7 +297,7 @@ public class ScheduleRepositoryImportAsyncTests
             SplitShiftDay(date, (Time(6), Time(14)))));
         await repository.ImportAsync([department2]);
 
-        using var readDb2 = database.NewContext();
+        using var readDb2 = NewContext();
         Assert.Equal(1, await readDb2.FlexibleSegments.CountAsync());
         var segment = await readDb2.FlexibleSegments.SingleAsync();
         Assert.Equal(Time(6), segment.TimeIn);
@@ -315,12 +306,30 @@ public class ScheduleRepositoryImportAsyncTests
     [Fact]
     public async Task EmptyInput_IsANoOp()
     {
-        using var database = TestDbContext.Create();
-        var repository = new ScheduleRepository(database.Db);
+        var repository = new ScheduleRepository(Db);
 
         await repository.ImportAsync([]);
 
-        using var readDb = database.NewContext();
+        using var readDb = NewContext();
         Assert.Equal(0, await readDb.Departments.CountAsync());
+    }
+
+    [Fact]
+    public async Task ExistingDepartment_DifferingOnlyByCase_IsReused()
+    {
+        // SQL Server's default collation is case-insensitive, so the existing-name query in
+        // ResolveDepartmentsAsync finds "Kitchen" for a sheet named "kitchen" -- and the
+        // OrdinalIgnoreCase dictionary it builds must then match it, or the import creates a
+        // second department and fails Department.Name's unique index.
+        var repository = new ScheduleRepository(Db);
+        Db.Departments.Add(new Department { Name = "Kitchen" });
+        await Db.SaveChangesAsync();
+
+        await repository.ImportAsync([BuildDepartment("kitchen", BuildEmployee(1001, "Cruz", "Juan", NormalDay(new DateOnly(2026, 1, 5))))]);
+
+        using var readDb = NewContext();
+        var department = await readDb.Departments.SingleAsync();
+        Assert.Equal("Kitchen", department.Name);
+        Assert.Equal(department.Id, (await readDb.Employees.SingleAsync()).DepartmentId);
     }
 }

@@ -3,132 +3,60 @@ using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Repositories;
 
 public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
 {
-    public async Task<List<Department>> GetDepartmentsWithEmployeesAsync(CancellationToken cancellationToken = default)
-    {
-        return await db.Departments
-            .Include(d => d.Employees)
-            .OrderBy(d => d.SortOrder)
-            .ThenBy(d => d.Name)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    // Reads go through Dapper (see Queries/DapperReads.cs and ScheduleReads.cs); everything that
+    // writes, and the tracked loads a write changes, stays on EF below.
 
-    public async Task<List<Employee>> GetUnassignedEmployeesAsync(CancellationToken cancellationToken = default)
-    {
-        return await db.Employees
-            .Where(e => e.DepartmentId == null)
-            .OrderBy(e => e.LastName)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    public Task<List<Department>> GetDepartmentsWithEmployeesAsync(CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetDepartmentsWithEmployeesAsync(db, activeOnly: false, cancellationToken);
 
-    public async Task<List<Department>> GetActiveDepartmentsWithEmployeesAsync(CancellationToken cancellationToken = default)
-    {
-        return await db.Departments
-            .Include(d => d.Employees.Where(e => !e.IsBlacklisted))
-            .OrderBy(d => d.SortOrder)
-            .ThenBy(d => d.Name)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    public Task<List<Employee>> GetUnassignedEmployeesAsync(CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetUnassignedEmployeesAsync(db, activeOnly: false, cancellationToken);
 
-    public async Task<List<Employee>> GetActiveUnassignedEmployeesAsync(CancellationToken cancellationToken = default)
-    {
-        return await db.Employees
-            .Where(e => e.DepartmentId == null && !e.IsBlacklisted)
-            .OrderBy(e => e.LastName)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    public Task<List<Department>> GetActiveDepartmentsWithEmployeesAsync(CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetDepartmentsWithEmployeesAsync(db, activeOnly: true, cancellationToken);
 
-    public async Task<List<Department>> GetDepartmentsForExportAsync(IReadOnlyCollection<int> employeeIds,
-        DateOnly rangeStart, DateOnly rangeEnd, CancellationToken cancellationToken = default)
-    {
-        // The outer Where (department has at least one matching employee) plus the filtered
-        // Include below (that department's Employees collection narrowed to just those
-        // matching employees) is what keeps a department the user didn't select anyone from
-        // out of the result entirely, rather than coming back with an empty Employees list --
-        // see this method's own doc comment on IScheduleRepository. employeeIds is
-        // Employee.Id (the DB key) -- selecting WHICH employees is an Id-based tree pick,
-        // entirely orthogonal to ScheduleEntry.Employee's own relationship (keyed off Pin
-        // as an alternate key -- see ScheduleDbContext's own remarks on ScheduleEntry) that
-        // the nested ThenInclude below rides on.
-        return await db.Departments
-            .Where(d => d.Employees.Any(e => employeeIds.Contains(e.Id)))
-            .Include(d => d.Employees.Where(e => employeeIds.Contains(e.Id)))
-                .ThenInclude(e => e.ScheduleEntries.Where(s => s.Date >= rangeStart && s.Date <= rangeEnd))
-                    .ThenInclude(s => s.FlexibleSegments)
-            .OrderBy(d => d.SortOrder)
-            .ThenBy(d => d.Name)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    public Task<List<Employee>> GetActiveUnassignedEmployeesAsync(CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetUnassignedEmployeesAsync(db, activeOnly: true, cancellationToken);
 
-    public async Task<List<Employee>> GetUnassignedForExportAsync(IReadOnlyCollection<int> employeeIds,
-        DateOnly rangeStart, DateOnly rangeEnd, CancellationToken cancellationToken = default)
-    {
-        return await db.Employees
-            .Where(e => e.DepartmentId == null && employeeIds.Contains(e.Id))
-            .Include(e => e.ScheduleEntries.Where(s => s.Date >= rangeStart && s.Date <= rangeEnd))
-                .ThenInclude(s => s.FlexibleSegments)
-            .OrderBy(e => e.LastName)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    /// <summary>Only the departments the user picked someone from come back, each with just
+    /// the picked employees -- see this method's own doc comment on IScheduleRepository.
+    /// employeeIds is Employee.Id (the DB key) -- selecting WHICH employees is an Id-based tree
+    /// pick, entirely orthogonal to ScheduleEntry.Employee's own relationship (keyed off Pin as an
+    /// alternate key -- see ScheduleDbContext's own remarks on ScheduleEntry) that the entries
+    /// are matched on.</summary>
+    public Task<List<Department>> GetDepartmentsForExportAsync(IReadOnlyCollection<int> employeeIds,
+        DateOnly rangeStart, DateOnly rangeEnd, CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetDepartmentsForExportAsync(db, employeeIds, rangeStart, rangeEnd, cancellationToken);
+
+    public Task<List<Employee>> GetUnassignedForExportAsync(IReadOnlyCollection<int> employeeIds,
+        DateOnly rangeStart, DateOnly rangeEnd, CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetUnassignedForExportAsync(db, employeeIds, rangeStart, rangeEnd, cancellationToken);
 
     /// <summary>Every schedule entry for one employee, across all time -- see this method's
     /// own doc comment on IScheduleRepository. <paramref name="employeePin"/> matches
     /// Employee.Pin (see ScheduleEntry.EmployeeId's own doc comment).</summary>
-    public async Task<List<ScheduleEntry>> GetScheduleEntriesForEmployeeAsync(int employeePin,
-        CancellationToken cancellationToken = default)
-    {
-        return await db.ScheduleEntries
-            .Where(s => s.EmployeeId == employeePin)
-            .Include(s => s.FlexibleSegments)
-            .OrderBy(s => s.Date)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    public Task<List<ScheduleEntry>> GetScheduleEntriesForEmployeeAsync(int employeePin,
+        CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetScheduleEntriesForEmployeeAsync(db, employeePin, cancellationToken);
 
     /// <summary>Schedule entries dated within [periodStart, periodEnd] (inclusive), with
     /// each entry's Employee and Employee.Department populated -- see this method's own
-    /// doc comment on IScheduleRepository. AttendanceWorkflowService.RunAsync, this
-    /// method's only caller, no longer needs its own separate employee fetch/attach step
-    /// to populate Employee -- restored to a real Include now that ScheduleEntry.Employee
-    /// is a real FK again (see ScheduleDbContext's own remarks on ScheduleEntry).
-    /// <paramref name="employeePins"/> matches directly against EmployeeId, which is
-    /// Employee.Pin (see ScheduleEntry.EmployeeId's own doc comment) -- no join needed to
-    /// reach it, it's sitting right there on the entry itself.</summary>
-    public async Task<List<ScheduleEntry>> GetScheduleEntriesForPeriodAsync(DateOnly periodStart, DateOnly periodEnd,
-        IReadOnlyCollection<int>? employeePins = null, CancellationToken cancellationToken = default)
-    {
-        return await db.ScheduleEntries
-            .Where(s => s.Date >= periodStart && s.Date <= periodEnd)
-            .Where(s => employeePins == null || employeePins.Contains(s.EmployeeId))
-            .Include(s => s.Employee)
-                .ThenInclude(e => e!.Department)
-            .Include(s => s.FlexibleSegments)
-            .OrderBy(s => s.EmployeeId)
-            .ThenBy(s => s.Date)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    /// doc comment on IScheduleRepository. AttendanceWorkflowService.RunAsync is this
+    /// method's only caller. <paramref name="employeePins"/> matches directly against
+    /// EmployeeId, which is Employee.Pin (see ScheduleEntry.EmployeeId's own doc comment).</summary>
+    public Task<List<ScheduleEntry>> GetScheduleEntriesForPeriodAsync(DateOnly periodStart, DateOnly periodEnd,
+        IReadOnlyCollection<int>? employeePins = null, CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetScheduleEntriesForPeriodAsync(db, periodStart, periodEnd, employeePins, cancellationToken);
 
-    public async Task<List<Employee>> GetEmployeesByPinsAsync(IReadOnlyCollection<int> pins,
-        CancellationToken cancellationToken = default)
-    {
-        return await db.Employees
-            .Where(e => pins.Contains(e.Pin))
-            .Include(e => e.Department)
-            .OrderBy(e => e.LastName)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-    }
+    public Task<List<Employee>> GetEmployeesByPinsAsync(IReadOnlyCollection<int> pins,
+        CancellationToken cancellationToken = default) =>
+        ScheduleReads.GetEmployeesByPinsAsync(db, pins, cancellationToken);
 
     public async Task<Department> AddDepartmentAsync(string name, CancellationToken cancellationToken = default)
     {

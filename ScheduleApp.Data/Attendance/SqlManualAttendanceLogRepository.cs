@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ScheduleApp.Core.Attendance;
+using ScheduleApp.Data.Queries;
 
 namespace ScheduleApp.Data.Attendance;
 
@@ -14,18 +15,18 @@ public class SqlManualAttendanceLogRepository(ScheduleDbContext db) : IManualAtt
 {
     public Task<List<ManualAttendanceLog>> GetLogsAsync(DateTime rangeStart, DateTime rangeEnd,
         IReadOnlyCollection<int>? pins = null, CancellationToken cancellationToken = default) =>
-        db.ManualAttendanceLogs
-            .Where(m => m.Timestamp >= rangeStart && m.Timestamp <= rangeEnd)
-            .Where(m => pins == null || pins.Contains(m.EmployeeId))
-            .OrderBy(m => m.Timestamp)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<ManualAttendanceLog>(
+            $"""
+            SELECT {Columns.Of<ManualAttendanceLog>("m")} FROM ManualAttendanceLogs m
+            WHERE m.Timestamp >= @rangeStart AND m.Timestamp <= @rangeEnd{(pins is null ? "" : $" AND m.EmployeeId IN ({DapperReads.IdsTable})")}
+            ORDER BY m.Timestamp
+            """,
+            new { rangeStart, rangeEnd, ids = pins is null ? null : DapperReads.IdList(pins) }, cancellationToken);
 
     public Task<List<ManualAttendanceLog>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        db.ManualAttendanceLogs
-            .OrderByDescending(m => m.Timestamp)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        db.QueryAsync<ManualAttendanceLog>(
+            $"SELECT {Columns.Of<ManualAttendanceLog>("m")} FROM ManualAttendanceLogs m ORDER BY m.Timestamp DESC",
+            null, cancellationToken);
 
     public async Task<ManualAttendanceLog> AddAsync(ManualAttendanceLog log, CancellationToken cancellationToken = default)
     {
