@@ -41,12 +41,14 @@ public partial class App : Application
     /// variable up on yet.
     ///
     /// The theme's settings (the accent and the text sizes) are registered here rather
-    /// than in OnStartup because Themes/FrameworkFallbacks.xaml merges two of the theme's
-    /// own dictionaries at application level, and those read the registered settings when
-    /// they load. ApplyThemeAsDefaultStyle makes SfSkinManager theme the native WPF
-    /// controls (Button, TextBox, DataGrid, ...) along with the Syncfusion ones, while the
-    /// views are still being moved over to Syncfusion controls; ApplicationTheme, set in
-    /// OnStartup, then applies the theme to every window as it loads.
+    /// than in OnStartup because Themes/FrameworkFallbacks.xaml merges one of the theme's
+    /// own dictionaries at application level, and it reads the registered settings when it
+    /// loads. ApplyThemeAsDefaultStyle makes SfSkinManager theme the native WPF controls
+    /// along with the Syncfusion ones. It stays on: the views still use native controls
+    /// with no Syncfusion counterpart here (PasswordBox, CheckBox, RadioButton, ProgressBar,
+    /// the templated ListBox/ListView lists, ScrollViewer, NumericTextBox and the TextBoxes
+    /// beside it), and they'd fall back to plain WPF chrome without it. ApplicationTheme,
+    /// set in OnStartup, then applies the theme to every window as it loads.
     ///
     /// Not a static constructor: registering the theme settings loads the theme's
     /// resources through pack:// URIs, and WPF only registers that scheme once the

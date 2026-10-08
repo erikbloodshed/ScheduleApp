@@ -4,6 +4,10 @@ A .NET 10 WPF desktop app for managing employee schedules, backed by SQL Server
 Express, with import/export to an Excel layout compatible with the original
 spreadsheet-based workflow this replaced.
 
+The UI is Syncfusion Essential Studio for WPF (the Windows11Light theme) with
+ReactiveUI view models. The data layer reads through Dapper and writes through
+EF Core, which also owns the schema and its migrations.
+
 > **Pay rules live in [PAYROLL-POLICY.md](PAYROLL-POLICY.md)** -- every rate and
 > multiplier the app applies, in one place, alongside where each still differs
 > from Philippine labor law. The payroll sections below cover how those rules are
@@ -22,7 +26,8 @@ ScheduleApp.ZkTeco      Standalone client for the ZKTeco/ZKSoftware device wire 
                         dependency on anything else in this solution. See Data/Attendance/
                         ZkTecoAttendanceLogReader for the adapter that turns its output into
                         AttendanceLog rows.
-ScheduleApp.Data        EF Core DbContext + repository (SQL Server) -- includes an AttendanceLogs
+ScheduleApp.Data        Repositories over SQL Server: reads through Dapper (Queries/), writes and
+                        migrations through the EF Core DbContext -- includes an AttendanceLogs
                         table (see Data/Attendance) that punches are imported into from either a
                         .dat file or a direct network fetch from the terminal (see "Attendance"
                         below), so reports run against the database, not either source, every time
@@ -30,12 +35,17 @@ ScheduleApp.Excel       Import/export using EPPlus, compatible with the legacy w
                         plus the attendance summary/punch-log Excel exporter
 ScheduleApp.Attendance  Attendance calculation engine: matches punches against schedule and
                         produces AttendanceSummary rows
+ScheduleApp.Payroll     Payroll calculation (PayrollCalculator) and the computation service
+ScheduleApp.Payroll.Pdf Payslip PDF rendering
+ScheduleApp.PushListener  The service ZKTeco terminals push punches to, writing straight into
+                        AttendanceLogs
 ScheduleApp.Desktop     The WPF app -- a left-side navigation drawer, not tabs (see
-                        MainWindow.xaml's NavigationView). Attendance is an expandable
+                        MainWindow.xaml's SfNavigationDrawer). Attendance is an expandable
                         submenu of its own three pages -- Summary, Punch Records, Manual
                         Entries (AttendanceSummaryPage/PunchRecordsPage/ManualEntriesPage) --
                         sharing one AttendanceViewModel; every other item (Schedule,
                         Employees, Payroll, Push Listener) is a single page
+*.Tests                 xUnit tests for Attendance, Payroll and Data -- see "Running the tests"
 ```
 
 ## Signing in
@@ -743,7 +753,7 @@ open sub-tab; the current cutoff period for Payroll. Nothing about where you
 left off survives a close-and-reopen, on any tab, by design.
 
 Switching tabs *within* a single running session is unaffected by this --
-that already works on its own (`NavigationView` reuses the same cached
+that already works on its own (the navigation drawer reuses the same cached
 page/ViewModel instance each time you revisit a tab), so a Schedule
 employee/month selection or an Attendance period/scope/search you set still
 holds for the rest of that session, right up until you close the app.
@@ -803,6 +813,22 @@ halves that can both be visible at once:
   `ScheduleApp.Desktop/appsettings.json` (defaults to
   `Server=.\SQLEXPRESS;Database=ScheduleAppDb;Trusted_Connection=True;TrustServerCertificate=True;`)
 - `dotnet tool install --global dotnet-ef` (one-time, for creating the database schema)
+- A Syncfusion license key in the `SYNCFUSION_LICENSE_KEY` user environment
+  variable -- the same key TinapayanRMS uses, since both are on Syncfusion 35.1.39.
+  The build doesn't need it; without it the app still runs, but shows Syncfusion's
+  unlicensed banner. Restart Visual Studio or the terminal after setting it.
+
+## Running the tests
+
+```bash
+dotnet test ScheduleApp.slnx
+```
+
+`ScheduleApp.Attendance.Tests` and `ScheduleApp.Payroll.Tests` need nothing
+external. `ScheduleApp.Data.Tests` runs against SQL Server Express at
+`.\SQLEXPRESS` (see its `appsettings.json`): it creates and migrates its own
+database, `ScheduleAppDb_Test_Data`, on first run, and Respawn empties it before
+each test. It never touches `ScheduleAppDb`.
 
 ## First-time setup
 
@@ -1069,10 +1095,9 @@ line for whatever your installed version's docs show.
   `Employee.LegacyId` -- see `ScheduleDbContext`), but that's the only one of
   these races with a DB-level guarantee; the schedule-overwrite race above
   still has none.
-- **No tests.** The date/priority-adjacent logic (contiguous-range grouping,
-  midnight-crossing time math, the TimeOut formula) is exactly the kind of
-  thing that's cheap to pin down with unit tests and expensive to debug by hand
-  after a refactor.
+- **No UI tests.** The attendance engine, payroll and the data layer have unit
+  tests (see "Running the tests"); the desktop app's view models and views are
+  only checked by hand.
 - **Manual attendance entries have no real audit trail or approval step.**
   `ManualAttendanceLog.EnteredBy` is still a free-text name, not tied to
   `UserAccount` in any way (see "Signing in" above -- the two are deliberately

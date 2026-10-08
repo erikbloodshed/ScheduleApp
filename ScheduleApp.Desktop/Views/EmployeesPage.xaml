@@ -144,10 +144,14 @@
                                           Command="{Binding ExportEmployeesCommand}" />
                 </StackPanel>
 
+                <!-- Trimmed: on a narrow window the buttons keep their room and this ends in
+                     an ellipsis rather than running underneath them. -->
                 <TextBlock VerticalAlignment="Center"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource MutedForegroundBrush}"
+                           TextTrimming="CharacterEllipsis"
                            Text="Select a department on the left to view its employees."
+                           ToolTip="Select a department on the left to view its employees."
                            Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NullToVisibility}}" />
 
                 <StackPanel Orientation="Horizontal"

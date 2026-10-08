@@ -13,7 +13,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// progress as each employee's figure arrives rather than waiting for
 /// all of them before rendering anything.
 ///
-/// ObservableObject (not a plain sealed class like BatchChecklistRow
+/// ReactiveObject (not a plain sealed class like BatchChecklistRow
 /// was) because NetPay is patched in place two ways:
 ///   1. By RefreshPayrollGroupRowsAsync itself, which sets it right
 ///      after each ComputeOneAsync call.

@@ -11,7 +11,7 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// ActivePayrollRunId (which saved PayrollRun, if any, that scope was confirmed against).
 /// See PayrollViewModel_Refactor_Plan.md's "Target shape" section -- this class is
 /// build-order step 1 of that plan, and the Payroll equivalent of AttendanceDataVersion
-/// (see AttendanceSharedState.cs): a small, deliberately dumb ObservableObject that only
+/// (see AttendanceSharedState.cs): a small, deliberately dumb ReactiveObject that only
 /// holds shared state and raises PropertyChanged, with no reaction logic of its own.
 ///
 /// Deliberately still holds no behavior even now that PayrollViewModel is its only

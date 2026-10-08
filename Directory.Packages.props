@@ -20,8 +20,7 @@
     <PackageVersion Include="Syncfusion.Tools.WPF" Version="$(SyncfusionVersion)" />
   </ItemGroup>
   <ItemGroup>
-    <!-- ScheduleApp.Desktop: ReactiveUI MVVM (replacing CommunityToolkit.Mvvm screen by screen) -->
-    <PackageVersion Include="DynamicData" Version="9.4.33" />
+    <!-- ScheduleApp.Desktop: ReactiveUI MVVM -->
     <PackageVersion Include="ReactiveUI.WPF" Version="26.0.1" />
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
     <!-- ScheduleApp.Data: reads through Dapper, writes through EF Core -->
@@ -34,7 +33,6 @@
     <!-- ScheduleApp.Data -->
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
     <!-- ScheduleApp.Desktop -->
-    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />

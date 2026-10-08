@@ -3,27 +3,23 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        Base styles for the native WPF controls that some views still restyle with BasedOn, while
-        those views wait for their phase of the Syncfusion port (DataGrid -> SfDataGrid, TextBox ->
-        SfTextBoxExt). WPF-UI used to supply these keys application-wide.
+        A base style for the native TextBoxes some views still restyle with BasedOn: the boxed
+        amounts on the Payroll summary, which stay TextBoxes beside the NumericTextBoxes they line
+        up with (see PayrollSummaryView.xaml). WPF-UI used to supply this key application-wide.
 
         SfSkinManager merges the Windows11Light theme into each window's resources only when that
         window loads (App.xaml.cs), but a BasedOn is a StaticResource, resolved when the view's XAML is
-        parsed, before that. So the theme's own DataGrid and TextBox dictionaries are merged here, at
-        application level, and the keys the views name are based on the theme's styles - a restyled
-        header, row or text box keeps the theme's look, selection highlight included. That needs the
-        theme's settings (the accent) registered before App.xaml loads, which is why App's
-        constructor does it first (ConfigureSyncfusion).
+        parsed, before that. So the theme's own TextBox dictionary is merged here, at application
+        level, and the key the views name is based on the theme's style - a restyled box keeps the
+        theme's look. That needs the theme's settings (the accent) registered before App.xaml loads,
+        which is why App's constructor does it first (ConfigureSyncfusion).
 
-        Delete each key, and its dictionary, once nothing names it.
+        Delete the key, and its dictionary, once nothing names it.
     -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/Syncfusion.Themes.Windows11Light.WPF;component/MSControl/DataGrid.xaml" />
         <ResourceDictionary Source="/Syncfusion.Themes.Windows11Light.WPF;component/MSControl/TextBox.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <Style x:Key="DefaultDataGridColumnHeaderStyle" TargetType="DataGridColumnHeader" BasedOn="{StaticResource DataGridColumnHeaderStyle}" />
-    <Style x:Key="DefaultDataGridRowStyle" TargetType="DataGridRow" BasedOn="{StaticResource DataGridRowStyle}" />
     <Style x:Key="{x:Type TextBox}" TargetType="TextBox" BasedOn="{StaticResource WPFTextBoxStyle}" />
 
 </ResourceDictionary>

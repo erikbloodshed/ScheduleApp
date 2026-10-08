@@ -8,8 +8,8 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// <summary>
 /// A ReactiveObject whose commands' CanExecute is a plain bool method (CanSaveX()), re-asked
 /// whenever this ViewModel's own properties change and whenever <see cref="RequeryCanExecute"/>
-/// is called -- the ReactiveUI form of a CommunityToolkit [RelayCommand(CanExecute = ...)] and
-/// the NotifyCanExecuteChanged() calls that kept it current -- and the Yes/No questions and
+/// is called -- so a command's CanExecute stays a method the rest of the class can read --
+/// and the Yes/No questions and
 /// notices a ViewModel asks (Confirm, Notify). The base of ViewModelBase, and of the few
 /// ViewModels with commands but nothing to report on the status bar.
 /// </summary>

@@ -59,7 +59,7 @@
     <SolidColorBrush x:Key="TertiaryForegroundBrush" Color="{StaticResource LatteOverlay1Color}" />
     <SolidColorBrush x:Key="DisabledForegroundBrush" Color="{StaticResource LatteOverlay0Color}" />
 
-    <!-- The app's own hand-templated inputs (TimeInput, PercentTextBox) and hover washes -->
+    <!-- The app's own hand-templated controls (DayPunchPairingEditor, PercentProgressBar) and hover washes -->
     <SolidColorBrush x:Key="ControlFillBrush" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="ControlFillSecondaryBrush" Color="{StaticResource LatteMantleColor}" />
     <SolidColorBrush x:Key="ControlFillDisabledBrush" Color="{StaticResource LatteMantleColor}" />

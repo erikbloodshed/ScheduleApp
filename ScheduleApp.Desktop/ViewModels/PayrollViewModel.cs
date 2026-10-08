@@ -253,7 +253,7 @@ public class PayrollViewModel : ReactiveObject
             new DateTime(today.Year, today.Month, startDay),
             new DateTime(today.Year, today.Month, endDay));
 
-        // Replaces the four CommunityToolkit.Mvvm-generated OnPeriodStartChanged/
+        // Replaces the four source-generated OnPeriodStartChanged/
         // OnPeriodEndChanged/OnBatchScopeEmployeesChanged/OnActivePayrollRunIdChanged
         // partial-method hooks that used to fire automatically whenever those properties
         // lived directly on this class -- now that their storage has moved to

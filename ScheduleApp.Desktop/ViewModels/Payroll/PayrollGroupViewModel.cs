@@ -307,7 +307,7 @@ public class PayrollGroupViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(TotalNetPay));
         };
 
-        // Replaces the four CommunityToolkit.Mvvm-generated OnPeriodStartChanged/
+        // Replaces the four source-generated OnPeriodStartChanged/
         // OnPeriodEndChanged/OnBatchScopeEmployeesChanged/OnActivePayrollRunIdChanged
         // partial-method hooks that used to fire automatically whenever those properties lived
         // directly on PayrollViewModel -- now that their storage lives on the shared
@@ -418,8 +418,8 @@ public class PayrollGroupViewModel : ViewModelBase
     /// blank-render it individually. Since RefreshPayrollGroupRowsAsync now computes every row
     /// before PayrollGroupRows is touched at all (see that method's and PayrollGroupRows' own
     /// doc comments), this jumps straight to the run's real total the moment the collection is
-    /// repopulated, rather than climbing row by row. Plain computed property (not
-    /// [ObservableProperty]) since nothing ever sets it directly -- see the constructor's
+    /// repopulated, rather than climbing row by row. Plain computed property (no backing
+    /// field) since nothing ever sets it directly -- see the constructor's
     /// PayrollGroupRows.CollectionChanged subscription for what actually triggers its change
     /// notification, same "OnPropertyChanged fired by whatever changed the underlying data"
     /// idea PayrollWizardViewModel.TotalNetPay's own doc comment describes for the wizard's
@@ -570,9 +570,9 @@ public class PayrollGroupViewModel : ViewModelBase
     /// off navigation events directly.</summary>
     public bool HasBatchScope => _scope.BatchScopeEmployees.Count > 0;
 
-    /// <summary>Formerly a CommunityToolkit.Mvvm-generated `partial void
+    /// <summary>Formerly a source-generated `partial void
     /// OnPeriodStartChanged(DateTime value)` hook on PayrollViewModel, invoked automatically
-    /// whenever PeriodStart's own [ObservableProperty] field changed; now invoked explicitly
+    /// whenever PeriodStart's own generated property changed; now invoked explicitly
     /// from this class's own _scope.PropertyChanged subscription in the constructor instead,
     /// since PayrollScopeState (not this class) owns that storage. The `value` parameter was
     /// never used by the body, so it's dropped rather than threaded through -- read
@@ -596,7 +596,7 @@ public class PayrollGroupViewModel : ViewModelBase
     /// one (or a few) rows and already patch PayrollGroupRows themselves -- see
     /// _suppressGroupRefreshOnScopeChange's own doc comment for how those skip it.
     ///
-    /// Formerly a CommunityToolkit.Mvvm-generated `partial void
+    /// Formerly a source-generated `partial void
     /// OnBatchScopeEmployeesChanged(IReadOnlyList&lt;Employee&gt; value)` hook on
     /// PayrollViewModel -- now invoked explicitly from this class's own _scope.PropertyChanged
     /// subscription in the constructor instead, since PayrollScopeState (not this class) owns
@@ -625,7 +625,7 @@ public class PayrollGroupViewModel : ViewModelBase
     /// landing sequence. Notifies the three group-membership commands whose CanExecute
     /// (CanEditGroupMembership) depends on this being non-null.
     ///
-    /// Formerly a CommunityToolkit.Mvvm-generated `partial void
+    /// Formerly a source-generated `partial void
     /// OnActivePayrollRunIdChanged(int? value)` hook on PayrollViewModel -- now invoked
     /// explicitly from this class's own _scope.PropertyChanged subscription in the constructor
     /// instead, since PayrollScopeState (not this class) owns that storage. The `value`

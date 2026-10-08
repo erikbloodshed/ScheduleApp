@@ -1065,8 +1065,8 @@ public class PayrollSummaryViewModel : ViewModelBase
     /// PayrollSummaryView (see AdjustmentGroupTemplate and
     /// PayrollSummaryView.xaml.cs's SingleValueAmountBox_LostFocus/KeyDown), which call this
     /// directly rather than through an ICommand -- TextBox has no Command/CommandParameter of
-    /// its own the way ButtonBase does, so there's nothing for a RelayCommand to bind to
-    /// here. Not gated by [RelayCommand(CanExecute = ...)] for that same reason; the box's
+    /// its own the way ButtonBase does, so there's nothing for a command to bind to
+    /// here. Not gated by a command's CanExecute for that same reason; the box's
     /// own IsEnabled (bound to CanEditAdjustmentsNow below) already keeps it from being typed
     /// into in the first place, and the guard on the first line below covers the case where a
     /// commit was already in flight when a second one lands.

@@ -514,9 +514,9 @@ public class PunchRecordsViewModel : ViewModelBase
 
     /// <summary>Split into a text Content and a separate Icon -- unlike
     /// ReportViewModel.RefreshOrCancelGlyph/ManualEntriesViewModel.RefreshOrCancelGlyph,
-    /// each a single Segoe Fluent Icons glyph that *is* an icon-only Button's whole
-    /// Content -- because this button is a controls:IconButton (see that control's own
-    /// doc comment) showing a short label and an icon side by side, sitting among the
+    /// each a single Segoe Fluent Icons glyph that *is* an icon-only button's whole
+    /// face -- because this button is a labeled ButtonAdv (Label, plus the glyph as its
+    /// Tag) showing a short label and an icon side by side, sitting among the
     /// other labeled buttons (◀/▶/Export/Import/Fetch from Device) in this same Period
     /// row rather than standing alone the way the other two pages' buttons do.</summary>
     public string RefreshOrCancelContent => _busy.IsVisiblyRunning ? "Cancel" : "Reload";

@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -20,7 +19,6 @@
     <!-- Needed for configuration.GetSection("Attendance").Get&lt;AttendanceSettings&gt;() in App.xaml.cs -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="DynamicData" />
     <PackageReference Include="ReactiveUI.WPF" />
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Serilog.Sinks.File" />

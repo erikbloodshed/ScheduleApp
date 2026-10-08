@@ -70,8 +70,8 @@ public sealed class PayrollAdjustmentGroupRow : ReactiveObject
 
     /// <summary>Same value as SingleValueAdjustment?.Amount, same "TextBox binding breaks on a
     /// null intermediate hop" reasoning as PayrollAdjustmentGroup.SingleValueAmount's own doc
-    /// comment -- kept in sync with SingleValueAdjustment via the [NotifyPropertyChangedFor]
-    /// above rather than duplicated as its own [ObservableProperty], so there's exactly one
+    /// comment -- kept in sync with SingleValueAdjustment by the change notification that
+    /// property's setter raises above rather than stored separately, so there's exactly one
     /// place (SyncAdjustmentGroupRows) that ever needs to set this row's single-value state.
     /// </summary>
     public decimal? SingleValueAmount => SingleValueAdjustment?.Amount;

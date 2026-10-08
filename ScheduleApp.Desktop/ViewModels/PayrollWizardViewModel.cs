@@ -543,8 +543,8 @@ public class PayrollWizardViewModel : ReactiveViewModel
     public bool IsReviewReady => !IsCalculating && CalculationErrorMessage is null;
 
     /// <summary>Sum of every row's own NetPay/TotalGrossPay/TotalDeductions -- the totals
-    /// strip under the grid. Plain decimal.Sum over ReviewResults rather than an
-    /// [ObservableProperty] of its own, since nothing ever sets these directly; the
+    /// strip under the grid. Plain decimal.Sum over ReviewResults rather than a stored
+    /// property of its own, since nothing ever sets these directly; the
     /// OnPropertyChanged calls at the end of CalculateReviewAsync below are what tell the
     /// view to re-read them once ReviewResults has actually finished changing, the same
     /// "batch the notification, not the individual Adds" idea NotifyEmployeeSelectionChanged
@@ -643,8 +643,8 @@ public class PayrollWizardViewModel : ReactiveViewModel
     private void OnIsSavingChanged(bool value) => RequeryCanExecute();
 
     /// <summary>Null until SavePayrollGroupCommand succeeds; the created PayrollRun
-    /// afterward, Id/CreatedAt included (see IPayrollRunRepository.CreateAsync). Not an
-    /// [ObservableProperty] since nothing here binds to it directly -- SavedRunSummary
+    /// afterward, Id/CreatedAt included (see IPayrollRunRepository.CreateAsync). Raises no
+    /// change notification of its own, since nothing here binds to it directly -- SavedRunSummary
     /// below is what the view actually shows, and both are raised together from the
     /// command. Build-order step 9.2 reads this off PayrollWizardDialog's own passthrough
     /// once Finish needs to carry it back to PayrollRunViewModel; nothing outside this class

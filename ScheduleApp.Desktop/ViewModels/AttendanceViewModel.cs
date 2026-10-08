@@ -194,10 +194,10 @@ public class AttendanceViewModel : ReactiveObject, IDisposable
         // blanket relay re-raises the child's own (unprefixed) name, which no binding
         // listens for, so those are re-raised explicitly in the _busy handler below off
         // the one flag all three derive from. PunchRecords' pair is named
-        // RefreshOrCancelContent/RefreshOrCancelIcon (split so its controls:IconButton can
-        // show a text label and a glyph as two separate things), while Report's and
-        // ManualEntriesTab's stay the older single RefreshOrCancelGlyph (a plain Button
-        // whose Content *is* the glyph) -- see PunchRecordsViewModel.RefreshOrCancelContent's
+        // RefreshOrCancelContent/RefreshOrCancelIcon (split so its labeled button can show a
+        // text label and a glyph as two separate things), while Report's and
+        // ManualEntriesTab's stay the older single RefreshOrCancelGlyph (an icon-only button
+        // whose face *is* the glyph) -- see PunchRecordsViewModel.RefreshOrCancelContent's
         // own doc comment for why that one page's button looks different.
         Report.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
         PunchRecords.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
@@ -394,7 +394,7 @@ public class AttendanceViewModel : ReactiveObject, IDisposable
     /// "PunchRecords" prefix for the same reason SummaryRefreshOrCancelGlyph is. Split into
     /// Content/Icon rather than a single Glyph -- see
     /// PunchRecordsViewModel.RefreshOrCancelContent's own doc comment -- since this
-    /// button, unlike Summary's/ManualEntries', is a controls:IconButton.</summary>
+    /// button, unlike Summary's/ManualEntries', carries a label as well as a glyph.</summary>
     public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelStoredLogsCommand => PunchRecords.RefreshOrCancelStoredLogsCommand;
     public string PunchRecordsRefreshOrCancelContent => PunchRecords.RefreshOrCancelContent;
     public string PunchRecordsRefreshOrCancelIcon => PunchRecords.RefreshOrCancelIcon;
