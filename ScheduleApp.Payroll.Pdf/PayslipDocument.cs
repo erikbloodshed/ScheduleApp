@@ -67,22 +67,22 @@ internal sealed class PayslipDocument : IDocument
     /// looser ~1.2x default before this was pinned down.</summary>
     private const float LineHeight = 1.05f;
 
-    /// <summary>How many <see cref="PayslipLineBuilder"/> lines fit in one
-    /// cell's usable 3.65"×4.9" area at 8pt Iosevka before the overflow
-    /// escape hatch kicks in. Same estimate-then-confirm story as
-    /// PayslipLineBuilder.LineWidth: 4.9" usable height ÷ <see
-    /// cref="LineHeight"/>-of-font-size line height at 8pt ≈ 40 theoretical
-    /// lines, scaled down by the same ~91% safety margin the original
-    /// 4.5"/33-line estimate was deliberately shaved to 30 by (see that
-    /// constant's prior value) -- kept at 33 rather than recalculated up to
-    /// ~36 now that LineHeight is pinned to 1.1 (down from the looser ~1.1x
-    /// default this estimate originally assumed), so a slip that could have
-    /// just barely fit a normal cell instead gets bumped to its own roomier
-    /// full page (harmless -- it still prints correctly, just alone), rather
-    /// than one that's cut too close and either clips or trips QuestPDF's
-    /// own layout-overflow exception. Raise this once a real render confirms
-    /// there's room to.</summary>
-    private const int MaxLinesPerCell = 36;
+    /// <summary>A cell's usable height in points -- same derivation as <see
+    /// cref="UsableWidthPt"/>, for the vertical axis (4.9").</summary>
+    private const float UsableHeightPt = (CellHeightIn - (2 * CellInsetIn)) * PointsPerInch;
+
+    /// <summary>How many <see cref="PayslipLineBuilder"/> lines a slip may
+    /// have and still print in a quarter-page cell; anything longer gets
+    /// its own overflow page. Derived from the geometry rather than
+    /// hard-coded, so changing <see cref="FontSizePt"/>, <see
+    /// cref="LineHeight"/> or the cell size keeps it correct: usable height
+    /// ÷ (font size × line height), less one line of safety margin. At 9pt ×
+    /// 1.05 that's 352.8 ÷ 9.45 = 37 full lines, so 36 -- confirmed by real
+    /// renders in both Iosevka and Lucida Console, where exactly 37 lines
+    /// fit. Only valid because the builder never emits a line wider than
+    /// <see cref="PayslipLineBuilder.LineWidth"/>: each counted line is
+    /// exactly one row on paper.</summary>
+    private const int MaxLinesPerCell = (int)(UsableHeightPt / (FontSizePt * LineHeight)) - 1;
 
     private sealed record Slip(PayrollResult Result, IReadOnlyList<PayslipLine> Lines, bool IsOverflow);
 

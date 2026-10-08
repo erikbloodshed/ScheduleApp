@@ -160,16 +160,21 @@ public static class PayslipLineBuilder
         ArgumentNullException.ThrowIfNull(result);
         ArgumentException.ThrowIfNullOrWhiteSpace(companyName);
 
-        var lines = new List<PayslipLine>
-        {
-            new(Center(companyName)),
-            new(Center("PAYSLIP")),
-            new(Rule()),
-            new(JustifyTwoColumns(result.EmployeeName, $"ID {result.EmployeeId}")),
-            new(PeriodText(result.PeriodStart, result.PeriodEnd)),
-            new(Rule()),
-            new("GROSS PAY", Bold: true),
-        };
+        // Every plain line here stays within LineWidth characters -- an
+        // over-long company or employee name is wrapped onto extra lines
+        // rather than left for QuestPDF to wrap on its own. A line QuestPDF
+        // wraps is two rows on paper but only one entry in this list, which
+        // would make PayslipDocument's MaxLinesPerCell check undercount and
+        // let a slip that's really too tall spill out of its quarter-page
+        // cell instead of getting the overflow page.
+        var lines = new List<PayslipLine>();
+        lines.AddRange(WordWrap(companyName, LineWidth).Select(l => new PayslipLine(Center(l))));
+        lines.Add(new(Center("PAYSLIP")));
+        lines.Add(new(Rule()));
+        lines.AddRange(JustifyTwoColumns(result.EmployeeName, $"ID {result.EmployeeId}").Select(l => new PayslipLine(l)));
+        lines.AddRange(WordWrap(PeriodText(result.PeriodStart, result.PeriodEnd), LineWidth).Select(l => new PayslipLine(l)));
+        lines.Add(new(Rule()));
+        lines.Add(new("GROSS PAY", Bold: true));
 
         foreach (var line in result.ComputedGrossPay)
             AddAmountLine(lines, indent: 2, line.Label, line.Amount);
@@ -248,7 +253,8 @@ public static class PayslipLineBuilder
             return;
         }
 
-        lines.Add(new(Indent(2) + group.Type.ToText(), Red: red));
+        foreach (var header in WordWrap(group.Type.ToText(), LineWidth - 2))
+            lines.Add(new(Indent(2) + header, Red: red));
 
         foreach (var adjustment in group.Adjustments)
             AddAmountLine(lines, indent: 4, adjustment.Description, adjustment.Amount, red: red);
@@ -329,10 +335,20 @@ public static class PayslipLineBuilder
         return new string(' ', left) + text;
     }
 
-    private static string JustifyTwoColumns(string left, string right)
+    /// <summary><paramref name="left"/> flush left and <paramref
+    /// name="right"/> flush right on the first line. If <paramref
+    /// name="left"/> is too long to share that line, it's word-wrapped and
+    /// the rest continues on the lines below, so no line is ever wider than
+    /// LineWidth (see Build's own comment for why that matters).</summary>
+    private static IEnumerable<string> JustifyTwoColumns(string left, string right)
     {
-        int gap = LineWidth - left.Length - right.Length;
-        return gap > 0 ? left + new string(' ', gap) + right : left + " " + right;
+        var leftLines = WordWrap(left, Math.Max(1, LineWidth - right.Length - 1)).ToList();
+
+        int gap = Math.Max(1, LineWidth - leftLines[0].Length - right.Length);
+        yield return leftLines[0] + new string(' ', gap) + right;
+
+        foreach (var rest in leftLines.Skip(1))
+            yield return rest;
     }
 
     /// <summary>"August 1 - August 15, 2026" for a same-year period, repeating
