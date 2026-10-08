@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Users;
 using ScheduleApp.Desktop.Services;
+using Syncfusion.UI.Xaml.Grid;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -57,7 +58,7 @@ public partial class ManageUsersDialog : Controls.AppWindow
         UpdateButtonStates();
     }
 
-    private void UsersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtonStates();
+    private void UsersGrid_SelectionChanged(object? sender, GridSelectionChangedEventArgs e) => UpdateButtonStates();
 
     private void UpdateButtonStates()
     {
@@ -67,7 +68,7 @@ public partial class ManageUsersDialog : Controls.AppWindow
         {
             ResetPasswordButton.IsEnabled = false;
             ToggleActiveButton.IsEnabled = false;
-            ToggleActiveButton.Content = "Deactivate";
+            ToggleActiveButton.Label = "Deactivate";
             DeleteButton.IsEnabled = false;
             return;
         }
@@ -81,7 +82,7 @@ public partial class ManageUsersDialog : Controls.AppWindow
 
         ResetPasswordButton.IsEnabled = true;
 
-        ToggleActiveButton.Content = selected.IsActive ? "Deactivate" : "Activate";
+        ToggleActiveButton.Label = selected.IsActive ? "Deactivate" : "Activate";
         ToggleActiveButton.IsEnabled = selected.IsActive ? !isSelf && !isLastActive : true;
 
         DeleteButton.IsEnabled = !isSelf && !isLastActive;

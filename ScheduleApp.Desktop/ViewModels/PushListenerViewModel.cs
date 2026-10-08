@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Desktop.Models.PushListener;
 using ScheduleApp.Desktop.Services;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -20,9 +20,8 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// It can even point at a PushListener running on a different machine (the normal case in a
 /// real deployment) just by changing ServerUrl.
 /// </summary>
-public partial class PushListenerViewModel : ObservableObject, IDisposable
+public class PushListenerViewModel : ViewModelBase, IDisposable
 {
-    private readonly IStatusBarService _statusBarService;
     private readonly PushListenerApiClient _client;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(10) };
 
@@ -33,19 +32,46 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
     /// <summary>ComboBox source for the Logs tab's level filter -- "All" translates to no minimum-level filter server-side, not a literal level value.</summary>
     public IReadOnlyList<string> LogLevelOptions { get; } = ["All", "Information", "Warning", "Error", "Fatal"];
 
-    [ObservableProperty]
-    private string serverUrl;
+    public string ServerUrl
+    {
+        get => _serverUrl;
+        set => this.RaiseAndSetIfChanged(ref _serverUrl, value);
+    }
 
-    [ObservableProperty]
-    private bool isConnected;
+    private string _serverUrl;
 
-    [ObservableProperty]
-    private string connectionStatusText = "Not connected";
+    public bool IsConnected
+    {
+        get => _isConnected;
+        set => this.RaiseAndSetIfChanged(ref _isConnected, value);
+    }
 
-    [ObservableProperty]
-    private bool autoRefresh = true;
+    private bool _isConnected;
 
-    partial void OnAutoRefreshChanged(bool value)
+    public string ConnectionStatusText
+    {
+        get => _connectionStatusText;
+        set => this.RaiseAndSetIfChanged(ref _connectionStatusText, value);
+    }
+
+    private string _connectionStatusText = "Not connected";
+
+    public bool AutoRefresh
+    {
+        get => _autoRefresh;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_autoRefresh, value)) return;
+            this.RaisePropertyChanging();
+            _autoRefresh = value;
+            OnAutoRefreshChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private bool _autoRefresh = true;
+
+    private void OnAutoRefreshChanged(bool value)
     {
         if (value)
         {
@@ -57,31 +83,74 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         }
     }
 
-    [ObservableProperty]
-    private PushListenerDeviceInfo? selectedDevice;
-
-    partial void OnSelectedDeviceChanged(PushListenerDeviceInfo? value)
+    public PushListenerDeviceInfo? SelectedDevice
     {
-        ResyncSelectedDeviceCommand.NotifyCanExecuteChanged();
-        ForceRecheckSelectedDeviceCommand.NotifyCanExecuteChanged();
+        get => _selectedDevice;
+        set
+        {
+            if (EqualityComparer<PushListenerDeviceInfo?>.Default.Equals(_selectedDevice, value)) return;
+            this.RaisePropertyChanging();
+            _selectedDevice = value;
+            OnSelectedDeviceChanged(value);
+            this.RaisePropertyChanged();
+        }
     }
 
-    [ObservableProperty]
-    private string? filterSn;
+    private PushListenerDeviceInfo? _selectedDevice;
 
-    [ObservableProperty]
-    private string? filterPin;
+    private void OnSelectedDeviceChanged(PushListenerDeviceInfo? value)
+    {
+        RequeryCanExecute();
+    }
 
-    [ObservableProperty]
-    private string? filterStartTime;
+    public string? FilterSn
+    {
+        get => _filterSn;
+        set => this.RaiseAndSetIfChanged(ref _filterSn, value);
+    }
 
-    [ObservableProperty]
-    private string? filterEndTime;
+    private string? _filterSn;
 
-    [ObservableProperty]
-    private PushListenerHealthInfo? health;
+    public string? FilterPin
+    {
+        get => _filterPin;
+        set => this.RaiseAndSetIfChanged(ref _filterPin, value);
+    }
 
-    partial void OnHealthChanged(PushListenerHealthInfo? value) => OnPropertyChanged(nameof(UptimeDisplay));
+    private string? _filterPin;
+
+    public string? FilterStartTime
+    {
+        get => _filterStartTime;
+        set => this.RaiseAndSetIfChanged(ref _filterStartTime, value);
+    }
+
+    private string? _filterStartTime;
+
+    public string? FilterEndTime
+    {
+        get => _filterEndTime;
+        set => this.RaiseAndSetIfChanged(ref _filterEndTime, value);
+    }
+
+    private string? _filterEndTime;
+
+    public PushListenerHealthInfo? Health
+    {
+        get => _health;
+        set
+        {
+            if (EqualityComparer<PushListenerHealthInfo?>.Default.Equals(_health, value)) return;
+            this.RaisePropertyChanging();
+            _health = value;
+            OnHealthChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private PushListenerHealthInfo? _health;
+
+    private void OnHealthChanged(PushListenerHealthInfo? value) => this.RaisePropertyChanged(nameof(UptimeDisplay));
 
     /// <summary>
     /// Formatted here rather than as a property on PushListenerHealthInfo itself -- that DTO
@@ -110,16 +179,38 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         }
     }
 
-    [ObservableProperty]
-    private string logLevelFilter = "All";
+    public string LogLevelFilter
+    {
+        get => _logLevelFilter;
+        set => this.RaiseAndSetIfChanged(ref _logLevelFilter, value);
+    }
 
-    [ObservableProperty]
-    private string? logSnFilter;
+    private string _logLevelFilter = "All";
 
-    [ObservableProperty]
-    private bool logAutoRefresh;
+    public string? LogSnFilter
+    {
+        get => _logSnFilter;
+        set => this.RaiseAndSetIfChanged(ref _logSnFilter, value);
+    }
 
-    partial void OnLogAutoRefreshChanged(bool value)
+    private string? _logSnFilter;
+
+    public bool LogAutoRefresh
+    {
+        get => _logAutoRefresh;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_logAutoRefresh, value)) return;
+            this.RaisePropertyChanging();
+            _logAutoRefresh = value;
+            OnLogAutoRefreshChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private bool _logAutoRefresh;
+
+    private void OnLogAutoRefreshChanged(bool value)
     {
         if (value)
         {
@@ -134,15 +225,23 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer _logsRefreshTimer = new() { Interval = TimeSpan.FromSeconds(10) };
 
     public PushListenerViewModel(IStatusBarService statusBarService, PushListenerSettings settings)
+        : base(statusBarService)
     {
-        _statusBarService = statusBarService;
-        serverUrl = settings.BaseUrl;
-        _client = new PushListenerApiClient(serverUrl);
+        _serverUrl = settings.BaseUrl;
+        _client = new PushListenerApiClient(_serverUrl);
         _refreshTimer.Tick += async (_, _) => await RefreshDevicesAsync();
         _logsRefreshTimer.Tick += async (_, _) => await RefreshLogsAsync();
+
+        TestConnectionCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(TestConnectionAsync));
+        RefreshDevicesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(RefreshDevicesAsync));
+        SearchAttendanceCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(SearchAttendanceAsync));
+        RefreshLogsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(RefreshLogsAsync));
+        ResyncSelectedDeviceCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ResyncSelectedDeviceAsync), CanExecuteFrom(CanActOnSelectedDevice));
+        ForceRecheckSelectedDeviceCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ForceRecheckSelectedDeviceAsync), CanExecuteFrom(CanActOnSelectedDevice));
     }
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> TestConnectionCommand { get; }
+
     private async Task TestConnectionAsync()
     {
         _client.UpdateBaseUrl(ServerUrl);
@@ -159,7 +258,7 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
             // underlying System.Uri is what throws in that case.
             IsConnected = false;
             ConnectionStatusText = "Invalid server URL";
-            _statusBarService.ShowError(ex.Message);
+            ShowFailure(ex);
             _refreshTimer.Stop();
             return;
         }
@@ -181,7 +280,8 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshDevicesCommand { get; }
+
     private async Task RefreshDevicesAsync()
     {
         // Health is folded into the same refresh cycle as Devices, on both the 10s timer and
@@ -213,11 +313,14 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            _statusBarService.ShowError(ex.Message, "Failed to refresh devices");
+            // Not ShowFailure: the auto-refresh timer runs this every few seconds, and a
+            // listener that's down would write the same failure to the log on every tick.
+            StatusBar.ShowError(ex.Message, "Failed to refresh devices");
         }
     }
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> SearchAttendanceCommand { get; }
+
     private async Task SearchAttendanceAsync()
     {
         try
@@ -231,17 +334,18 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
                 AttendanceRows.Add(row);
             }
 
-            _statusBarService.ShowSuccess($"Found {AttendanceRows.Count} punch(es) via the push listener.");
+            StatusBar.ShowSuccess($"Found {AttendanceRows.Count} punch(es) via the push listener.");
         }
         catch (Exception ex)
         {
             // Most likely a malformed startTime/endTime, or a non-numeric PIN -- the server
             // validates both and returns 400 rather than an empty result.
-            _statusBarService.ShowError(ex.Message, "Search failed");
+            ShowFailure(ex, "Search failed");
         }
     }
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshLogsCommand { get; }
+
     private async Task RefreshLogsAsync()
     {
         try
@@ -257,13 +361,15 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            _statusBarService.ShowError(ex.Message, "Failed to refresh logs");
+            // Not ShowFailure, for the same reason as RefreshDevicesAsync: a timer runs this.
+            StatusBar.ShowError(ex.Message, "Failed to refresh logs");
         }
     }
 
     private bool CanActOnSelectedDevice() => SelectedDevice is not null;
 
-    [RelayCommand(CanExecute = nameof(CanActOnSelectedDevice))]
+    public ReactiveCommand<RxVoid, RxVoid> ResyncSelectedDeviceCommand { get; }
+
     private async Task ResyncSelectedDeviceAsync()
     {
         if (SelectedDevice is null)
@@ -274,16 +380,17 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         try
         {
             await _client.ResyncAttendanceAsync(SelectedDevice.SerialNumber);
-            _statusBarService.ShowSuccess(
+            StatusBar.ShowSuccess(
                 $"Resync queued for {SelectedDevice.SerialNumber} -- it'll pick this up on its next poll.");
         }
         catch (Exception ex)
         {
-            _statusBarService.ShowError(ex.Message, "Resync failed");
+            ShowFailure(ex, "Resync failed");
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanActOnSelectedDevice))]
+    public ReactiveCommand<RxVoid, RxVoid> ForceRecheckSelectedDeviceCommand { get; }
+
     private async Task ForceRecheckSelectedDeviceAsync()
     {
         if (SelectedDevice is null)
@@ -294,12 +401,12 @@ public partial class PushListenerViewModel : ObservableObject, IDisposable
         try
         {
             await _client.ForceRecheckAsync(SelectedDevice.SerialNumber);
-            _statusBarService.ShowSuccess(
+            StatusBar.ShowSuccess(
                 $"Force-recheck queued for {SelectedDevice.SerialNumber} -- stamps reset, it'll re-upload everything.");
         }
         catch (Exception ex)
         {
-            _statusBarService.ShowError(ex.Message, "Force recheck failed");
+            ShowFailure(ex, "Force recheck failed");
         }
     }
 

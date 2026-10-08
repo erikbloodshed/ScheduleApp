@@ -174,7 +174,7 @@ public partial class DatabaseSetupDialog : Controls.AppWindow
                 "Schedule Manager needs a database before it can start, and this machine " +
                 "doesn't have one set up yet -- this screen is required to continue.\n\n" +
                 IntroText.Text;
-            CancelButton.Content = "Exit";
+            CancelButton.Label = "Exit";
         }
 
         Loaded += (_, _) => ServerBox.Focus();

@@ -229,11 +229,11 @@ public partial class SettingsDialog : Controls.AppWindow
         // .Value, not .Text -- these five are PercentTextBox now, not TextBox. No
         // ToString() needed either: Value takes the raw decimal fraction directly and
         // the control does its own x100-plus-"%" formatting for display.
-        OvertimeRatePercentageBox.Value = payrollPolicy.OvertimeRatePercentage;
-        NightDiffRatePercentageBox.Value = payrollPolicy.NightDiffRatePercentage;
-        RestDayPremiumPercentageBox.Value = payrollPolicy.RestDayPremiumPercentage;
-        RestDayOvertimeRatePercentageBox.Value = payrollPolicy.RestDayOvertimeRatePercentage;
-        HolidayPremiumPercentageBox.Value = payrollPolicy.HolidayPremiumPercentage;
+        OvertimeRatePercentageBox.PercentValue = ToPercent(payrollPolicy.OvertimeRatePercentage);
+        NightDiffRatePercentageBox.PercentValue = ToPercent(payrollPolicy.NightDiffRatePercentage);
+        RestDayPremiumPercentageBox.PercentValue = ToPercent(payrollPolicy.RestDayPremiumPercentage);
+        RestDayOvertimeRatePercentageBox.PercentValue = ToPercent(payrollPolicy.RestDayOvertimeRatePercentage);
+        HolidayPremiumPercentageBox.PercentValue = ToPercent(payrollPolicy.HolidayPremiumPercentage);
         NetPayRoundingMultipleBox.Text = payrollPolicy.NetPayRoundingMultiple.ToString(CultureInfo.CurrentCulture);
 
         CompanyNameBox.Text = _originalCompanyName;
@@ -317,7 +317,7 @@ public partial class SettingsDialog : Controls.AppWindow
     private void ExpandAdvanced()
     {
         AdvancedPanel.Visibility = Visibility.Visible;
-        AdvancedToggleButton.Content = "Advanced ▴";
+        AdvancedToggleButton.Label = "Advanced ▴";
     }
 
     private void ConnectionProfilesCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -384,7 +384,7 @@ public partial class SettingsDialog : Controls.AppWindow
     {
         var expanding = AdvancedPanel.Visibility != Visibility.Visible;
         AdvancedPanel.Visibility = expanding ? Visibility.Visible : Visibility.Collapsed;
-        AdvancedToggleButton.Content = expanding ? "Advanced ▴" : "Advanced ▾";
+        AdvancedToggleButton.Label = expanding ? "Advanced ▴" : "Advanced ▾";
     }
 
     /// <summary>Selects whichever tab <paramref name="field"/> lives on and scrolls it
@@ -398,10 +398,14 @@ public partial class SettingsDialog : Controls.AppWindow
     /// all -- which is why none of the TabItems in the XAML has an x:Name.</summary>
     private void RevealField(Control field)
     {
+        // The tab is whichever of SettingsTabs' items the field sits under.
         for (DependencyObject? node = field; node is not null; node = LogicalTreeHelper.GetParent(node))
         {
-            if (node is TabItem tab)
-                tab.IsSelected = true;
+            if (LogicalTreeHelper.GetParent(node) == SettingsTabs)
+            {
+                SettingsTabs.SelectedItem = node;
+                break;
+            }
         }
 
         // The tab just selected only becomes a real visual tree on the next measure pass,
@@ -608,21 +612,19 @@ public partial class SettingsDialog : Controls.AppWindow
         }
 
         // No TryParse/range check needed for these five -- unlike StandardHoursPerDayBox/
-        // NetPayRoundingMultipleBox above and below, they're PercentTextBox now, which
-        // wraps a NumericTextBox that already guarantees a valid, in-range Value on its
-        // own (keystrokes that wouldn't leave a number are rejected outright; an
-        // out-of-range commit is clamped to Minimum/Maximum -- see each field's own
-        // Maximum="5" in the XAML, the same 500% ceiling TryParsePremiumPercentage used to
-        // enforce by hand). The only state left to handle here is Value itself being null
+        // NetPayRoundingMultipleBox above and below, they're PercentTextBoxes, which only
+        // ever hold a number, clamped to MinValue/MaxValue (FieldPercentBoxStyle's 0-500%,
+        // the same 500% ceiling TryParsePremiumPercentage used to enforce by hand). The only
+        // state left to handle here is PercentValue itself being null
         // -- the box was cleared to blank and has no PlaceholderValue to fall back to,
         // since a company-wide policy default has nothing above it to inherit from -- so
         // that falls back to whatever this policy already held rather than silently
         // adopting 0%.
-        var overtimeRatePercentage = OvertimeRatePercentageBox.Value ?? _originalPayrollPolicy.OvertimeRatePercentage;
-        var nightDiffRatePercentage = NightDiffRatePercentageBox.Value ?? _originalPayrollPolicy.NightDiffRatePercentage;
-        var restDayPremiumPercentage = RestDayPremiumPercentageBox.Value ?? _originalPayrollPolicy.RestDayPremiumPercentage;
-        var restDayOvertimeRatePercentage = RestDayOvertimeRatePercentageBox.Value ?? _originalPayrollPolicy.RestDayOvertimeRatePercentage;
-        var holidayPremiumPercentage = HolidayPremiumPercentageBox.Value ?? _originalPayrollPolicy.HolidayPremiumPercentage;
+        var overtimeRatePercentage = ToFraction(OvertimeRatePercentageBox.PercentValue) ?? _originalPayrollPolicy.OvertimeRatePercentage;
+        var nightDiffRatePercentage = ToFraction(NightDiffRatePercentageBox.PercentValue) ?? _originalPayrollPolicy.NightDiffRatePercentage;
+        var restDayPremiumPercentage = ToFraction(RestDayPremiumPercentageBox.PercentValue) ?? _originalPayrollPolicy.RestDayPremiumPercentage;
+        var restDayOvertimeRatePercentage = ToFraction(RestDayOvertimeRatePercentageBox.PercentValue) ?? _originalPayrollPolicy.RestDayOvertimeRatePercentage;
+        var holidayPremiumPercentage = ToFraction(HolidayPremiumPercentageBox.PercentValue) ?? _originalPayrollPolicy.HolidayPremiumPercentage;
 
         if (!decimal.TryParse(NetPayRoundingMultipleBox.Text, out var netPayRoundingMultiple) ||
             netPayRoundingMultiple <= 0)
@@ -760,4 +762,12 @@ public partial class SettingsDialog : Controls.AppWindow
 
         DialogResult = true;
     }
+
+    /// <summary>A premium fraction (0.30) as the percent a PercentTextBox shows (30).</summary>
+    private static double ToPercent(decimal fraction) => (double)(fraction * 100m);
+
+    /// <summary>A percent typed into a PercentTextBox (30) as the fraction PayrollPolicy holds
+    /// (0.30), to four decimal places.</summary>
+    private static decimal? ToFraction(double? percent) =>
+        percent is double p ? Math.Round((decimal)p / 100m, 4) : null;
 }
