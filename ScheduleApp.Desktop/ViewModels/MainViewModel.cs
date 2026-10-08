@@ -312,6 +312,7 @@ public partial class MainViewModel : ObservableObject
     public IAsyncRelayCommand ExportScheduleCommand => ImportExport.ExportScheduleCommand;
     public IAsyncRelayCommand ImportScheduleCommand => ImportExport.ImportScheduleCommand;
     public IAsyncRelayCommand ImportEmployeesCommand => ImportExport.ImportEmployeesCommand;
+    public IAsyncRelayCommand ExportEmployeesCommand => ImportExport.ExportEmployeesCommand;
 
     // ---- View-state persistence ----
 

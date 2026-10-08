@@ -271,4 +271,40 @@ public partial class ScheduleImportExportViewModel : ObservableObject
         await _tree.LoadAsync();
         _statusBarService.ShowSuccess($"Imported {rows.Count} employees.", "Import complete");
     }
+
+    /// <summary>
+    /// Saves the whole roster -- every department's employees plus the unassigned ones,
+    /// blacklisted included -- in the same column layout ImportEmployeesAsync reads (see
+    /// EmployeeRosterExporter's own doc comment), so the file can be edited in Excel and
+    /// imported straight back. Reads the full GetDepartmentsWithEmployeesAsync/
+    /// GetUnassignedEmployeesAsync pair rather than ActiveRosterProvider's Active-only cache,
+    /// since a roster export that silently dropped blacklisted employees wouldn't be the
+    /// complete roster.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportEmployeesAsync()
+    {
+        var saveDialog = new SaveFileDialog
+        {
+            Filter = "Excel workbook (*.xlsx)|*.xlsx",
+            FileName = $"Employees_{DateTime.Today:yyyy-MM-dd}.xlsx",
+        };
+        if (saveDialog.ShowDialog() != true) return;
+
+        try
+        {
+            var departments = await _repository.GetDepartmentsWithEmployeesAsync();
+            var unassigned = await _repository.GetUnassignedEmployeesAsync();
+            EmployeeRosterExporter.Export(departments, unassigned, saveDialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            // Most likely cause: the target file is open in Excel (sharing violation),
+            // or the destination path/folder is no longer valid.
+            _statusBarService.ShowError($"Could not export employees. {ex.Message}", "Export failed");
+            return;
+        }
+
+        _statusBarService.ShowSuccess("Employees exported.", "Export complete");
+    }
 }

@@ -31,18 +31,18 @@ namespace ScheduleApp.Excel;
 /// </summary>
 public static class EmployeeRosterImporter
 {
-    private const string EmployeeIdHeader = "EmployeeId";
-    private const string LastNameHeader = "LastName";
-    private const string FirstNameHeader = "FirstName";
-    private const string DepartmentHeader = "Department";
-    private const string DailyRateHeader = "DailyRate";
-    private const string IsOvertimeEligibleHeader = "IsOvertimeEligible";
-    private const string HasOvertimePremiumHeader = "HasOvertimePremium";
-    private const string HasNightDiffHeader = "HasNightDiff";
-    private const string SssHeader = "SSS";
-    private const string PhilHealthHeader = "PhilHealth";
-    private const string PagIbigHeader = "PagIBIG";
-    private const string HasLeaveWithPayHeader = "HasLeaveWithPay";
+    internal const string EmployeeIdHeader = "EmployeeId";
+    internal const string LastNameHeader = "LastName";
+    internal const string FirstNameHeader = "FirstName";
+    internal const string DepartmentHeader = "Department";
+    internal const string DailyRateHeader = "DailyRate";
+    internal const string IsOvertimeEligibleHeader = "IsOvertimeEligible";
+    internal const string HasOvertimePremiumHeader = "HasOvertimePremium";
+    internal const string HasNightDiffHeader = "HasNightDiff";
+    internal const string SssHeader = "SSS";
+    internal const string PhilHealthHeader = "PhilHealth";
+    internal const string PagIbigHeader = "PagIBIG";
+    internal const string HasLeaveWithPayHeader = "HasLeaveWithPay";
 
     public static List<EmployeeImportRow> Import(string filePath)
     {

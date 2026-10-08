@@ -230,7 +230,11 @@
                                                                      Margin="0,0,6,0"/>
                                                 <controls:IconButton Icon="&#xE8B5;"
                                                                      Content="Import"
-                                                                     Command="{Binding ImportEmployeesCommand}"/>
+                                                                     Command="{Binding ImportEmployeesCommand}"
+                                                                     Margin="0,0,6,0"/>
+                                                <controls:IconButton Icon="&#xEDE1;"
+                                                                     Content="Export"
+                                                                     Command="{Binding ExportEmployeesCommand}"/>
                                         </StackPanel>
 
                                         <TextBlock VerticalAlignment="Center"
