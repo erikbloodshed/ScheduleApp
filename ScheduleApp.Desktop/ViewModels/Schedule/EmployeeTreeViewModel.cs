@@ -143,6 +143,11 @@ public class EmployeeTreeViewModel : ViewModelBase
 
     public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
 
+    /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
+    /// what the Schedule tab's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).
+    /// EmployeesPage deliberately binds to Departments instead, ignoring the filter.</summary>
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
+
     public Employee? SelectedEmployee
     {
         get => _selectedEmployee;
@@ -211,7 +216,7 @@ public class EmployeeTreeViewModel : ViewModelBase
 
     private string _searchText = string.Empty;
 
-    private void ApplySearchFilter() => EmployeeTreeSearchFilter.Apply(Departments, SearchText);
+    private void ApplySearchFilter() => EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
 
     /// <summary>Set once LoadAsync has applied the saved employee/department selection
     /// for the first time this run -- guards against a later reload (e.g. after Import

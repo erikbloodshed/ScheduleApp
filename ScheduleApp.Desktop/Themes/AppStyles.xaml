@@ -87,6 +87,15 @@
         <TextBlock Text="&#xE713;" Style="{StaticResource IconGlyphStyle}" />
     </DataTemplate>
 
+    <!-- A ButtonAdv whose glyph changes with state, such as a header's Refresh that turns
+         into Cancel while something runs: the glyph is the button's own Tag, so one template
+         serves every such button (<ButtonAdv SizeMode="Small" Tag="{Binding SomeGlyph}"
+         IconTemplate="{StaticResource TagGlyphIconTemplate}" />). -->
+    <DataTemplate x:Key="TagGlyphIconTemplate">
+        <TextBlock Text="{Binding Tag, RelativeSource={RelativeSource AncestorType={x:Type ButtonBase}}}"
+                   Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+
     <!-- Generic card-like grouping container - the shared replacement for the plain
          <Border Background="#F..." BorderBrush="#E../#C.."> pattern repeated across most
          pages/dialogs before this file existed. -->

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using ReactiveUI;
 using ScheduleApp.Core.Models;
 
@@ -13,6 +14,14 @@ public class DepartmentGroupViewModel : ReactiveObject
     public required string Name { get; init; }
     public Department? RealDepartment { get; init; }
     public List<EmployeeNodeViewModel> Employees { get; init; } = new();
+
+    /// <summary>The employees a search box hasn't hidden (IsVisible), in Employees' order --
+    /// what a filtered tree binds its rows to, since SfTreeView can't hide a row itself. Kept
+    /// in step by EmployeeTreeSearchFilter.Apply; every employee until that first runs.</summary>
+    public ObservableCollection<EmployeeNodeViewModel> VisibleEmployees { get; } = new();
+
+    /// <summary>Brings VisibleEmployees in line with each employee's IsVisible.</summary>
+    public void RefreshVisibleEmployees() => CollectionSync.Sync(VisibleEmployees, Employees.Where(e => e.IsVisible));
 
     public bool IsUnassignedBucket => RealDepartment is null;
 
@@ -71,6 +80,8 @@ public class DepartmentGroupViewModel : ReactiveObject
     /// in sync as individual employee checkboxes are toggled.</summary>
     public void AttachChildNotifications()
     {
+        RefreshVisibleEmployees();
+
         foreach (var node in Employees)
         {
             node.PropertyChanged += (_, e) =>

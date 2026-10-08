@@ -1,6 +1,5 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ReactiveUI;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
@@ -59,9 +58,9 @@ namespace ScheduleApp.Desktop.ViewModels;
 ///    for why this cascade couldn't live on either sibling that reads/writes the flag.
 ///
 /// A ReactiveObject: it has no action of its own that can fail, so it doesn't need
-/// ViewModelBase. Its children move to ReactiveUI one at a time; until they all have,
-/// the forwarded commands below are a mix of ReactiveCommands (Tree's) and the
-/// CommunityToolkit commands the other children still have.
+/// ViewModelBase. Its four children's commands, forwarded below, are ReactiveCommands
+/// whose CanExecute follows MultiSelectModeState for themselves, so the cascade below
+/// only has its own properties and the tree's checkboxes left to see to.
 /// </summary>
 public class MainViewModel : ReactiveObject
 {
@@ -157,11 +156,6 @@ public class MainViewModel : ReactiveObject
             this.RaisePropertyChanged(nameof(IsMultiSelectMode));
             this.RaisePropertyChanged(nameof(MultiSelectButtonText));
             this.RaisePropertyChanged(nameof(CalendarHeaderText));
-            Assignment.SetScheduleForSelectionCommand.NotifyCanExecuteChanged();
-            Assignment.SetLeaveForSelectionCommand.NotifyCanExecuteChanged();
-            Assignment.ClearScheduleForSelectionCommand.NotifyCanExecuteChanged();
-            Calendar.RecalculateScheduleCommand.NotifyCanExecuteChanged();
-            Calendar.RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
 
             // Leaving the mode (whether by cancelling or after a successful bulk assign)
             // clears whatever was checked -- checkboxes are about to disappear, so a leftover
@@ -183,6 +177,7 @@ public class MainViewModel : ReactiveObject
     // that XAML or code-behind needed to change as part of the split.
 
     public ObservableCollection<DepartmentGroupViewModel> Departments => Tree.Departments;
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments => Tree.VisibleDepartments;
     public ObservableCollection<ScheduleEntry> ScheduleEntries => Calendar.ScheduleEntries;
     public ObservableCollection<CalendarDayViewModel> CalendarDays => Calendar.CalendarDays;
 
@@ -263,13 +258,13 @@ public class MainViewModel : ReactiveObject
 
     public string DisplayedMonthText => Calendar.DisplayedMonthText;
 
-    public IRelayCommand PreviousMonthCommand => Calendar.PreviousMonthCommand;
-    public IRelayCommand NextMonthCommand => Calendar.NextMonthCommand;
-    public IAsyncRelayCommand RecalculateScheduleCommand => Calendar.RecalculateScheduleCommand;
+    public ReactiveCommand<RxVoid, RxVoid> PreviousMonthCommand => Calendar.PreviousMonthCommand;
+    public ReactiveCommand<RxVoid, RxVoid> NextMonthCommand => Calendar.NextMonthCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RecalculateScheduleCommand => Calendar.RecalculateScheduleCommand;
 
     /// <summary>What SchedulePage's calendar-header icon button actually binds to now --
     /// see ScheduleCalendarViewModel.RefreshOrCancelSchedule's own doc comment.</summary>
-    public IRelayCommand RefreshOrCancelScheduleCommand => Calendar.RefreshOrCancelScheduleCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelScheduleCommand => Calendar.RefreshOrCancelScheduleCommand;
     public string RefreshOrCancelGlyph => Calendar.RefreshOrCancelGlyph;
     public string RefreshOrCancelToolTip => Calendar.RefreshOrCancelToolTip;
 
@@ -294,29 +289,29 @@ public class MainViewModel : ReactiveObject
     public ReactiveCommand<RxVoid, RxVoid> BlacklistEmployeeCommand => Tree.BlacklistEmployeeCommand;
     public ReactiveCommand<RxVoid, RxVoid> UnblacklistEmployeeCommand => Tree.UnblacklistEmployeeCommand;
 
-    public IAsyncRelayCommand<ScheduleType?> SetScheduleForSelectionCommand => Assignment.SetScheduleForSelectionCommand;
-    public IAsyncRelayCommand SetLeaveForSelectionCommand => Assignment.SetLeaveForSelectionCommand;
+    public ReactiveCommand<ScheduleType?, RxVoid> SetScheduleForSelectionCommand => Assignment.SetScheduleForSelectionCommand;
+    public ReactiveCommand<RxVoid, RxVoid> SetLeaveForSelectionCommand => Assignment.SetLeaveForSelectionCommand;
     public ReactiveCommand<RxVoid, RxVoid> ClearEmployeeSelectionCommand => Tree.ClearEmployeeSelectionCommand;
-    public IAsyncRelayCommand ClearScheduleForSelectionCommand => Assignment.ClearScheduleForSelectionCommand;
-    public IRelayCommand ClearCalendarSelectionCommand => Calendar.ClearCalendarSelectionCommand;
-    public IAsyncRelayCommand<CalendarDayViewModel> AddManualEntryForDayCommand => Assignment.AddManualEntryForDayCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ClearScheduleForSelectionCommand => Assignment.ClearScheduleForSelectionCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ClearCalendarSelectionCommand => Calendar.ClearCalendarSelectionCommand;
+    public ReactiveCommand<CalendarDayViewModel, RxVoid> AddManualEntryForDayCommand => Assignment.AddManualEntryForDayCommand;
 
     /// <summary>Calendar right-click "Edit Punch Pairing…" -- see
     /// ScheduleAssignmentViewModel.EditPunchPairingForDayAsync. Reached only from
     /// MonthCalendarControl.BuildDayContextMenu (no button on SchedulePage.xaml), same as
     /// AddManualEntryForDayCommand just above.</summary>
-    public IAsyncRelayCommand<CalendarDayViewModel> EditPunchPairingForDayCommand => Assignment.EditPunchPairingForDayCommand;
+    public ReactiveCommand<CalendarDayViewModel, RxVoid> EditPunchPairingForDayCommand => Assignment.EditPunchPairingForDayCommand;
 
     /// <summary>Calendar right-click "Mark as Holiday…" / "Remove Holiday" -- see
     /// ScheduleAssignmentViewModel.ToggleHolidayForSelectionAsync. Reached only from
     /// MonthCalendarControl.BuildDayContextMenu (no button on SchedulePage.xaml), same as
     /// AddManualEntryForDayCommand above.</summary>
-    public IAsyncRelayCommand ToggleHolidayForSelectionCommand => Assignment.ToggleHolidayForSelectionCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ToggleHolidayForSelectionCommand => Assignment.ToggleHolidayForSelectionCommand;
 
-    public IAsyncRelayCommand ExportScheduleCommand => ImportExport.ExportScheduleCommand;
-    public IAsyncRelayCommand ImportScheduleCommand => ImportExport.ImportScheduleCommand;
-    public IAsyncRelayCommand ImportEmployeesCommand => ImportExport.ImportEmployeesCommand;
-    public IAsyncRelayCommand ExportEmployeesCommand => ImportExport.ExportEmployeesCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ExportScheduleCommand => ImportExport.ExportScheduleCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ImportScheduleCommand => ImportExport.ImportScheduleCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ImportEmployeesCommand => ImportExport.ImportEmployeesCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ExportEmployeesCommand => ImportExport.ExportEmployeesCommand;
 
     // ---- View-state persistence ----
 

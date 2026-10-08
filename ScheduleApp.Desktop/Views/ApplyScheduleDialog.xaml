@@ -1,6 +1,7 @@
 <controls:AppWindow x:Class="ScheduleApp.Desktop.Views.ApplyScheduleDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
                  xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
                  xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
                  xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
@@ -36,14 +37,18 @@
                   Orientation="Horizontal"
                   HorizontalAlignment="Right"
                   Margin="0,16,0,0">
-        <Button Content="OK"
-                Width="80"
-                Margin="0,0,8,0"
-                IsDefault="True"
-                Click="OkButton_Click" />
-        <Button Content="Cancel"
-                Width="80"
-                IsCancel="True" />
+        <syncfusion:ButtonAdv Label="OK"
+                              IconTemplate="{StaticResource ApplyIconTemplate}"
+                              SizeMode="Normal"
+                              Width="80"
+                              Margin="0,0,8,0"
+                              IsDefault="True"
+                              Click="OkButton_Click" />
+        <syncfusion:ButtonAdv Label="Cancel"
+                              IconTemplate="{StaticResource CancelIconTemplate}"
+                              SizeMode="Normal"
+                              Width="80"
+                              IsCancel="True" />
       </StackPanel>
 
       <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -94,18 +99,18 @@
                      Grid.Column="0"
                      Grid.ColumnSpan="2"
                      Margin="0,0,0,4" />
-          <ComboBox x:Name="TypeCombo"
+          <syncfusion:ComboBoxAdv x:Name="TypeCombo"
                     Grid.Row="5"
                     Grid.Column="0"
                     Grid.ColumnSpan="2"
                     Margin="0,0,0,12"
                     SelectionChanged="TypeCombo_SelectionChanged">
-            <ComboBox.ItemTemplate>
+            <syncfusion:ComboBoxAdv.ItemTemplate>
               <DataTemplate>
                 <TextBlock Text="{Binding Converter={StaticResource ScheduleTypeToDisplayText}}" />
               </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
+            </syncfusion:ComboBoxAdv.ItemTemplate>
+          </syncfusion:ComboBoxAdv>
 
           <!-- RestDay-only. Governs the two fields below directly, replacing the old
              "leave Work time and Time in both blank via the text/picker controls
@@ -149,7 +154,7 @@
                      Grid.Row="7"
                      Grid.Column="1"
                      Margin="8,0,0,4" />
-          <TextBox x:Name="WorkTimeBox"
+          <syncfusion:SfTextBoxExt x:Name="WorkTimeBox"
                    Grid.Row="8"
                    Grid.Column="0"
                    Width="90"
@@ -287,16 +292,17 @@
             </ScrollViewer>
           </Border>
 
-          <Button x:Name="AddSegmentButton"
-                  Grid.Row="11"
-                  Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Content="+ Add window"
-                  HorizontalAlignment="Left"
-                  Padding="8,3"
-                  Margin="0,0,0,4"
-                  Visibility="Collapsed"
-                  Click="AddSegmentButton_Click" />
+          <syncfusion:ButtonAdv x:Name="AddSegmentButton"
+                                Grid.Row="11"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                Label="Add window"
+                                IconTemplate="{StaticResource AddIconTemplate}"
+                                SizeMode="Normal"
+                                HorizontalAlignment="Left"
+                                Margin="0,0,0,4"
+                                Visibility="Collapsed"
+                                Click="AddSegmentButton_Click" />
 
           <!-- Buffer overrides for the two types that actually match punches
              against a single scheduled window via SingleWindowShiftCalculationStrategy
@@ -352,14 +358,14 @@
                          FontSize="11"
                          Foreground="{DynamicResource MutedForegroundBrush}"
                          Margin="4,0,0,2" />
-              <TextBox x:Name="ClockInBufferBeforeBox"
+              <syncfusion:SfTextBoxExt x:Name="ClockInBufferBeforeBox"
                        Grid.Row="1"
                        Grid.Column="0"
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="0,0,4,10"
                        ToolTip="How many hours before the scheduled time in a punch still counts as clock-in. Grayed-out tracks the employee/policy default live; type over it to lock in just this day." />
-              <TextBox x:Name="ClockInBufferAfterBox"
+              <syncfusion:SfTextBoxExt x:Name="ClockInBufferAfterBox"
                        Grid.Row="1"
                        Grid.Column="1"
                        Width="70"
@@ -379,14 +385,14 @@
                          FontSize="11"
                          Foreground="{DynamicResource MutedForegroundBrush}"
                          Margin="4,0,0,2" />
-              <TextBox x:Name="ClockOutBufferBeforeBox"
+              <syncfusion:SfTextBoxExt x:Name="ClockOutBufferBeforeBox"
                        Grid.Row="3"
                        Grid.Column="0"
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="0,0,4,0"
                        ToolTip="How many hours before the scheduled time out a punch still counts as clock-out. Grayed-out tracks the employee/policy default live; type over it to lock in just this day." />
-              <TextBox x:Name="ClockOutBufferAfterBox"
+              <syncfusion:SfTextBoxExt x:Name="ClockOutBufferAfterBox"
                        Grid.Row="3"
                        Grid.Column="1"
                        Width="70"
@@ -454,13 +460,13 @@
                          FontSize="11"
                          Foreground="{DynamicResource MutedForegroundBrush}"
                          Margin="4,0,0,2" />
-              <ComboBox x:Name="OvertimeEligibleCombo"
+              <syncfusion:ComboBoxAdv x:Name="OvertimeEligibleCombo"
                         Grid.Row="1"
                         Grid.Column="0"
                         Margin="0,0,4,10"
                         HorizontalAlignment="Stretch"
                         ToolTip="Per-day override of overtime eligibility -- 'Use employee default' inherits it; 'Eligible'/'Not eligible' overrides just this day, without changing the employee's own setting." />
-              <ComboBox x:Name="NightDiffEligibleCombo"
+              <syncfusion:ComboBoxAdv x:Name="NightDiffEligibleCombo"
                         Grid.Row="1"
                         Grid.Column="1"
                         Margin="4,0,0,10"
@@ -473,7 +479,7 @@
                          FontSize="11"
                          Foreground="{DynamicResource MutedForegroundBrush}"
                          Margin="0,0,4,2" />
-              <ComboBox x:Name="ApplyOvertimeRatePercentageCombo"
+              <syncfusion:ComboBoxAdv x:Name="ApplyOvertimeRatePercentageCombo"
                         Grid.Row="3"
                         Grid.Column="0"
                         Margin="0,0,4,10"
@@ -492,14 +498,14 @@
                          FontSize="11"
                          Foreground="{DynamicResource MutedForegroundBrush}"
                          Margin="4,0,0,2" />
-              <TextBox x:Name="OvertimeRatePercentageBox"
+              <syncfusion:SfTextBoxExt x:Name="OvertimeRatePercentageBox"
                        Grid.Row="5"
                        Grid.Column="0"
                        Width="70"
                        HorizontalAlignment="Left"
                        Margin="0,0,4,0"
                        ToolTip="Overrides the overtime rate % for just this day. Grayed-out tracks the policy default live; type over it to lock in. Only applies when eligible and the premium is on." />
-              <TextBox x:Name="NightDiffRatePercentageBox"
+              <syncfusion:SfTextBoxExt x:Name="NightDiffRatePercentageBox"
                        Grid.Row="5"
                        Grid.Column="1"
                        Width="70"

@@ -1,10 +1,10 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using ReactiveUI;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Models;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
-public partial class CalendarDayViewModel : ObservableObject
+public class CalendarDayViewModel : ReactiveObject
 {
     public DateOnly Date { get; init; }
     public bool IsCurrentMonth { get; init; }
@@ -37,8 +37,13 @@ public partial class CalendarDayViewModel : ObservableObject
 
     /// <summary>Set by MonthCalendarControl's click/drag selection; read by the
     /// "set/clear schedule for selection" commands on MainViewModel.</summary>
-    [ObservableProperty]
-    private bool isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+    }
+
+    private bool _isSelected;
 
     /// <summary>The schedule-vs-punches result for this day, for the little
     /// completion marker in the cell's bottom-left corner (see
@@ -52,8 +57,13 @@ public partial class CalendarDayViewModel : ObservableObject
     /// even though its own Status stays PunchStatus.RestDay everywhere else
     /// (payroll, reports, Excel export) -- see
     /// RefreshCalendarAttendanceStatusesAsync's own doc comment.</summary>
-    [ObservableProperty]
-    private PunchStatus? attendanceStatus;
+    public PunchStatus? AttendanceStatus
+    {
+        get => _attendanceStatus;
+        set => this.RaiseAndSetIfChanged(ref _attendanceStatus, value);
+    }
+
+    private PunchStatus? _attendanceStatus;
 
     /// <summary>True when this day's computed clock-in or clock-out is a hand-entered
     /// (manual) punch rather than a device tap -- set alongside
@@ -62,9 +72,9 @@ public partial class CalendarDayViewModel : ObservableObject
     /// from it; it exists so the tile's right-click punch menu stays editable ("Edit
     /// Punches…") on an otherwise-Complete non-Flexible day whose completion rests on a
     /// manual punch that might still need correcting or removing -- see
-    /// MonthCalendarControl.BuildDayContextMenu. Plain settable (not
-    /// <c>[ObservableProperty]</c>) since it has no binding, only that one code-behind
-    /// reader, refreshed on every menu build.</summary>
+    /// MonthCalendarControl.BuildDayContextMenu. Plain settable (no change notification)
+    /// since it has no binding, only that one code-behind reader, refreshed on every menu
+    /// build.</summary>
     public bool HasManualPunch { get; set; }
 
     public int DayNumber => Date.Day;

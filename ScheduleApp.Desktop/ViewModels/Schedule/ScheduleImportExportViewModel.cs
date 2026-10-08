@@ -1,6 +1,4 @@
 using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
@@ -10,6 +8,8 @@ using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
@@ -51,14 +51,13 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// and forwards its members flatly, the same way AttendanceViewModel forwards
 /// AttendanceImportViewModel's.
 ///
-/// Not yet compiled against the real project (same no-SDK caveat as phases 1-4) -- flagging
-/// this again for phase 6's author, same as phases 1 through 4 each did for the phase right
-/// after them.
+/// A ReactiveUI ViewModel (ViewModelBase): a failure no catch below expected is shown and
+/// logged rather than escaping a command, and an import's list of problems is shown through
+/// Notify, which the page answers with a MessageBox.
 /// </summary>
-public partial class ScheduleImportExportViewModel : ObservableObject
+public class ScheduleImportExportViewModel : ViewModelBase
 {
     private readonly IScheduleRepository _repository;
-    private readonly IStatusBarService _statusBarService;
 
     /// <summary>Shared with EmployeeTreeViewModel, ScheduleAssignmentViewModel,
     /// AttendanceViewModel, and PayrollViewModel (same instance -- see App.xaml.cs's
@@ -119,14 +118,26 @@ public partial class ScheduleImportExportViewModel : ObservableObject
         EmployeeTreeViewModel tree,
         ScheduleCalendarViewModel calendar,
         ActiveRosterProvider activeRosterProvider)
+        : base(statusBarService)
     {
         _repository = repository;
-        _statusBarService = statusBarService;
         _dataVersion = dataVersion;
         _tree = tree;
         _calendar = calendar;
         _activeRosterProvider = activeRosterProvider;
+
+        ExportScheduleCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportScheduleAsync));
+        ImportScheduleCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportScheduleAsync));
+        ImportEmployeesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportEmployeesAsync));
+        ExportEmployeesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportEmployeesAsync));
     }
+
+    public ReactiveCommand<RxVoid, RxVoid> ExportScheduleCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ImportScheduleCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ImportEmployeesCommand { get; }
+
+    /// <summary>See ExportEmployeesAsync.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> ExportEmployeesCommand { get; }
 
     /// <summary>
     /// Opens the same Department/Employee checkbox-tree + period-picker scope dialog
@@ -138,7 +149,6 @@ public partial class ScheduleImportExportViewModel : ObservableObject
     /// (unlike payroll) has never required an Employee ID -- see
     /// PayslipScopeViewModel.GetSelectedEmployees' own doc comment.
     /// </summary>
-    [RelayCommand]
     private async Task ExportScheduleAsync()
     {
         var defaultStart = new DateTime(_calendar.DisplayedMonth.Year, _calendar.DisplayedMonth.Month, 1);
@@ -181,15 +191,14 @@ public partial class ScheduleImportExportViewModel : ObservableObject
         catch (Exception ex)
         {
             // Most likely cause: the target file is open in Excel (sharing violation),
-            // or the destination path/folder is no longer valid.
-            _statusBarService.ShowError($"Could not export the schedule. {ex.Message}", "Export failed");
+            // or the destination path/folder is no longer valid -- Failure says which.
+            ShowFailure(ex, "Could not export the schedule");
             return;
         }
 
-        _statusBarService.ShowSuccess("Schedule exported.", "Export complete");
+        StatusBar.ShowSuccess("Schedule exported.", "Export complete");
     }
 
-    [RelayCommand]
     private async Task ImportScheduleAsync()
     {
         var dialog = new OpenFileDialog { Filter = "Excel workbook (*.xlsx)|*.xlsx" };
@@ -219,24 +228,24 @@ public partial class ScheduleImportExportViewModel : ObservableObject
             // layout problem, so it gets its own message rather than the generic
             // catch's "Check that it matches the expected column layout" below, which
             // would be actively misleading here.
-            _statusBarService.ShowError(ex.Message, "Import failed");
+            ShowFailure(ex, "Import failed");
             return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Most likely cause: a cell that doesn't match the expected layout --
             // a non-numeric Id, a blank/invalid StartDate or EndDate, etc.
-            _statusBarService.ShowError(
+            Logger.Warning(ex, "Schedule import failed");
+            StatusBar.ShowError(
                 $"Could not import this file. Check that it matches the expected column layout. {ex.Message}",
                 "Import failed");
             return;
         }
 
         await _tree.LoadAsync();
-        _statusBarService.ShowSuccess("Schedule import complete.", "Import");
+        StatusBar.ShowSuccess("Schedule import complete.", "Import");
     }
 
-    [RelayCommand]
     private async Task ImportEmployeesAsync()
     {
         var dialog = new OpenFileDialog { Filter = "Excel workbook (*.xlsx)|*.xlsx" };
@@ -256,20 +265,21 @@ public partial class ScheduleImportExportViewModel : ObservableObject
             // transient, single-line-ish notification isn't a good fit for that, so this
             // uses the same MessageBox surface the rest of the app already reserves for
             // things the status bar can't handle (see StatusBarNotificationExtensions' own
-            // doc comment).
-            MessageBox.Show(ex.Message, "Import problems found", MessageBoxButton.OK, MessageBoxImage.Warning);
+            // doc comment), through Notify, which the page answers.
+            await NotifyAsync(ex.Message, "Import problems found", NoticeKind.Warning);
             return;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _statusBarService.ShowError(
+            Logger.Warning(ex, "Employee import failed");
+            StatusBar.ShowError(
                 $"Could not import this file. Check that it matches the expected column layout. {ex.Message}",
                 "Import failed");
             return;
         }
 
         await _tree.LoadAsync();
-        _statusBarService.ShowSuccess($"Imported {rows.Count} employees.", "Import complete");
+        StatusBar.ShowSuccess($"Imported {rows.Count} employees.", "Import complete");
     }
 
     /// <summary>
@@ -281,7 +291,6 @@ public partial class ScheduleImportExportViewModel : ObservableObject
     /// since a roster export that silently dropped blacklisted employees wouldn't be the
     /// complete roster.
     /// </summary>
-    [RelayCommand]
     private async Task ExportEmployeesAsync()
     {
         var saveDialog = new SaveFileDialog
@@ -300,11 +309,11 @@ public partial class ScheduleImportExportViewModel : ObservableObject
         catch (Exception ex)
         {
             // Most likely cause: the target file is open in Excel (sharing violation),
-            // or the destination path/folder is no longer valid.
-            _statusBarService.ShowError($"Could not export employees. {ex.Message}", "Export failed");
+            // or the destination path/folder is no longer valid -- Failure says which.
+            ShowFailure(ex, "Could not export employees");
             return;
         }
 
-        _statusBarService.ShowSuccess("Employees exported.", "Export complete");
+        StatusBar.ShowSuccess("Employees exported.", "Export complete");
     }
 }

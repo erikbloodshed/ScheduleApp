@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reactive.Linq;
 using ReactiveUI;
 using ScheduleApp.Desktop.Services;
@@ -79,6 +80,26 @@ public abstract class ViewModelBase(IStatusBarService statusBarService) : Reacti
                 }
             })))
             .Subscribe();
+
+    /// <summary>
+    /// A command's CanExecute that re-asks <paramref name="canExecute"/> whenever any of
+    /// <paramref name="sources"/> raises PropertyChanged -- the ReactiveUI form of the
+    /// "PropertyChanged, then NotifyCanExecuteChanged" wiring a CommunityToolkit command
+    /// needed. For a condition read off shared state some other object owns
+    /// (AttendanceBusyState.IsRunning, MultiSelectModeState, a sibling's selection), where a
+    /// WhenAnyValue on this ViewModel's own properties can't see the change. Asked first when
+    /// the command subscribes, not when this is called, so it can be built before every
+    /// field the condition reads is set.
+    /// </summary>
+    protected static IObservable<bool> CanExecuteWhen(Func<bool> canExecute, params INotifyPropertyChanged[] sources) =>
+        Observable.Defer(() => Observable.Return(canExecute()))
+            .Concat(sources
+                .Select(source => Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                    handler => source.PropertyChanged += handler,
+                    handler => source.PropertyChanged -= handler))
+                .Merge()
+                .Select(_ => canExecute()))
+            .DistinctUntilChanged();
 
     /// <summary>
     /// Shows <paramref name="exception"/> on the status bar in <see cref="Failure"/>'s words, under

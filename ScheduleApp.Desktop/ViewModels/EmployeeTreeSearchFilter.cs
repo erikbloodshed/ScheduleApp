@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using ScheduleApp.Core.Models;
 
 namespace ScheduleApp.Desktop.ViewModels;
@@ -26,8 +27,25 @@ internal static class EmployeeTreeSearchFilter
     /// departmentNameMatches -- this has to be enforced here, not just once at tree-load
     /// time, since Apply recomputes every node's IsVisible from scratch on every
     /// keystroke and would otherwise silently un-hide a blacklisted employee the moment
-    /// a search term (or their department's name) matched them.</summary>
-    public static void Apply(IEnumerable<DepartmentGroupViewModel> departments, string searchText)
+    /// a search term (or their department's name) matched them.
+    ///
+    /// Each department's VisibleEmployees, and <paramref name="visibleDepartments"/> when a
+    /// caller passes one, are brought in line with the new IsVisible flags afterwards -- they're
+    /// what an SfTreeView binds to, since it has no way to hide a row of its own.</summary>
+    public static void Apply(IEnumerable<DepartmentGroupViewModel> departments, string searchText,
+        ObservableCollection<DepartmentGroupViewModel>? visibleDepartments = null)
+    {
+        var departmentList = departments as IReadOnlyList<DepartmentGroupViewModel> ?? [.. departments];
+        ApplyFlags(departmentList, searchText);
+
+        foreach (var department in departmentList)
+            department.RefreshVisibleEmployees();
+
+        if (visibleDepartments is not null)
+            CollectionSync.Sync(visibleDepartments, departmentList.Where(d => d.IsVisible));
+    }
+
+    private static void ApplyFlags(IEnumerable<DepartmentGroupViewModel> departments, string searchText)
     {
         var terms = searchText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 

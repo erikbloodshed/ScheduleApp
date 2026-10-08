@@ -1,8 +1,9 @@
 using System.Reactive.Linq;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ScheduleApp.Desktop.ViewModels;
+using Syncfusion.UI.Xaml.TreeView;
+using Syncfusion.UI.Xaml.TreeView.Engine;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -16,6 +17,11 @@ public partial class SchedulePage : Page, INavigationAware
         _viewModel = viewModel;
         DataContext = viewModel;
         InitializeComponent();
+
+        // Remove Schedule/Holiday ask first, and Import Employees/Schedule can have a list of
+        // problems to show; both go through the ViewModels' Confirm/Notify.
+        MessageBoxInteractions.Register(viewModel.Assignment, this);
+        MessageBoxInteractions.Register(viewModel.ImportExport, this);
     }
 
     // Loads on first navigation to this page rather than eagerly at app
@@ -38,54 +44,65 @@ public partial class SchedulePage : Page, INavigationAware
         // LoadCommand may have just restored SelectedEmployee/SelectedDepartment
         // from last launch (see MainViewModel.RestoreSelectionFromViewState) --
         // that alone already drives the calendar and header text correctly, but
-        // TreeView.SelectedItem has no built-in two-way binding, so the tree
-        // itself won't visually highlight that node without this nudge.
-        // Dispatched rather than called inline so the tree's containers (one
-        // per department/employee row) have actually been generated from
-        // Departments by the time this runs.
+        // the tree's own selection isn't bound to it, so the tree itself won't
+        // visually highlight that node without this nudge. Dispatched rather than
+        // called inline so the tree's nodes have actually been generated from
+        // VisibleDepartments by the time this runs.
         _ = Dispatcher.BeginInvoke(TryHighlightRestoredSelection, DispatcherPriority.ContextIdle);
     }
 
     public Task OnNavigatedFromAsync() => Task.CompletedTask;
 
-    /// <summary>Best-effort only -- if a container isn't ready for some reason,
-    /// the tree just starts unhighlighted. The calendar's already showing the
-    /// right employee/month regardless (see OnNavigatedToAsync above), so a
-    /// missed highlight is a minor cosmetic gap, not a functional one.</summary>
+    /// <summary>Best-effort only -- if the node isn't there (hidden by the search box, say),
+    /// the tree just starts unhighlighted. The calendar's already showing the right
+    /// employee/month regardless (see OnNavigatedToAsync above), so a missed highlight is
+    /// a minor cosmetic gap, not a functional one. Selecting in code doesn't raise
+    /// SelectionChanged (SfTreeView raises it for clicks only), so this doesn't feed back
+    /// into the ViewModel either.</summary>
     private void TryHighlightRestoredSelection()
     {
-        foreach (var departmentGroup in _viewModel.Departments)
+        foreach (var departmentGroup in _viewModel.VisibleDepartments)
         {
-            if (EmployeeTree.ItemContainerGenerator.ContainerFromItem(departmentGroup) is not TreeViewItem departmentContainer)
-                continue;
-
             if (_viewModel.SelectedEmployee is { } employee)
             {
-                var employeeNode = departmentGroup.Employees.FirstOrDefault(n => n.Employee.Id == employee.Id);
+                var employeeNode = departmentGroup.VisibleEmployees.FirstOrDefault(n => n.Employee.Id == employee.Id);
                 if (employeeNode is null) continue;
 
-                departmentContainer.IsExpanded = true;
-                departmentContainer.UpdateLayout();
-
-                if (departmentContainer.ItemContainerGenerator.ContainerFromItem(employeeNode) is TreeViewItem employeeContainer)
-                {
-                    employeeContainer.IsSelected = true;
-                    employeeContainer.BringIntoView();
-                    return;
-                }
+                departmentGroup.IsExpanded = true;
+                EmployeeTree.SelectedItem = employeeNode;
+                BringIntoView(employeeNode);
+                return;
             }
-            else if (_viewModel.SelectedDepartment is { } department && departmentGroup.RealDepartment?.Id == department.Id)
+
+            if (_viewModel.SelectedDepartment is { } department && departmentGroup.RealDepartment?.Id == department.Id)
             {
-                departmentContainer.IsSelected = true;
-                departmentContainer.BringIntoView();
+                EmployeeTree.SelectedItem = departmentGroup;
+                BringIntoView(departmentGroup);
                 return;
             }
         }
     }
 
-    private void EmployeeTree_OnSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    private void BringIntoView(object content)
     {
-        switch (e.NewValue)
+        if (FindNode(EmployeeTree.Nodes, content) is { } node)
+            EmployeeTree.BringIntoView(node);
+    }
+
+    private static TreeViewNode? FindNode(IEnumerable<TreeViewNode> nodes, object content)
+    {
+        foreach (var node in nodes)
+        {
+            if (ReferenceEquals(node.Content, content)) return node;
+            if (FindNode(node.ChildNodes, content) is { } child) return child;
+        }
+
+        return null;
+    }
+
+    private void EmployeeTree_SelectionChanged(object? sender, ItemSelectionChangedEventArgs e)
+    {
+        switch (EmployeeTree.SelectedItem)
         {
             case EmployeeNodeViewModel node:
                 _viewModel.SelectedEmployee = node.Employee;

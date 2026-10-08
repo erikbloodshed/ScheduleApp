@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using ReactiveUI;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
@@ -10,6 +9,7 @@ using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
@@ -83,11 +83,12 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// and ScheduleCalendarViewModel.RefreshScheduleForSelectedEmployeeAsync's own doc
 /// comment, for the fix.
 ///
-/// Not yet compiled against the real project (same no-SDK caveat as phases 1-3) -- flagging
-/// this again for phase 5's author, same as phases 1 through 3 each did for the phase right
-/// after them.
+/// A ReactiveUI ViewModel (ViewModelBase): each command's CanExecute is re-asked whenever
+/// _busy, _multiSelectMode, _tree or _manualEntryEditor changes (CanExecuteWhen), which is
+/// what the PropertyChanged-then-NotifyCanExecuteChanged subscriptions used to do; the
+/// Remove Schedule/Holiday questions go through Confirm, which SchedulePage answers.
 /// </summary>
-public partial class ScheduleAssignmentViewModel : ObservableObject
+public class ScheduleAssignmentViewModel : ViewModelBase
 {
     private readonly IScheduleRepository _repository;
 
@@ -101,7 +102,6 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// use.</summary>
     private readonly IHolidayRepository _holidayRepository;
 
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceSettings _attendanceSettings;
 
     /// <summary>Only used to seed ApplyScheduleDialog's grayed-out placeholder text for the
@@ -189,10 +189,10 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         ScheduleCalendarViewModel calendar,
         MultiSelectModeState multiSelectMode,
         IDayPunchPairingEditorLauncher pairingLauncher)
+        : base(statusBarService)
     {
         _repository = repository;
         _holidayRepository = holidayRepository;
-        _statusBarService = statusBarService;
         _attendanceSettings = attendanceSettings;
         _payrollPolicy = payrollSettings.Policy;
         _busy = busy;
@@ -203,47 +203,43 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         _multiSelectMode = multiSelectMode;
         _pairingLauncher = pairingLauncher;
 
-        // Keeps the Set Schedule/Set Leave/Clear Schedule buttons in sync with
-        // _busy.IsRunning -- mirrors MainViewModel's own _busy.PropertyChanged(IsRunning)
-        // handler today, minus the RefreshScheduleForSelectedEmployeeAsync/
-        // RefreshCalendarAttendanceStatusesAsync re-run logic, which stays on
-        // ScheduleCalendarViewModel's own _busy.PropertyChanged subscription -- that class's
-        // own doc comment on the constructor already predicted this class would add its own
-        // subscription just for its own commands' CanExecute, the same "each class subscribes
-        // to what it needs" layering that class's own subscription to Tree already follows.
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
-
-            SetScheduleForSelectionCommand.NotifyCanExecuteChanged();
-            SetLeaveForSelectionCommand.NotifyCanExecuteChanged();
-            ClearScheduleForSelectionCommand.NotifyCanExecuteChanged();
-            AddManualEntryForDayCommand.NotifyCanExecuteChanged();
-            ToggleHolidayForSelectionCommand.NotifyCanExecuteChanged();
-        };
-
-        // Closes the same gap MainViewModel's own equivalent subscription closes today --
-        // see CanAddManualEntryForDay's own doc comment below for the race this avoids.
-        _manualEntryEditor.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(ManualEntryEditorViewModel.IsAttendanceBusy)) return;
-            AddManualEntryForDayCommand.NotifyCanExecuteChanged();
-        };
-
-        // The other half of the "child subscribes to the sibling it depends on" layering
-        // EmployeeTreeViewModel.LoadAsync/OnEmployeeNodeSelectionChanged's own doc comments
-        // already assigned to this class -- CanSetScheduleForSelection reads
-        // Tree.SelectedEmployeeCount, so a checkbox toggle in the tree needs to re-query it,
-        // the same way ScheduleCalendarViewModel's own Tree.PropertyChanged(SelectedEmployee)
-        // subscription reacts to a different Tree property for a different reason.
-        _tree.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(EmployeeTreeViewModel.SelectedEmployeeCount)) return;
-
-            SetScheduleForSelectionCommand.NotifyCanExecuteChanged();
-            SetLeaveForSelectionCommand.NotifyCanExecuteChanged();
-        };
+        // Each command's CanExecute is re-asked whenever anything it reads changes:
+        // _busy.IsRunning for all of them, the multi-select flag and Tree.SelectedEmployeeCount
+        // for Set/Leave (CanSetScheduleForSelection), and ManualEntryEditorViewModel.
+        // IsAttendanceBusy for the two calendar right-click items -- see each Can* method's own
+        // doc comment for why it gates on what it does.
+        var canSet = CanExecuteWhen(CanSetScheduleForSelection, _busy, _multiSelectMode, _tree);
+        SetScheduleForSelectionCommand = ReactiveCommand.CreateFromTask<ScheduleType?>(
+            presetType => RunSafelyAsync(() => SetScheduleForSelectionAsync(presetType)), canSet);
+        SetLeaveForSelectionCommand = ReactiveCommand.CreateFromTask(
+            () => RunSafelyAsync(SetLeaveForSelectionAsync), canSet);
+        ClearScheduleForSelectionCommand = ReactiveCommand.CreateFromTask(
+            () => RunSafelyAsync(ClearScheduleForSelectionAsync),
+            CanExecuteWhen(CanClearScheduleForSelection, _busy, _multiSelectMode));
+        ToggleHolidayForSelectionCommand = ReactiveCommand.CreateFromTask(
+            () => RunSafelyAsync(ToggleHolidayForSelectionAsync),
+            CanExecuteWhen(CanToggleHolidayForSelection, _busy));
+        var canEditDay = CanExecuteWhen(CanEditDay, _busy, _manualEntryEditor);
+        AddManualEntryForDayCommand = ReactiveCommand.CreateFromTask<CalendarDayViewModel>(
+            day => RunSafelyAsync(() => AddManualEntryForDayAsync(day)), canEditDay);
+        EditPunchPairingForDayCommand = ReactiveCommand.CreateFromTask<CalendarDayViewModel>(
+            day => RunSafelyAsync(() => EditPunchPairingForDayAsync(day)), canEditDay);
     }
+
+    /// <summary>Set/Edit Schedule for the highlighted days, with an optional preset type (the
+    /// calendar's right-click "Set Schedule As" submenu) -- see SetScheduleForSelectionAsync.</summary>
+    public ReactiveCommand<ScheduleType?, RxVoid> SetScheduleForSelectionCommand { get; }
+
+    public ReactiveCommand<RxVoid, RxVoid> SetLeaveForSelectionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ClearScheduleForSelectionCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> ToggleHolidayForSelectionCommand { get; }
+
+    /// <summary>The calendar's right-click "Add Manual Entry…" for one tile -- see AddManualEntryForDayAsync.</summary>
+    public ReactiveCommand<CalendarDayViewModel, RxVoid> AddManualEntryForDayCommand { get; }
+
+    /// <summary>The calendar's right-click "Edit Punch Pairing…"/"View Punches…" for one tile
+    /// -- see EditPunchPairingForDayAsync.</summary>
+    public ReactiveCommand<CalendarDayViewModel, RxVoid> EditPunchPairingForDayCommand { get; }
 
     /// <summary>Also requires !_busy.IsRunning -- SetScheduleForSelectionAsync,
     /// SetLeaveForSelectionAsync, and (via AssignScheduleToCheckedEmployeesAsync/
@@ -256,9 +252,9 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// by the time one of these commands would write, the person has already gone through a
     /// confirmation dialog and made a decision, so silently queuing that decision behind
     /// whatever's running elsewhere -- with no visible sign anything is waiting -- would be a
-    /// worse experience than just not letting the click start in the first place. Notified via
-    /// the _busy.PropertyChanged handler in this class's own constructor, same as every other
-    /// _busy-gated command in the app.</summary>
+    /// worse experience than just not letting the click start in the first place. Re-asked
+    /// whenever _busy, _multiSelectMode or _tree changes (see the constructor), same as every
+    /// other _busy-gated command in the app.</summary>
     private bool CanSetScheduleForSelection() =>
         (!_multiSelectMode.IsMultiSelectMode || _tree.SelectedEmployeeCount > 0) && !_busy.IsRunning;
 
@@ -278,7 +274,6 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// items instead, which pre-selects that type in the dialog rather than leaving it to the
     /// usual default/prefill.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanSetScheduleForSelection))]
     private async Task SetScheduleForSelectionAsync(ScheduleType? presetType)
     {
         if (_multiSelectMode.IsMultiSelectMode)
@@ -289,14 +284,14 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
 
         if (_tree.SelectedEmployee is null)
         {
-            _statusBarService.ShowCaution("Select an employee first.", "No employee selected");
+            StatusBar.ShowCaution("Select an employee first.", "No employee selected");
             return;
         }
 
         var selectedDates = _calendar.GetSelectedDates();
         if (selectedDates.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Click a day, Shift+click or drag for a range, or Ctrl+click to pick several days -- then try again.",
                 "No days selected");
             return;
@@ -365,7 +360,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
                 cancellationToken: cancellationToken);
             _dataVersion.BumpScheduleForEmployees([employeePin]);
         },
-        onError: ex => _statusBarService.ShowError($"Could not save the schedule. {ex.Message}", "Save failed"));
+        onError: ex => ShowFailure(ex, "Could not save the schedule"));
 
         // A second, independent race sits underneath the "hidden busy cycle" one described
         // above: if the person switches to a different employee while the write above is
@@ -422,7 +417,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         var employees = _tree.GetCheckedEmployees();
         if (employees.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Check one or more employees in the tree first (each has a checkbox).",
                 "No employees selected");
             return;
@@ -431,7 +426,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         var selectedDates = _calendar.GetSelectedDates();
         if (selectedDates.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Click a day, Shift+click or drag for a range, or Ctrl+click to pick several days -- then try again.",
                 "No days selected");
             return;
@@ -500,11 +495,11 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
             // fire yet).
             _multiSelectMode.IsMultiSelectMode = false;
 
-            _statusBarService.ShowSuccess(
+            StatusBar.ShowSuccess(
                 $"Schedule applied to {employees.Count} employee(s) across {selectedDates.Count} day(s).",
                 "Bulk assign complete");
         },
-        onError: ex => _statusBarService.ShowError($"Could not assign the schedule. {ex.Message}", "Bulk assign failed"));
+        onError: ex => ShowFailure(ex, "Could not assign the schedule"));
 
         // Same race SetScheduleForSelectionAsync's own guard comment above describes in
         // full (including why AttendanceBusyState.RunAsync's own hardening, not this
@@ -532,7 +527,6 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// dropdown) still goes through ApplyScheduleDialog as before; this is only reached from
     /// that one submenu item. Same multi-select branching as SetScheduleForSelectionAsync.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanSetScheduleForSelection))]
     private async Task SetLeaveForSelectionAsync()
     {
         if (_multiSelectMode.IsMultiSelectMode)
@@ -543,14 +537,14 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
 
         if (_tree.SelectedEmployee is null)
         {
-            _statusBarService.ShowCaution("Select an employee first.", "No employee selected");
+            StatusBar.ShowCaution("Select an employee first.", "No employee selected");
             return;
         }
 
         var selectedDates = _calendar.GetSelectedDates();
         if (selectedDates.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Click a day, Shift+click or drag for a range, or Ctrl+click to pick several days -- then try again.",
                 "No days selected");
             return;
@@ -572,9 +566,9 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
                 cancellationToken: cancellationToken);
             _dataVersion.BumpScheduleForEmployees([employeePin]);
 
-            _statusBarService.ShowSuccess($"Set to Leave for {selectedDates.Count} day(s).");
+            StatusBar.ShowSuccess($"Set to Leave for {selectedDates.Count} day(s).");
         },
-        onError: ex => _statusBarService.ShowError($"Could not set Leave. {ex.Message}", "Save failed"));
+        onError: ex => ShowFailure(ex, "Could not set Leave"));
 
         // See SetScheduleForSelectionAsync's own guard comment above for the race this
         // closes -- same shape here, against employeeId.
@@ -590,7 +584,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         var employees = _tree.GetCheckedEmployees();
         if (employees.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Check one or more employees in the tree first (each has a checkbox).",
                 "No employees selected");
             return;
@@ -599,7 +593,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         var selectedDates = _calendar.GetSelectedDates();
         if (selectedDates.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Click a day, Shift+click or drag for a range, or Ctrl+click to pick several days -- then try again.",
                 "No days selected");
             return;
@@ -631,11 +625,11 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
 
             _multiSelectMode.IsMultiSelectMode = false;
 
-            _statusBarService.ShowSuccess(
+            StatusBar.ShowSuccess(
                 $"Set to Leave for {employees.Count} employee(s) across {selectedDates.Count} day(s).",
                 "Bulk assign complete");
         },
-        onError: ex => _statusBarService.ShowError($"Could not set Leave. {ex.Message}", "Bulk assign failed"));
+        onError: ex => ShowFailure(ex, "Could not set Leave"));
 
         // See AssignScheduleToCheckedEmployeesAsync's own guard comment above for the race
         // this closes -- same shape here, against selectedEmployeeIdBeforeWrite.
@@ -650,35 +644,33 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// this command unavailable whenever there'd be checked employees to bulk-clear for.
     ///
     /// Unlike CanSetScheduleForSelection, this doesn't also check Tree.SelectedEmployeeCount
-    /// -- there's no bulk branch here for a count to gate, so this class's own
-    /// Tree.PropertyChanged(SelectedEmployeeCount) subscription only re-queries
-    /// SetScheduleForSelectionCommand/SetLeaveForSelectionCommand, not this one.</summary>
+    /// -- there's no bulk branch here for a count to gate, so only Set/Leave re-ask their
+    /// CanExecute on a Tree change.</summary>
     private bool CanClearScheduleForSelection() => !_multiSelectMode.IsMultiSelectMode && !_busy.IsRunning;
 
     /// <summary>Removes the schedule entirely (back to "nothing set") for every highlighted day.</summary>
-    [RelayCommand(CanExecute = nameof(CanClearScheduleForSelection))]
     private async Task ClearScheduleForSelectionAsync()
     {
         if (_tree.SelectedEmployee is null)
         {
-            _statusBarService.ShowCaution("Select an employee first.", "No employee selected");
+            StatusBar.ShowCaution("Select an employee first.", "No employee selected");
             return;
         }
 
         var selectedDates = _calendar.GetSelectedDates();
         if (selectedDates.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Click a day, Shift+click or drag for a range, or Ctrl+click to pick several days -- then try again.",
                 "No days selected");
             return;
         }
 
-        var confirm = MessageBox.Show(
+        var confirmed = await ConfirmAsync(
             $"Remove the schedule for {selectedDates.Count} selected day(s)? This cannot be undone.",
-            "Confirm remove", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            "Confirm remove", isWarning: true);
 
-        if (confirm != MessageBoxResult.Yes) return;
+        if (!confirmed) return;
 
         // Captured now (see SetScheduleForSelectionAsync's own local for the same reason)
         // rather than read as Tree.SelectedEmployee.Id/Pin inside the lambda below.
@@ -694,9 +686,9 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         {
             await _repository.ClearScheduleForDatesAsync(employeePin, selectedDates, cancellationToken);
             _dataVersion.BumpScheduleForEmployees([employeePin]);
-            _statusBarService.ShowSuccess($"Schedule removed for {selectedDates.Count} day(s).");
+            StatusBar.ShowSuccess($"Schedule removed for {selectedDates.Count} day(s).");
         },
-        onError: ex => _statusBarService.ShowError($"Could not remove the schedule. {ex.Message}", "Remove failed"));
+        onError: ex => ShowFailure(ex, "Could not remove the schedule"));
 
         // See SetScheduleForSelectionAsync's own guard comment above for the race this
         // closes -- same shape here, against employeeId.
@@ -709,8 +701,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// employee-selection or multi-select-count check: holidays are company-wide (see
     /// Holiday's own doc comment), so this is available whenever the calendar has days
     /// highlighted, regardless of whether an employee is selected or which mode the tree is
-    /// in. Notified from the _busy.PropertyChanged handler in this class's constructor, same
-    /// as every other command here.</summary>
+    /// in. Re-asked whenever _busy changes, same as every other command here.</summary>
     private bool CanToggleHolidayForSelection() => !_busy.IsRunning;
 
     /// <summary>
@@ -732,13 +723,12 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// ManageHolidaysDialog makes, so an already-open Payroll tab recomputes Holiday Pay on
     /// its next revisit -- see that counter's own doc comment.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanToggleHolidayForSelection))]
     private async Task ToggleHolidayForSelectionAsync()
     {
         var selectedDays = _calendar.CalendarDays.Where(d => d.IsSelected).ToList();
         if (selectedDays.Count == 0)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 "Click a day, Shift+click or drag for a range, or Ctrl+click to pick several days -- then try again.",
                 "No days selected");
             return;
@@ -757,10 +747,10 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
 
         if (toRemove.Count > 0)
         {
-            var confirm = MessageBox.Show(
+            var confirmed = await ConfirmAsync(
                 $"Remove {toRemove.Count} holiday(s) from the company-wide list? This affects payroll for every employee.",
-                "Confirm remove", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes) return;
+                "Confirm remove", isWarning: true);
+            if (!confirmed) return;
 
             await _busy.RunAsync(visibly: true, async cancellationToken =>
             {
@@ -776,16 +766,16 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
                 }
                 _dataVersion.BumpHoliday();
                 changed = true;
-                _statusBarService.ShowSuccess($"Removed {toRemove.Count} holiday(s).");
+                StatusBar.ShowSuccess($"Removed {toRemove.Count} holiday(s).");
             },
-            onError: ex => _statusBarService.ShowError($"Could not remove the holiday. {ex.Message}", "Remove failed"));
+            onError: ex => ShowFailure(ex, "Could not remove the holiday"));
         }
         else
         {
             // Reached only via the single-day "Mark as Holiday…" item; guard anyway.
             if (selectedDates.Count != 1)
             {
-                _statusBarService.ShowCaution("Select a single day to mark as a holiday.", "One day at a time");
+                StatusBar.ShowCaution("Select a single day to mark as a holiday.", "One day at a time");
                 return;
             }
 
@@ -802,7 +792,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
                     await _holidayRepository.AddAsync(new Holiday { Date = date, Name = name }, cancellationToken);
                     _dataVersion.BumpHoliday();
                     changed = true;
-                    _statusBarService.ShowSuccess($"Marked {date:MMMM d, yyyy} as a holiday.");
+                    StatusBar.ShowSuccess($"Marked {date:MMMM d, yyyy} as a holiday.");
                 }
                 catch (DuplicateHolidayDateException)
                 {
@@ -812,7 +802,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
                     changed = true;
                 }
             },
-            onError: ex => _statusBarService.ShowError($"Could not mark the holiday. {ex.Message}", "Save failed"));
+            onError: ex => ShowFailure(ex, "Could not mark the holiday"));
         }
 
         if (!changed) return;
@@ -837,8 +827,13 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// without it, this menu item stayed clickable (and its reentrant call rode along,
     /// unserialized, on whatever else already had AttendanceViewModel's own busy state
     /// running) any time the Attendance page's own Import/Fetch/Generate Reports/Manual Entry
-    /// edit was already in flight when the person right-clicked a calendar tile.</summary>
-    private bool CanAddManualEntryForDay(CalendarDayViewModel day) => !_busy.IsRunning && !_manualEntryEditor.IsAttendanceBusy;
+    /// edit was already in flight when the person right-clicked a calendar tile.
+    ///
+    /// Shared with EditPunchPairingForDayCommand, which gates on the same two things for the
+    /// same two reasons -- it likewise opens a dialog and then writes through the shared,
+    /// app-lifetime-scoped ScheduleDbContext, and the launcher it delegates to reads that
+    /// context before the dialog even opens.</summary>
+    private bool CanEditDay() => !_busy.IsRunning && !_manualEntryEditor.IsAttendanceBusy;
 
     /// <summary>Bound to the calendar's right-click "Add Manual Entry…" item (see
     /// MonthCalendarControl.BuildDayContextMenu, which only ever offers it for a single
@@ -867,7 +862,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// entry's own AddAsync call against the shared, app-lifetime-scoped ScheduleDbContext --
     /// for the entire time the dialog is open and saving.
     ///
-    /// CanAddManualEntryForDay's own !_manualEntryEditor.IsAttendanceBusy check is what closes
+    /// CanEditDay's own !_manualEntryEditor.IsAttendanceBusy check is what closes
     /// the other direction of that same race: this method's body still only ever touches
     /// *this* class's own _busy (via the RunAsync wrapper here) and ManualEntryEditorViewModel.
     /// AddManualEntryForDayAsync's own separate AttendanceBusyState.RunAsync internally -- it
@@ -880,7 +875,6 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// this item greyed out (and re-enables itself the moment that operation finishes, via
     /// ManualEntryEditorViewModel.IsAttendanceBusy's PropertyChanged) rather than letting the
     /// click through to race it.</summary>
-    [RelayCommand(CanExecute = nameof(CanAddManualEntryForDay))]
     private async Task AddManualEntryForDayAsync(CalendarDayViewModel day)
     {
         // Shouldn't happen -- the menu item this is bound to only ever shows up for a tile
@@ -898,7 +892,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
             await _manualEntryEditor.AddManualEntryForDayAsync(_tree.SelectedEmployee, day.Date);
-        });
+        }, onError: ex => ShowFailure(ex, "Couldn't add the manual entry"));
 
         // Unlike the five Set/Clear/Leave Schedule call sites above, this particular call
         // was never independently crash-vulnerable to the race their own guard comments
@@ -919,13 +913,6 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         if (_tree.SelectedEmployee?.Id == employeeId)
             await _calendar.RefreshCalendarAttendanceStatusesAsync();
     }
-
-    /// <summary>Same two-part gate, for the same two reasons, as
-    /// CanAddManualEntryForDay just above -- this command likewise opens a dialog and then
-    /// writes through the shared, app-lifetime-scoped ScheduleDbContext, and the launcher
-    /// it delegates to reads that context before the dialog even opens.</summary>
-    private bool CanEditPunchPairingForDay(CalendarDayViewModel day) =>
-        !_busy.IsRunning && !_manualEntryEditor.IsAttendanceBusy;
 
     /// <summary>Bound to the calendar's right-click "Edit Punch Pairing…" / "View
     /// Punches…" item (see MonthCalendarControl.BuildDayContextMenu -- offered for any
@@ -950,7 +937,6 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
     /// -- with one difference: the launcher has no AttendanceBusyState of its own to
     /// serialize against (it isn't a ViewModel), so this wrapper is the only thing
     /// guarding its reads and writes on this side.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditPunchPairingForDay))]
     private async Task EditPunchPairingForDayAsync(CalendarDayViewModel day)
     {
         // Shouldn't happen -- BuildDayContextMenu only offers this item when an employee
@@ -965,7 +951,7 @@ public partial class ScheduleAssignmentViewModel : ObservableObject
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
             saved = await _pairingLauncher.OpenAsync(employee, day.Date, day.AttendanceStatus, cancellationToken);
-        });
+        }, onError: ex => ShowFailure(ex, "Couldn't open the punch pairing"));
 
         // Same "did the selection move on while the dialog was open" guard as
         // AddManualEntryForDayAsync -- see its own comment for why a recompute for an

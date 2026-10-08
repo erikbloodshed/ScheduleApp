@@ -5,6 +5,8 @@ using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Controls;
 using ScheduleApp.Desktop.Utilities;
+using Syncfusion.Windows.Controls.Input;
+using Syncfusion.Windows.Tools.Controls;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -503,7 +505,7 @@ public partial class ApplyScheduleDialog : Controls.AppWindow
 
     /// <summary>The inverse of <see cref="TriStateIndexFromNullableBool"/>, read
     /// back by OkButton_Click for each of the three tri-state ComboBoxes.</summary>
-    private static bool? ReadTriStateOverride(ComboBox combo) => combo.SelectedIndex switch
+    private static bool? ReadTriStateOverride(ComboBoxAdv combo) => combo.SelectedIndex switch
     {
         1 => true,
         2 => false,
@@ -792,7 +794,12 @@ public partial class ApplyScheduleDialog : Controls.AppWindow
         Grid.SetColumn(timeOutPicker, 2);
         Grid.SetRow(timeOutPicker, 0);
 
-        var removeButton = new Button { Content = "✕", Width = 24, Padding = new Thickness(0) };
+        var removeButton = new ButtonAdv
+        {
+            SizeMode = SizeMode.Small,
+            IconTemplate = (DataTemplate)FindResource("CancelIconTemplate"),
+            ToolTip = "Remove this window",
+        };
         Grid.SetColumn(removeButton, 3);
         Grid.SetRow(removeButton, 0);
 
@@ -809,7 +816,7 @@ public partial class ApplyScheduleDialog : Controls.AppWindow
         Grid.SetColumnSpan(bufferPanel, 3);
         Grid.SetRow(bufferPanel, 1);
 
-        var clockInBufferBox = new TextBox
+        var clockInBufferBox = new SfTextBoxExt
         {
             Width = 40,
             Margin = new Thickness(0, 0, 4, 0),
@@ -818,7 +825,7 @@ public partial class ApplyScheduleDialog : Controls.AppWindow
                 "for this segment, or leave it as-is to keep tracking the policy default even if it " +
                 "changes later."
         };
-        var clockOutBufferBox = new TextBox
+        var clockOutBufferBox = new SfTextBoxExt
         {
             Width = 40,
             Margin = new Thickness(0, 0, 4, 0),

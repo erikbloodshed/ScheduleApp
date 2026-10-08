@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using ReactiveUI;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
@@ -26,7 +26,7 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// is exactly the shape AttendanceBusyState/AttendanceDataVersion/ManualEntryEditorViewModel
 /// already solve for in this codebase -- see this class's own file for that precedent.
 ///
-/// Deliberately just the one [ObservableProperty] and nothing else: unlike
+/// Deliberately just the one notifying property and nothing else: unlike
 /// AttendanceBusyState, there's no cancellation token, no RunAsync wrapper, no derived
 /// IsVisiblyRunning -- every reaction to a flip of this flag (MultiSelectButtonText,
 /// CalendarHeaderText, the three affected commands' CanExecute, clearing the tree's
@@ -38,8 +38,13 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// isn't shared with anything outside the Schedule page, so MainViewModel just `new`s one
 /// up in its own constructor alongside the four child ViewModels, the same way it
 /// constructs them.</summary>
-public partial class MultiSelectModeState : ObservableObject
+public class MultiSelectModeState : ReactiveObject
 {
-    [ObservableProperty]
-    private bool isMultiSelectMode;
+    public bool IsMultiSelectMode
+    {
+        get => _isMultiSelectMode;
+        set => this.RaiseAndSetIfChanged(ref _isMultiSelectMode, value);
+    }
+
+    private bool _isMultiSelectMode;
 }

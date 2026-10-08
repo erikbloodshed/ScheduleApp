@@ -1,8 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using ReactiveUI;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
@@ -10,6 +9,7 @@ using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
@@ -72,7 +72,7 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// have moved since that entry was computed, which is what tells a schedule edit, a
 /// device import/fetch, or a manual-entry change to correctly invalidate it again.
 /// </summary>
-public partial class ScheduleCalendarViewModel : ObservableObject
+public class ScheduleCalendarViewModel : ViewModelBase
 {
     private readonly IScheduleRepository _repository;
 
@@ -88,7 +88,6 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// every month's holidays already on hand.</summary>
     private readonly IHolidayRepository _holidayRepository;
 
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceSettings _attendanceSettings;
     private readonly IAttendanceRunner _attendanceRunner;
 
@@ -225,10 +224,10 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         EmployeeTreeViewModel tree,
         MultiSelectModeState multiSelectMode,
         AttendanceDataVersion dataVersion)
+        : base(statusBarService)
     {
         _repository = repository;
         _holidayRepository = holidayRepository;
-        _statusBarService = statusBarService;
         _attendanceSettings = attendanceSettings;
         _attendanceRunner = attendanceRunner;
         _busy = busy;
@@ -238,19 +237,27 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         _multiSelectMode = multiSelectMode;
         _dataVersion = dataVersion;
 
+        PreviousMonthCommand = ReactiveCommand.Create(() => { DisplayedMonth = DisplayedMonth.AddMonths(-1); });
+        NextMonthCommand = ReactiveCommand.Create(() => { DisplayedMonth = DisplayedMonth.AddMonths(1); });
+        ClearCalendarSelectionCommand = ReactiveCommand.Create(ClearCalendarSelection);
+
+        // Both re-ask their CanExecute whenever _busy, _multiSelectMode or _tree changes
+        // (CanExecuteWhen) -- the same "disable the instant _busy.IsRunning goes true,
+        // re-enable it the instant it goes false" behavior every other _busy-gated command in
+        // this app follows, and the same for an employee picked or multi-select toggled.
+        RecalculateScheduleCommand = ReactiveCommand.CreateFromTask(
+            RecalculateScheduleAsync, CanExecuteWhen(CanRecalculateSchedule, _busy, _multiSelectMode, _tree));
+        RefreshOrCancelScheduleCommand = ReactiveCommand.Create(
+            RefreshOrCancelSchedule, CanExecuteWhen(CanRefreshOrCancelSchedule, _busy, _multiSelectMode, _tree));
+
         // Picks up an employee/month change that arrived while
         // RefreshCalendarAttendanceStatusesAsync deferred instead of racing whatever else
         // was using _busy (a PayrollViewModel refresh, most commonly), and an
         // employee-selection or multi-select-toggle change that arrived while
         // RefreshScheduleForSelectedEmployeeAsync deferred the same way -- see
-        // _calendarStatusRefreshPending/_scheduleRefreshPending's own doc comments. Mirrors
-        // MainViewModel's own _busy.PropertyChanged(IsRunning) handler, minus the
-        // NotifyCanExecuteChanged calls for SetScheduleForSelectionCommand/
-        // SetLeaveForSelectionCommand/ClearScheduleForSelectionCommand/
-        // AddManualEntryForDayCommand -- those are ScheduleAssignmentViewModel's own
-        // commands (phase 4), which is expected to add its own _busy.PropertyChanged
-        // subscription for them, the same "each class subscribes to what it needs" layering
-        // this class's own subscription to Tree below follows.
+        // _calendarStatusRefreshPending/_scheduleRefreshPending's own doc comments. The
+        // commands' own CanExecute follows _busy through CanExecuteWhen above;
+        // ScheduleAssignmentViewModel's commands do the same for themselves.
         _busy.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
@@ -259,21 +266,12 @@ public partial class ScheduleCalendarViewModel : ObservableObject
                 // this is what flips the calendar header's icon button between Refresh
                 // and Cancel, same mechanism PayrollSummaryViewModel's own analogous
                 // handler uses for the payslip header's button.
-                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
-                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
-                RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
+                this.RaisePropertyChanged(nameof(RefreshOrCancelGlyph));
+                this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
                 return;
             }
 
             if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
-
-            // Disable RecalculateScheduleCommand the instant _busy.IsRunning goes true,
-            // re-enable it the instant it goes false -- same "PropertyChanged ->
-            // NotifyCanExecuteChanged, immediately, every time" behavior every other
-            // _busy-gated command elsewhere in this app follows (see e.g.
-            // PayrollSummaryViewModel's own _busy.PropertyChanged handler).
-            RecalculateScheduleCommand.NotifyCanExecuteChanged();
-            RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
 
             if (!_busy.IsRunning && _scheduleRefreshPending)
             {
@@ -296,20 +294,15 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         // CalendarHeaderText itself, leaving this class (and, for CalendarHeaderText, the
         // phase 6 facade) to pick each up via this subscription instead. Same "child
         // subscribes to the sibling it depends on" shape ReportViewModel's own
-        // _reportScope.PropertyChanged subscription already establishes. Also notifies
-        // RecalculateScheduleCommand -- its own CanExecute reads _tree.SelectedEmployee
-        // directly (see CanRecalculateSchedule), the same dependency CalendarHeaderText's
-        // own facade-level subscription reacts to.
+        // _reportScope.PropertyChanged subscription already establishes.
         _tree.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(EmployeeTreeViewModel.SelectedEmployee)) return;
 
             RequestScheduleRefresh();
-            RecalculateScheduleCommand.NotifyCanExecuteChanged();
-            RefreshOrCancelScheduleCommand.NotifyCanExecuteChanged();
         };
 
-        // Goes through the generated property setter (not the backing field directly) so
+        // Goes through the property setter (not the backing field directly) so
         // OnDisplayedMonthChanged fires and the empty calendar grid is built immediately.
         // ViewStateStore is in-memory/session-only (see its own doc comment), so this falls
         // back to the current month on every launch now, not just the first-ever run --
@@ -321,8 +314,18 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     public ObservableCollection<ScheduleEntry> ScheduleEntries { get; } = new();
     public ObservableCollection<CalendarDayViewModel> CalendarDays { get; } = new();
 
-    [ObservableProperty]
-    private DateTime displayedMonth;
+    public DateTime DisplayedMonth
+    {
+        get => _displayedMonth;
+        set
+        {
+            if (_displayedMonth == value) return;
+            this.RaiseAndSetIfChanged(ref _displayedMonth, value);
+            OnDisplayedMonthChanged();
+        }
+    }
+
+    private DateTime _displayedMonth;
 
     public string DisplayedMonthText => DisplayedMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
@@ -335,24 +338,26 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// RefreshScheduleForSelectedEmployeeAsync below), so this naturally stays "Set..."
     /// there too -- "what's already set" has no single answer across several employees, so
     /// there's nothing to flip it to "Edit..." for.</summary>
-    [ObservableProperty]
-    private string setScheduleButtonText = "Set Schedule for Selected Days";
-
-    partial void OnDisplayedMonthChanged(DateTime value)
+    public string SetScheduleButtonText
     {
-        OnPropertyChanged(nameof(DisplayedMonthText));
-        // Fire-and-forget here, same as always -- OnDisplayedMonthChanged is a partial
-        // property-changed hook and can't be async, so this can't await RebuildCalendar's
-        // own returned Task the way RefreshScheduleForSelectedEmployeeAsync below does.
+        get => _setScheduleButtonText;
+        private set => this.RaiseAndSetIfChanged(ref _setScheduleButtonText, value);
+    }
+
+    private string _setScheduleButtonText = "Set Schedule for Selected Days";
+
+    private void OnDisplayedMonthChanged()
+    {
+        this.RaisePropertyChanged(nameof(DisplayedMonthText));
+        // Fire-and-forget here, same as always -- a property setter can't be async, so this
+        // can't await RebuildCalendar's own returned Task the way
+        // RefreshScheduleForSelectedEmployeeAsync below does.
         _ = RebuildCalendar();
         _saveViewState();
     }
 
-    [RelayCommand]
-    private void PreviousMonth() => DisplayedMonth = DisplayedMonth.AddMonths(-1);
-
-    [RelayCommand]
-    private void NextMonth() => DisplayedMonth = DisplayedMonth.AddMonths(1);
+    public ReactiveCommand<RxVoid, RxVoid> PreviousMonthCommand { get; }
+    public ReactiveCommand<RxVoid, RxVoid> NextMonthCommand { get; }
 
     /// <summary>Gate-and-defer counterpart to RefreshScheduleForSelectedEmployeeAsync, for
     /// its two fire-and-forget callers: this class's own Tree.PropertyChanged(SelectedEmployee)
@@ -468,7 +473,7 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         onError: ex =>
         {
             succeeded = false;
-            _statusBarService.ShowError($"Could not load the schedule. {ex.Message}", "Schedule load failed");
+            ShowFailure(ex, "Schedule load failed");
         });
 
         // Runs whether the fetch above succeeded, failed, or was cancelled -- either way
@@ -538,11 +543,12 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// multi-select mode and while _busy.IsRunning, so there's nothing left here for that
     /// wrapper to guard against, and awaiting the real work directly is what lets this
     /// method see the returned success flag at all.</summary>
-    [RelayCommand(CanExecute = nameof(CanRecalculateSchedule))]
+    public ReactiveCommand<RxVoid, RxVoid> RecalculateScheduleCommand { get; }
+
     private async Task RecalculateScheduleAsync()
     {
         if (await RefreshScheduleForSelectedEmployeeAsync(visibly: true))
-            _statusBarService.ShowSuccess("Schedule recalculated.");
+            StatusBar.ShowSuccess("Schedule recalculated.");
     }
 
     /// <summary>!_busy.IsRunning guard for the same shared-DbContext reason every other
@@ -572,7 +578,8 @@ public partial class ScheduleCalendarViewModel : ObservableObject
     /// IsVisiblyRunning makes it look like a live Cancel button.</summary>
     private bool CanRefreshOrCancelSchedule() => _busy.IsVisiblyRunning || CanRecalculateSchedule();
 
-    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelSchedule))]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelScheduleCommand { get; }
+
     private void RefreshOrCancelSchedule()
     {
         if (_busy.IsVisiblyRunning)
@@ -771,8 +778,9 @@ public partial class ScheduleCalendarViewModel : ObservableObject
         // for this key). Wired to the status bar for now so the exception that's actually
         // killing the markers after a manual punch is added shows up somewhere instead of
         // only going to Debug.WriteLine (invisible outside a debugger). Revert to the old
-        // 2-argument RunAsync call once the real cause is found.
-        onError: ex => _statusBarService.ShowError($"Calendar marker refresh failed: {ex}"));
+        // 2-argument RunAsync call once the real cause is found. ShowFailure logs it with
+        // its stack, too (%LOCALAPPDATA%\ScheduleApp\logs).
+        onError: ex => ShowFailure(ex, "Calendar marker refresh failed"));
 
         if (result is null || cts.IsCancellationRequested) return;
 
@@ -999,7 +1007,8 @@ public partial class ScheduleCalendarViewModel : ObservableObject
             day.IsSelected = dates.Contains(day.Date);
     }
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> ClearCalendarSelectionCommand { get; }
+
     private void ClearCalendarSelection()
     {
         foreach (var day in CalendarDays)
