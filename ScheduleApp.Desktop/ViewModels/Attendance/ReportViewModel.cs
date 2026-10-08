@@ -3,8 +3,6 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
@@ -13,6 +11,8 @@ using ScheduleApp.Excel;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.Views;
 using System.ComponentModel;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -32,10 +32,9 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// check already treats as "stale" since nothing has loaded yet -- after something
 /// changed elsewhere (see OnIsSummaryTabSelectedChanged and
 /// AttendanceViewModel.ActivateSummaryTab).</summary>
-public partial class ReportViewModel : ObservableObject
+public class ReportViewModel : ViewModelBase
 {
     private readonly IAttendanceRunner _attendanceRunner;
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendancePolicy _policy;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
@@ -90,9 +89,9 @@ public partial class ReportViewModel : ObservableObject
         AttendanceTabActivationGate tabActivationGate,
         ManualEntryEditorViewModel manualEntryEditor,
         IDayPunchPairingEditorLauncher pairingLauncher)
+        : base(statusBarService)
     {
         _attendanceRunner = attendanceRunner;
-        _statusBarService = statusBarService;
         _policy = policy;
         _busy = busy;
         _dataVersion = dataVersion;
@@ -114,14 +113,7 @@ public partial class ReportViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
             {
-                ExportSummaryCommand.NotifyCanExecuteChanged();
-                ShowStatusDetailCommand.NotifyCanExecuteChanged();
-                ShowOrphanedDetailCommand.NotifyCanExecuteChanged();
-                ShowUnscheduledDetailCommand.NotifyCanExecuteChanged();
-                RefreshSummaryCommand.NotifyCanExecuteChanged();
-                RefreshOrCancelSummaryCommand.NotifyCanExecuteChanged();
-                AddManualEntryForRowCommand.NotifyCanExecuteChanged();
-                EditPunchPairingForRowCommand.NotifyCanExecuteChanged();
+                RequeryCanExecute();
 
                 // Picks up a date/tree change that arrived while a previous run was
                 // still in flight -- TryAutoRun's own CanRun() check blocks a second
@@ -142,14 +134,13 @@ public partial class ReportViewModel : ObservableObject
                 // this is what actually flips the Period row's icon button between
                 // Refresh and Cancel the moment anything on the Attendance page starts
                 // or stops being visibly busy, not just a click on this button itself.
-                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
-                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
-                RefreshOrCancelSummaryCommand.NotifyCanExecuteChanged();
+                this.RaisePropertyChanged(nameof(RefreshOrCancelGlyph));
+                this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
+                RequeryCanExecute();
             }
         };
 
-        SummaryRowsView = CollectionViewSource.GetDefaultView(SummaryRows);
-        SummaryRowsView.Filter = FilterSummaryRow;
+        SummaryRowsView = new FilteredCollection<AttendanceSummaryRow>(SummaryRows) { Filter = FilterSummaryRow };
 
         // Reacts to every check/uncheck in the report-scope tree (both of these still
         // raise SelectedEmployeeCount's own change notification on each flip, plus once
@@ -169,10 +160,21 @@ public partial class ReportViewModel : ObservableObject
             {
                 SummaryRowsView.Refresh();
                 TryAutoRun();
-                RefreshSummaryCommand.NotifyCanExecuteChanged();
-                RefreshOrCancelSummaryCommand.NotifyCanExecuteChanged();
+                RequeryCanExecute();
             }
         };
+
+        PreviousPeriodCommand = ReactiveCommand.Create(PreviousPeriod);
+        NextPeriodCommand = ReactiveCommand.Create(NextPeriod);
+        ExportSummaryCommand = ReactiveCommand.Create(ExportSummary, CanExecuteFrom(CanExportSummary));
+        ShowStatusDetailCommand = ReactiveCommand.Create<PunchStatus>(ShowStatusDetail, CanExecuteFrom(CanShowStatusDetail));
+        ClearStatusFilterCommand = ReactiveCommand.Create(ClearStatusFilter);
+        ShowOrphanedDetailCommand = ReactiveCommand.Create(ShowOrphanedDetail, CanExecuteFrom(CanShowStatusDetail));
+        ShowUnscheduledDetailCommand = ReactiveCommand.Create(ShowUnscheduledDetail, CanExecuteFrom(CanShowStatusDetail));
+        AddManualEntryForRowCommand = ReactiveCommand.CreateFromTask<AttendanceSummaryRow>(p => RunSafelyAsync(() => AddManualEntryForRowAsync(p)), CanExecuteFrom(CanAddManualEntryForRow));
+        EditPunchPairingForRowCommand = ReactiveCommand.CreateFromTask<AttendanceSummaryRow>(p => RunSafelyAsync(() => EditPunchPairingForRowAsync(p)), CanExecuteFrom(CanEditPunchPairingForRow));
+        RefreshSummaryCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(RefreshSummaryAsync), CanExecuteFrom(CanRun));
+        RefreshOrCancelSummaryCommand = ReactiveCommand.Create(RefreshOrCancelSummary, CanExecuteFrom(CanRefreshOrCancelSummary));
     }
 
     /// <summary>The DataGrid binds to this instead of SummaryRows directly, so
@@ -181,7 +183,7 @@ public partial class ReportViewModel : ObservableObject
     /// Summary…, which always exports everything regardless of what's currently filtered
     /// on-screen). Same story for SelectedStatusFilter below -- clicking a status tile
     /// narrows this view too, without touching SummaryRows itself.</summary>
-    public ICollectionView SummaryRowsView { get; }
+    public FilteredCollection<AttendanceSummaryRow> SummaryRowsView { get; }
 
     private bool FilterSummaryRow(object obj) =>
         obj is AttendanceSummaryRow row
@@ -195,24 +197,60 @@ public partial class ReportViewModel : ObservableObject
     /// never touches SummaryRows itself, so Export Summary… (which always reads
     /// _lastResult.Summaries, not the view) is unaffected by whatever's currently
     /// selected here.</summary>
-    [ObservableProperty]
-    private PunchStatus? selectedStatusFilter;
+    public PunchStatus? SelectedStatusFilter
+    {
+        get => _selectedStatusFilter;
+        set
+        {
+            if (EqualityComparer<PunchStatus?>.Default.Equals(_selectedStatusFilter, value)) return;
+            this.RaisePropertyChanging();
+            _selectedStatusFilter = value;
+            OnSelectedStatusFilterChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnSelectedStatusFilterChanged(PunchStatus? value) => SummaryRowsView.Refresh();
+    private PunchStatus? _selectedStatusFilter;
 
-    [ObservableProperty]
-    private DateTime? periodStart;
+    private void OnSelectedStatusFilterChanged(PunchStatus? value) => SummaryRowsView.Refresh();
 
-    partial void OnPeriodStartChanged(DateTime? value)
+    public DateTime? PeriodStart
+    {
+        get => _periodStart;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_periodStart, value)) return;
+            this.RaisePropertyChanging();
+            _periodStart = value;
+            OnPeriodStartChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private DateTime? _periodStart;
+
+    private void OnPeriodStartChanged(DateTime? value)
     {
         _saveViewState();
         TryAutoRun();
     }
 
-    [ObservableProperty]
-    private DateTime? periodEnd;
+    public DateTime? PeriodEnd
+    {
+        get => _periodEnd;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_periodEnd, value)) return;
+            this.RaisePropertyChanging();
+            _periodEnd = value;
+            OnPeriodEndChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnPeriodEndChanged(DateTime? value)
+    private DateTime? _periodEnd;
+
+    private void OnPeriodEndChanged(DateTime? value)
     {
         _saveViewState();
         TryAutoRun();
@@ -231,7 +269,8 @@ public partial class ReportViewModel : ObservableObject
     /// edited each DatePicker by hand), but TryAutoRun's own _autoRunPending guard
     /// coalesces the pair into a single deferred run, same as a bulk report-scope
     /// selection change already does -- see that field's doc comment.</summary>
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand { get; }
+
     private void PreviousPeriod()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(PeriodStart ?? PeriodEnd ?? DateTime.Today, forward: false);
@@ -241,7 +280,8 @@ public partial class ReportViewModel : ObservableObject
 
     /// <summary>See PreviousPeriodCommand's doc comment -- same step, the other
     /// direction.</summary>
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand { get; }
+
     private void NextPeriod()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(PeriodStart ?? PeriodEnd ?? DateTime.Today, forward: true);
@@ -249,49 +289,103 @@ public partial class ReportViewModel : ObservableObject
         PeriodEnd = end;
     }
 
-    [ObservableProperty]
-    private bool hasResults;
-
-    partial void OnHasResultsChanged(bool value)
+    public bool HasResults
     {
-        ExportSummaryCommand.NotifyCanExecuteChanged();
-        ShowStatusDetailCommand.NotifyCanExecuteChanged();
-        ShowOrphanedDetailCommand.NotifyCanExecuteChanged();
-        ShowUnscheduledDetailCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(HasSummaryRows));
+        get => _hasResults;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_hasResults, value)) return;
+            this.RaisePropertyChanging();
+            _hasResults = value;
+            OnHasResultsChanged(value);
+            this.RaisePropertyChanged();
+        }
     }
 
-    [ObservableProperty]
-    private int totalLogs;
+    private bool _hasResults;
 
-    [ObservableProperty]
-    private int completeCount;
+    private void OnHasResultsChanged(bool value)
+    {
+        RequeryCanExecute();
+        this.RaisePropertyChanged(nameof(HasSummaryRows));
+    }
 
-    [ObservableProperty]
-    private int partialCount;
+    public int TotalLogs
+    {
+        get => _totalLogs;
+        set => this.RaiseAndSetIfChanged(ref _totalLogs, value);
+    }
 
-    [ObservableProperty]
-    private int absentCount;
+    private int _totalLogs;
 
-    [ObservableProperty]
-    private int leaveCount;
+    public int CompleteCount
+    {
+        get => _completeCount;
+        set => this.RaiseAndSetIfChanged(ref _completeCount, value);
+    }
 
-    [ObservableProperty]
-    private int officialBusinessCount;
+    private int _completeCount;
 
-    [ObservableProperty]
-    private int restDayCount;
+    public int PartialCount
+    {
+        get => _partialCount;
+        set => this.RaiseAndSetIfChanged(ref _partialCount, value);
+    }
+
+    private int _partialCount;
+
+    public int AbsentCount
+    {
+        get => _absentCount;
+        set => this.RaiseAndSetIfChanged(ref _absentCount, value);
+    }
+
+    private int _absentCount;
+
+    public int LeaveCount
+    {
+        get => _leaveCount;
+        set => this.RaiseAndSetIfChanged(ref _leaveCount, value);
+    }
+
+    private int _leaveCount;
+
+    public int OfficialBusinessCount
+    {
+        get => _officialBusinessCount;
+        set => this.RaiseAndSetIfChanged(ref _officialBusinessCount, value);
+    }
+
+    private int _officialBusinessCount;
+
+    public int RestDayCount
+    {
+        get => _restDayCount;
+        set => this.RaiseAndSetIfChanged(ref _restDayCount, value);
+    }
+
+    private int _restDayCount;
 
     /// <summary>Punches near a schedule's window but not picked as its
     /// clock-in/out (see AttendanceRunResult.OrphanedPunches) -- distinct from
     /// UnscheduledCount below, which never came near any schedule at all.</summary>
-    [ObservableProperty]
-    private int orphanedCount;
+    public int OrphanedCount
+    {
+        get => _orphanedCount;
+        set => this.RaiseAndSetIfChanged(ref _orphanedCount, value);
+    }
+
+    private int _orphanedCount;
 
     /// <summary>Punches no schedule entry this run even considered (see
     /// AttendanceRunResult.UnscheduledPunches).</summary>
-    [ObservableProperty]
-    private int unscheduledCount;
+    public int UnscheduledCount
+    {
+        get => _unscheduledCount;
+        set => this.RaiseAndSetIfChanged(ref _unscheduledCount, value);
+    }
+
+    private int _unscheduledCount;
 
     public ObservableCollection<AttendanceSummaryRow> SummaryRows { get; } = new();
 
@@ -302,7 +396,8 @@ public partial class ReportViewModel : ObservableObject
     /// it used to just stash the written path in OutputSummaryPath for a person to click
     /// Open afterward). Same Process.Start/UseShellExecute call that button used to make,
     /// just fired right after a successful write instead of waiting for a second click.</summary>
-    [RelayCommand(CanExecute = nameof(CanExportSummary))]
+    public ReactiveCommand<RxVoid, RxVoid> ExportSummaryCommand { get; }
+
     private void ExportSummary()
     {
         var dialog = new SaveFileDialog
@@ -321,11 +416,11 @@ public partial class ReportViewModel : ObservableObject
             Process.Start(new ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
 
             var message = $"Saved attendance summary to {dialog.FileName}.";
-            _statusBarService.ShowSuccess(message);
+            StatusBar.ShowSuccess(message);
         }
         catch (Exception ex)
         {
-            _statusBarService.ShowError(ex.Message);
+            ShowFailure(ex);
         }
     }
 
@@ -341,7 +436,8 @@ public partial class ReportViewModel : ObservableObject
     /// picking a different radio option rather than needing to clear the old one
     /// first. See SelectedStatusFilter/FilterSummaryRow for the actual
     /// filtering.</summary>
-    [RelayCommand(CanExecute = nameof(CanShowStatusDetail))]
+    public ReactiveCommand<PunchStatus, RxVoid> ShowStatusDetailCommand { get; }
+
     private void ShowStatusDetail(PunchStatus status) =>
         SelectedStatusFilter = SelectedStatusFilter == status ? null : status;
 
@@ -349,7 +445,8 @@ public partial class ReportViewModel : ObservableObject
     /// Summary… once a status tile has narrowed the grid -- same effect as clicking
     /// the active tile a second time (see ShowStatusDetail above), just reachable
     /// without having to find and re-click that exact tile again.</summary>
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> ClearStatusFilterCommand { get; }
+
     private void ClearStatusFilter() => SelectedStatusFilter = null;
 
     private bool CanShowStatusDetail() => !_busy.IsRunning && _lastResult is not null;
@@ -358,13 +455,15 @@ public partial class ReportViewModel : ObservableObject
     /// every punch that fell within some schedule entry's buffer window but
     /// wasn't picked as its clock-in/out (see
     /// AttendanceRunResult.OrphanedPunches).</summary>
-    [RelayCommand(CanExecute = nameof(CanShowStatusDetail))]
+    public ReactiveCommand<RxVoid, RxVoid> ShowOrphanedDetailCommand { get; }
+
     private void ShowOrphanedDetail() => ShowPunchListDetail("Orphaned", _lastResult!.OrphanedPunches);
 
     /// <summary>Backs the Unscheduled tile -- same idea as ShowOrphanedDetail,
     /// but for AttendanceRunResult.UnscheduledPunches (punches no schedule
     /// entry this run even considered).</summary>
-    [RelayCommand(CanExecute = nameof(CanShowStatusDetail))]
+    public ReactiveCommand<RxVoid, RxVoid> ShowUnscheduledDetailCommand { get; }
+
     private void ShowUnscheduledDetail() => ShowPunchListDetail("Unscheduled", _lastResult!.UnscheduledPunches);
 
     /// <summary>Shared by both commands above -- builds the same
@@ -425,15 +524,16 @@ public partial class ReportViewModel : ObservableObject
     /// picks up the ManualLogsVersion bump AddOrEditManualEntryAsync makes -- so unlike
     /// MainViewModel.AddManualEntryForDayAsync, there's no explicit
     /// RefreshCalendarAttendanceStatusesAsync-equivalent call to make here.</summary>
-    private bool CanAddManualEntryForRow(AttendanceSummaryRow row) => !_busy.IsRunning;
+    private bool CanAddManualEntryForRow() => !_busy.IsRunning;
 
-    [RelayCommand(CanExecute = nameof(CanAddManualEntryForRow))]
+    public ReactiveCommand<AttendanceSummaryRow, RxVoid> AddManualEntryForRowCommand { get; }
+
     private Task AddManualEntryForRowAsync(AttendanceSummaryRow row)
     {
         var employee = _lastResult?.Employees.FirstOrDefault(e => e.Pin == row.EmployeeId);
         if (employee is null)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 $"Couldn't find {row.EmployeeName} in the current summary. Refresh Summary and try again.",
                 "Employee not found");
             return Task.CompletedTask;
@@ -463,15 +563,16 @@ public partial class ReportViewModel : ObservableObject
     /// AttendanceDataVersion.PairingVersion, this class's own _busy.PropertyChanged
     /// handler re-runs TryAutoRun() when IsRunning drops back to false, and
     /// ShouldAutoReload now compares that counter (see _loadedSnapshot).</summary>
-    private bool CanEditPunchPairingForRow(AttendanceSummaryRow row) => !_busy.IsRunning;
+    private bool CanEditPunchPairingForRow() => !_busy.IsRunning;
 
-    [RelayCommand(CanExecute = nameof(CanEditPunchPairingForRow))]
+    public ReactiveCommand<AttendanceSummaryRow, RxVoid> EditPunchPairingForRowCommand { get; }
+
     private async Task EditPunchPairingForRowAsync(AttendanceSummaryRow row)
     {
         var employee = _lastResult?.Employees.FirstOrDefault(e => e.Pin == row.EmployeeId);
         if (employee is null)
         {
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 $"Couldn't find {row.EmployeeName} in the current summary. Refresh Summary and try again.",
                 "Employee not found");
             return;
@@ -479,13 +580,25 @@ public partial class ReportViewModel : ObservableObject
 
         await _busy.RunAsync(visibly: false,
             ct => _pairingLauncher.OpenAsync(employee, DateOnly.FromDateTime(row.ShiftDate), row.Status, ct),
-            onError: ex => _statusBarService.ShowError(ex.Message));
+            onError: ex => ShowFailure(ex));
     }
 
-    [ObservableProperty]
-    private bool isSummaryTabSelected;
+    public bool IsSummaryTabSelected
+    {
+        get => _isSummaryTabSelected;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isSummaryTabSelected, value)) return;
+            this.RaisePropertyChanging();
+            _isSummaryTabSelected = value;
+            OnIsSummaryTabSelectedChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnIsSummaryTabSelectedChanged(bool value)
+    private bool _isSummaryTabSelected;
+
+    private void OnIsSummaryTabSelectedChanged(bool value)
     {
         if (!_tabActivationGate.IsReady) return;
 
@@ -550,7 +663,8 @@ public partial class ReportViewModel : ObservableObject
     /// Unconditional (no ShouldAutoReload gate) and always shows feedback -- unlike
     /// TryAutoRun, a click here is always something the person is watching happen, even
     /// if it turns out nothing had actually changed.</summary>
-    [RelayCommand(CanExecute = nameof(CanRun))]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshSummaryCommand { get; }
+
     private Task RefreshSummaryAsync() => RunCoreAsync(showFeedback: true);
 
     /// <summary>The Period row's icon button's actual Content/Command/ToolTip binding
@@ -574,7 +688,8 @@ public partial class ReportViewModel : ObservableObject
     /// makes it look like a live Cancel button.</summary>
     private bool CanRefreshOrCancelSummary() => _busy.IsVisiblyRunning || CanRun();
 
-    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelSummary))]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelSummaryCommand { get; }
+
     private void RefreshOrCancelSummary()
     {
         if (_busy.IsVisiblyRunning)
@@ -713,7 +828,7 @@ public partial class ReportViewModel : ObservableObject
         if (validationErrors.Count > 0)
         {
             if (showFeedback)
-                _statusBarService.ShowCaution(string.Join(" ", validationErrors));
+                StatusBar.ShowCaution(string.Join(" ", validationErrors));
             return;
         }
 
@@ -734,7 +849,7 @@ public partial class ReportViewModel : ObservableObject
             var progress = new Progress<string>(msg =>
             {
                 if (showFeedback)
-                    _statusBarService.ShowInfo(msg);
+                    StatusBar.ShowInfo(msg);
             });
 
             var request = new AttendanceRunRequest
@@ -802,11 +917,17 @@ public partial class ReportViewModel : ObservableObject
                 SummaryRows.Add(row);
 
             HasResults = true;
+
+            // HasSummaryRows also depends on how many rows there are, which HasResults'
+            // own change can't report when it was already true -- going from a period
+            // with nothing to show to one with rows otherwise left the grid hidden.
+            // Raised once, after the rebuild, so the grid still never collapses midway.
+            this.RaisePropertyChanged(nameof(HasSummaryRows));
             _loadedSnapshot = requestSnapshot;
             _saveViewState();
 
             if (showFeedback)
-                _statusBarService.ShowSuccess(
+                StatusBar.ShowSuccess(
                     $"Report generated: {CompleteCount} complete, {PartialCount} partial, " +
                     $"{AbsentCount} absent, {LeaveCount} leave, {OfficialBusinessCount} official business, " +
                     $"{RestDayCount} rest day.",
@@ -835,10 +956,11 @@ public partial class ReportViewModel : ObservableObject
                 _lastResult = null;
                 HasResults = false;
                 SummaryRows.Clear();
+                this.RaisePropertyChanged(nameof(HasSummaryRows));
             }
 
             if (showFeedback)
-                _statusBarService.ShowError(ex.Message);
+                ShowFailure(ex);
         });
     }
 

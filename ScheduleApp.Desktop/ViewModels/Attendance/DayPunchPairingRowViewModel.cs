@@ -1,5 +1,5 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
-using ScheduleApp.Core.Attendance;
+﻿using ScheduleApp.Core.Attendance;
+using ReactiveUI;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -21,13 +21,37 @@ public enum ColumnSlot
 /// working space (see <see cref="DayPunchPairingEditorViewModel.MoveCell"/>); only
 /// "Remove Empty" or a save clears one out.
 /// </summary>
-public partial class DayPunchPairingRowViewModel : ObservableObject
+public class DayPunchPairingRowViewModel : ReactiveObject
 {
-    [ObservableProperty]
-    private DayPunchPairingCellViewModel? inPunch;
+    public DayPunchPairingCellViewModel? InPunch
+    {
+        get => _inPunch;
+        set
+        {
+            if (EqualityComparer<DayPunchPairingCellViewModel?>.Default.Equals(_inPunch, value)) return;
+            this.RaisePropertyChanging();
+            _inPunch = value;
+            OnInPunchChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    [ObservableProperty]
-    private DayPunchPairingCellViewModel? outPunch;
+    private DayPunchPairingCellViewModel? _inPunch;
+
+    public DayPunchPairingCellViewModel? OutPunch
+    {
+        get => _outPunch;
+        set
+        {
+            if (EqualityComparer<DayPunchPairingCellViewModel?>.Default.Equals(_outPunch, value)) return;
+            this.RaisePropertyChanging();
+            _outPunch = value;
+            OnOutPunchChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private DayPunchPairingCellViewModel? _outPunch;
 
     /// <summary>True when exactly one of the two slots is filled -- the row is a
     /// half-open segment, i.e. the orphan. Drives the row's warning styling.</summary>
@@ -45,13 +69,13 @@ public partial class DayPunchPairingRowViewModel : ObservableObject
         }
     }
 
-    partial void OnInPunchChanged(DayPunchPairingCellViewModel? value) => NotifyFillStateChanged();
+    private void OnInPunchChanged(DayPunchPairingCellViewModel? value) => NotifyFillStateChanged();
 
-    partial void OnOutPunchChanged(DayPunchPairingCellViewModel? value) => NotifyFillStateChanged();
+    private void OnOutPunchChanged(DayPunchPairingCellViewModel? value) => NotifyFillStateChanged();
 
     private void NotifyFillStateChanged()
     {
-        OnPropertyChanged(nameof(IsIncomplete));
-        OnPropertyChanged(nameof(IsEmpty));
+        this.RaisePropertyChanged(nameof(IsIncomplete));
+        this.RaisePropertyChanged(nameof(IsEmpty));
     }
 }

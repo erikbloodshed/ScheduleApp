@@ -1,9 +1,9 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.ZkTeco;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -17,10 +17,9 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// connection dialog, since a deployment only ever talks to one device and a separate
 /// dialog asking for the same IP/port/comm key/transport Settings already has was just a
 /// redundant place to edit the same four fields.</summary>
-public partial class DeviceFetchViewModel : ObservableObject
+public class DeviceFetchViewModel : ViewModelBase
 {
     private readonly IAttendanceLogRepository _attendanceLogRepository;
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
 
@@ -43,9 +42,9 @@ public partial class DeviceFetchViewModel : ObservableObject
         int initialDevicePort,
         uint initialDeviceCommKey,
         string? initialDeviceTransport)
+        : base(statusBarService)
     {
         _attendanceLogRepository = attendanceLogRepository;
-        _statusBarService = statusBarService;
         _busy = busy;
         _dataVersion = dataVersion;
 
@@ -57,11 +56,14 @@ public partial class DeviceFetchViewModel : ObservableObject
         _busy.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
-                FetchFromDeviceCommand.NotifyCanExecuteChanged();
+                RequeryCanExecute();
         };
+
+        FetchFromDeviceCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(FetchFromDeviceAsync), CanExecuteFrom(CanFetchFromDevice));
     }
 
-    [RelayCommand(CanExecute = nameof(CanFetchFromDevice))]
+    public ReactiveCommand<RxVoid, RxVoid> FetchFromDeviceCommand { get; }
+
     private async Task FetchFromDeviceAsync()
     {
         // No connection dialog -- see the class doc comment above. A blank IP means
@@ -70,7 +72,7 @@ public partial class DeviceFetchViewModel : ObservableObject
         var validationError = ValidateDeviceConnection();
         if (validationError is not null)
         {
-            _statusBarService.ShowCaution(validationError);
+            StatusBar.ShowCaution(validationError);
             return;
         }
 
@@ -120,14 +122,14 @@ public partial class DeviceFetchViewModel : ObservableObject
 
                 // One status bar message, not two -- Show() replaces whatever's
                 // currently displayed, so a second call here would just hide the first.
-                _statusBarService.ShowCaution($"{message} {skippedMessage}", "Partial import");
+                StatusBar.ShowCaution($"{message} {skippedMessage}", "Partial import");
             }
             else
             {
-                _statusBarService.ShowSuccess(message);
+                StatusBar.ShowSuccess(message);
             }
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     private bool CanFetchFromDevice() => !_busy.IsRunning;

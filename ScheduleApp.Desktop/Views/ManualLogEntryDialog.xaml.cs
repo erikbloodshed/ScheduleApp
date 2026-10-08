@@ -61,7 +61,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
 
     /// <summary>The Task for whichever RefreshMachinePunchesAsync call was most
     /// recently kicked off -- every call site fires that method fire-and-forget
-    /// (DateBox_SelectedDateChanged, EmployeeBox_LostFocus, and the one-shot call
+    /// (DateBox_DateTimeChanged, EmployeeBox_LostFocus, and the one-shot call
     /// each constructor's own DateBox assignment triggers before this dialog is
     /// even shown), since nothing in here needs to await it. A caller that's
     /// about to touch the same shared DbContext right after this dialog closes
@@ -120,7 +120,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
         _employees = employees.ToList();
         _attendanceLogRepository = attendanceLogRepository;
 
-        DateBox.SelectedDate = DateTime.Today; // fires SelectedDateChanged -> RefreshMachinePunchesAsync, a no-op here since no employee is resolved yet
+        DateBox.DateTime = DateTime.Today; // fires SelectedDateChanged -> RefreshMachinePunchesAsync, a no-op here since no employee is resolved yet
         EnteredByBox.Text = Environment.UserName;
 
         // Called once here, not in the Edit-mode/calendar-tile constructors below --
@@ -143,7 +143,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
         _existingLog = existingLog;
 
         Title = "Edit Manual Entry";
-        SaveButton.Content = "Save";
+        SaveButton.Label = "Save";
 
         var employee = employees.FirstOrDefault(e => e.Pin == existingLog.EmployeeId);
         _suppressEmployeeTextChanged = true;
@@ -152,7 +152,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
             : existingLog.EmployeeId.ToString(CultureInfo.InvariantCulture);
         _suppressEmployeeTextChanged = false;
 
-        DateBox.SelectedDate = existingLog.Timestamp.Date;
+        DateBox.DateTime = existingLog.Timestamp.Date;
         TimeBox.SelectedTime = TimeOnly.FromDateTime(existingLog.Timestamp);
         PunchTypeCombo.SelectedIndex = existingLog.PunchType; // fires SelectionChanged -> refreshes ReasonBox's default, if it's still showing one
 
@@ -182,7 +182,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
     /// <summary>Convenience constructor for the calendar's right-click "Add Manual
     /// Entry…" command (see ManualEntryEditorViewModel.AddManualEntryForDayAsync) --
     /// chains to the Add constructor above (full roster, same filtering, same initial
-    /// no-op DateBox.SelectedDate = DateTime.Today fetch while EmployeeBox is still
+    /// no-op DateBox.DateTime = DateTime.Today fetch while EmployeeBox is still
     /// blank) and then overwrites EmployeeBox/DateBox with whichever tile was
     /// right-clicked, the same way the Edit-mode constructor above overwrites them with
     /// an existing entry's own values. Same reason for the order too: DateBox gets set
@@ -208,7 +208,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
         EmployeeBox.Text = FormatEmployee(employee);
         _suppressEmployeeTextChanged = false;
 
-        DateBox.SelectedDate = date.ToDateTime(TimeOnly.MinValue);
+        DateBox.DateTime = date.ToDateTime(TimeOnly.MinValue);
 
         EmployeeBox.IsEnabled = false;
         DateBox.IsEnabled = false;
@@ -303,7 +303,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
             _machinePunchesFetchTask = RefreshMachinePunchesAsync();
     }
 
-    private void DateBox_SelectedDateChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e) =>
+    private void DateBox_DateTimeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         _machinePunchesFetchTask = RefreshMachinePunchesAsync();
 
     /// <summary>Keeps ReasonBox's default in step with whichever punch type is
@@ -369,7 +369,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
         _machinePunchesCts = cts;
 
         var employeeId = ResolveEmployeeId(EmployeeBox.Text);
-        if (employeeId is null || DateBox.SelectedDate is not { } selectedDate)
+        if (employeeId is null || DateBox.DateTime is not { } selectedDate)
         {
             ShowMachinePunchesUnresolved();
             return;
@@ -511,7 +511,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
             return;
         }
 
-        if (DateBox.SelectedDate is not { } date)
+        if (DateBox.DateTime is not { } date)
         {
             Warn("Select a date.");
             return;

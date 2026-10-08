@@ -2,14 +2,14 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Excel;
 using ScheduleApp.Desktop.Services;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -37,10 +37,9 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// entirely -- this Import… is paired with this class's own Export…, the same way
 /// ScheduleImportExportViewModel pairs Import Schedule…/Export Schedule… together
 /// in one class rather than splitting them.</summary>
-public partial class ManualEntriesViewModel : ObservableObject
+public class ManualEntriesViewModel : ViewModelBase
 {
     private readonly IManualAttendanceLogRepository _manualAttendanceLogRepository;
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
     private readonly AttendanceEmployeeDirectory _employeeDirectory;
@@ -63,29 +62,24 @@ public partial class ManualEntriesViewModel : ObservableObject
         bool initialIsManualEntriesTabSelected,
         Action saveViewState,
         AttendanceTabActivationGate tabActivationGate)
+        : base(statusBarService)
     {
         _manualAttendanceLogRepository = manualAttendanceLogRepository;
-        _statusBarService = statusBarService;
         _busy = busy;
         _dataVersion = dataVersion;
         _employeeDirectory = employeeDirectory;
         _saveViewState = saveViewState;
         _tabActivationGate = tabActivationGate;
 
-        manualEntriesStart = initialManualEntriesStart;
-        manualEntriesEnd = initialManualEntriesEnd;
-        isManualEntriesTabSelected = initialIsManualEntriesTabSelected;
+        _manualEntriesStart = initialManualEntriesStart;
+        _manualEntriesEnd = initialManualEntriesEnd;
+        _isManualEntriesTabSelected = initialIsManualEntriesTabSelected;
 
         _busy.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
             {
-                LoadManualEntriesCommand.NotifyCanExecuteChanged();
-                ExportManualEntriesCommand.NotifyCanExecuteChanged();
-                ImportManualEntriesCommand.NotifyCanExecuteChanged();
-                PreviousPeriodCommand.NotifyCanExecuteChanged();
-                NextPeriodCommand.NotifyCanExecuteChanged();
-                RefreshOrCancelManualEntriesCommand.NotifyCanExecuteChanged();
+                RequeryCanExecute();
             }
             else if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
             {
@@ -93,20 +87,39 @@ public partial class ManualEntriesViewModel : ObservableObject
                 // this is what flips the toolbar's icon Refresh button between Refresh
                 // and Cancel, same mechanism ReportViewModel's own analogous handler
                 // uses for the Attendance Summary tab's Refresh/Cancel button.
-                OnPropertyChanged(nameof(RefreshOrCancelGlyph));
-                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
-                RefreshOrCancelManualEntriesCommand.NotifyCanExecuteChanged();
+                this.RaisePropertyChanged(nameof(RefreshOrCancelGlyph));
+                this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
+                RequeryCanExecute();
             }
         };
+
+        PreviousPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(PreviousPeriodAsync), CanExecuteFrom(CanLoad));
+        NextPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(NextPeriodAsync), CanExecuteFrom(CanLoad));
+        LoadManualEntriesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(LoadManualEntriesAsync), CanExecuteFrom(CanLoad));
+        RefreshOrCancelManualEntriesCommand = ReactiveCommand.Create(RefreshOrCancelManualEntries, CanExecuteFrom(CanRefreshOrCancelManualEntries));
+        ExportManualEntriesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportManualEntriesAsync), CanExecuteFrom(CanExportManualEntries));
+        ImportManualEntriesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportManualEntriesAsync), CanExecuteFrom(CanImportManualEntries));
     }
 
     /// <summary>Bound to the Manual Entries TabItem's IsSelected -- mirrors
     /// PunchRecordsViewModel.IsPunchRecordsTabSelected's role, just for
     /// LoadManualEntriesCoreAsync.</summary>
-    [ObservableProperty]
-    private bool isManualEntriesTabSelected;
+    public bool IsManualEntriesTabSelected
+    {
+        get => _isManualEntriesTabSelected;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isManualEntriesTabSelected, value)) return;
+            this.RaisePropertyChanging();
+            _isManualEntriesTabSelected = value;
+            OnIsManualEntriesTabSelectedChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnIsManualEntriesTabSelectedChanged(bool value)
+    private bool _isManualEntriesTabSelected;
+
+    private void OnIsManualEntriesTabSelectedChanged(bool value)
     {
         if (!_tabActivationGate.IsReady) return;
 
@@ -133,23 +146,57 @@ public partial class ManualEntriesViewModel : ObservableObject
     private bool ShouldAutoReload() =>
         _loadedSnapshot != (ManualEntriesStart, ManualEntriesEnd, _dataVersion.ManualLogsVersion);
 
-    [ObservableProperty]
-    private int manualEntriesCount;
+    public int ManualEntriesCount
+    {
+        get => _manualEntriesCount;
+        set => this.RaiseAndSetIfChanged(ref _manualEntriesCount, value);
+    }
 
-    [ObservableProperty]
-    private bool hasLoadedManualEntries;
+    private int _manualEntriesCount;
+
+    public bool HasLoadedManualEntries
+    {
+        get => _hasLoadedManualEntries;
+        set => this.RaiseAndSetIfChanged(ref _hasLoadedManualEntries, value);
+    }
+
+    private bool _hasLoadedManualEntries;
 
     public ObservableCollection<StoredPunchLogRow> ManualEntries { get; } = new();
 
-    [ObservableProperty]
-    private DateTime? manualEntriesStart;
+    public DateTime? ManualEntriesStart
+    {
+        get => _manualEntriesStart;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_manualEntriesStart, value)) return;
+            this.RaisePropertyChanging();
+            _manualEntriesStart = value;
+            OnManualEntriesStartChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnManualEntriesStartChanged(DateTime? value) => _saveViewState();
+    private DateTime? _manualEntriesStart;
 
-    [ObservableProperty]
-    private DateTime? manualEntriesEnd;
+    private void OnManualEntriesStartChanged(DateTime? value) => _saveViewState();
 
-    partial void OnManualEntriesEndChanged(DateTime? value) => _saveViewState();
+    public DateTime? ManualEntriesEnd
+    {
+        get => _manualEntriesEnd;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_manualEntriesEnd, value)) return;
+            this.RaisePropertyChanging();
+            _manualEntriesEnd = value;
+            OnManualEntriesEndChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private DateTime? _manualEntriesEnd;
+
+    private void OnManualEntriesEndChanged(DateTime? value) => _saveViewState();
 
     /// <summary>Backs the Manual Entries tab's own "◀"/"▶" period-nav buttons -- same
     /// AttendancePeriodNavigation.AdjacentCutoffPeriod step ReportViewModel/
@@ -160,7 +207,8 @@ public partial class ManualEntriesViewModel : ObservableObject
     /// property-changed handler to notice; showFeedback: true, same as a direct ↻ Refresh
     /// click, since stepping the period is just as much an explicit action as pressing
     /// it.</summary>
-    [RelayCommand(CanExecute = nameof(CanLoad))]
+    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand { get; }
+
     private Task PreviousPeriodAsync()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(ManualEntriesStart ?? ManualEntriesEnd ?? DateTime.Today, forward: false);
@@ -171,7 +219,8 @@ public partial class ManualEntriesViewModel : ObservableObject
 
     /// <summary>See PreviousPeriodCommand's doc comment -- same step, the other
     /// direction.</summary>
-    [RelayCommand(CanExecute = nameof(CanLoad))]
+    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand { get; }
+
     private Task NextPeriodAsync()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(ManualEntriesStart ?? ManualEntriesEnd ?? DateTime.Today, forward: true);
@@ -180,7 +229,8 @@ public partial class ManualEntriesViewModel : ObservableObject
         return LoadManualEntriesCoreAsync(showFeedback: true);
     }
 
-    [RelayCommand(CanExecute = nameof(CanLoad))]
+    public ReactiveCommand<RxVoid, RxVoid> LoadManualEntriesCommand { get; }
+
     private Task LoadManualEntriesAsync() => LoadManualEntriesCoreAsync(showFeedback: true);
 
     /// <summary>What ManualEntriesView's toolbar button is actually wired to now -- see
@@ -197,7 +247,8 @@ public partial class ManualEntriesViewModel : ObservableObject
     /// button.</summary>
     private bool CanRefreshOrCancelManualEntries() => _busy.IsVisiblyRunning || CanLoad();
 
-    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelManualEntries))]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelManualEntriesCommand { get; }
+
     private void RefreshOrCancelManualEntries()
     {
         if (_busy.IsVisiblyRunning)
@@ -229,13 +280,14 @@ public partial class ManualEntriesViewModel : ObservableObject
     /// rather than ExportLogsToExcel, so Reason and EnteredBy -- the two columns that
     /// only exist on a manual entry, and the actual point of exporting this grid
     /// separately from Punch Records -- make it into the file.</summary>
-    [RelayCommand(CanExecute = nameof(CanExportManualEntries))]
+    public ReactiveCommand<RxVoid, RxVoid> ExportManualEntriesCommand { get; }
+
     private async Task ExportManualEntriesAsync()
     {
         var validationError = ValidateManualEntriesRange();
         if (validationError is not null)
         {
-            _statusBarService.ShowCaution(validationError);
+            StatusBar.ShowCaution(validationError);
             return;
         }
 
@@ -261,9 +313,9 @@ public partial class ManualEntriesViewModel : ObservableObject
             AttendanceExcelExporter.ExportManualLogsToExcel(dialog.FileName, entries, employees);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
             _saveViewState();
-            _statusBarService.ShowSuccess($"Saved {entries.Count} manual entry(ies) to {dialog.FileName}.");
+            StatusBar.ShowSuccess($"Saved {entries.Count} manual entry(ies) to {dialog.FileName}.");
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     private bool CanExportManualEntries() => !_busy.IsRunning;
@@ -279,12 +331,16 @@ public partial class ManualEntriesViewModel : ObservableObject
     /// well-formed but already on file is a separate, ordinary case handled by
     /// AddRangeAsync's own dedup rather than treated as a problem here -- see
     /// ManualEntryImportResult's own doc comment for that split.</summary>
-    [RelayCommand(CanExecute = nameof(CanImportManualEntries))]
+    public ReactiveCommand<RxVoid, RxVoid> ImportManualEntriesCommand { get; }
+
     private async Task ImportManualEntriesAsync()
     {
         var dialog = new OpenFileDialog { Filter = "Excel workbook (*.xlsx)|*.xlsx" };
         if (dialog.ShowDialog() != true)
             return;
+
+        // Shown once the busy run is over: onError can't wait for the user to read it.
+        ManualEntryImportException? importProblems = null;
 
         // visibly: true -- always an explicit click, never a silent auto-load.
         await _busy.RunAsync(visibly: true, async cancellationToken =>
@@ -312,7 +368,7 @@ public partial class ManualEntriesViewModel : ObservableObject
             if (result.NewRecords > 0)
                 _dataVersion.BumpManualLogs();
 
-            _statusBarService.ShowSuccess(
+            StatusBar.ShowSuccess(
                 $"Imported {result.NewRecords} new manual entry(ies) from {Path.GetFileName(dialog.FileName)} " +
                 $"({result.DuplicateRecords} already on file, {result.TotalInFile} total in the file).");
 
@@ -327,21 +383,25 @@ public partial class ManualEntriesViewModel : ObservableObject
             {
                 // Can carry many lines -- one workbook can fail several rows for
                 // several different reasons at once -- so unlike the single-line
-                // status bar notification below, this uses the same MessageBox
+                // status bar notification below, this uses the same MessageBox (Notify)
                 // surface ScheduleImportExportViewModel.ImportEmployeesAsync already
                 // reserves for the same shape of problem (see
                 // StatusBarNotificationExtensions' own doc comment for why
                 // confirmations/multi-line problem lists stay off the status bar).
-                MessageBox.Show(importEx.Message, "Import problems found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                importProblems = importEx;
                 return;
             }
 
             // Most likely cause: a column layout that doesn't match, or the file is
             // open in Excel (sharing violation).
-            _statusBarService.ShowError(
+            Logger.Warning(ex, "Manual entry import failed");
+            StatusBar.ShowError(
                 $"Could not import this file. Check that it matches the expected column layout. {ex.Message}",
                 "Import failed");
         });
+
+        if (importProblems is not null)
+            await NotifyAsync(importProblems.Message, "Import problems found", NoticeKind.Warning);
     }
 
     private bool CanImportManualEntries() => !_busy.IsRunning;
@@ -385,7 +445,7 @@ public partial class ManualEntriesViewModel : ObservableObject
         if (validationError is not null)
         {
             if (showFeedback)
-                _statusBarService.ShowCaution(validationError);
+                StatusBar.ShowCaution(validationError);
             return;
         }
 
@@ -408,12 +468,12 @@ public partial class ManualEntriesViewModel : ObservableObject
             _saveViewState();
 
             if (showFeedback)
-                _statusBarService.ShowSuccess($"Found {ManualEntriesCount} manual entry(ies) in range.");
+                StatusBar.ShowSuccess($"Found {ManualEntriesCount} manual entry(ies) in range.");
         },
         onError: ex =>
         {
             if (showFeedback)
-                _statusBarService.ShowError(ex.Message);
+                ShowFailure(ex);
         });
     }
 

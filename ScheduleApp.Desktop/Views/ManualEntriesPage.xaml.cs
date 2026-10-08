@@ -15,6 +15,11 @@ public partial class ManualEntriesPage : Page, INavigationAware
         _viewModel = viewModel;
         DataContext = viewModel;
         InitializeComponent();
+
+        // Deleting a manual entry asks first, and an import can have a list of problems to
+        // show -- the ViewModels' Confirm/Notify.
+        MessageBoxInteractions.Register(viewModel.ManualEntryEditor, this);
+        MessageBoxInteractions.Register(viewModel.ManualEntriesTab, this);
     }
 
     public async Task OnNavigatedToAsync()

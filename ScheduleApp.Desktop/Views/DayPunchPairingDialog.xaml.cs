@@ -32,6 +32,9 @@ public partial class DayPunchPairingDialog : Controls.AppWindow
         Editor = editor;
         DataContext = editor;
 
+        // Deleting a manual punch asks first (DayPunchPairingEditorViewModel.Confirm).
+        MessageBoxInteractions.Register(editor, this);
+
         // Named for what it does here, matching the menu item that opened it (see
         // MonthCalendarControl.BuildDayContextMenu): "Edit Punch Pairing" for a
         // Flexible day, "Edit Punches" for an editable non-Flexible one (drag isn't
@@ -55,7 +58,7 @@ public partial class DayPunchPairingDialog : Controls.AppWindow
         if (!editor.PairingAffectsResult)
         {
             SaveButton.Visibility = Visibility.Collapsed;
-            CancelButton.Content = "Close";
+            CancelButton.Label = "Close";
             CancelButton.IsDefault = true;
         }
     }

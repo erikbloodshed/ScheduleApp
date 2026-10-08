@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -27,7 +27,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// checked) -- ReportViewModel calls it when building a run and listens for
 /// SelectedEmployeeCount/TotalEmployeeCount changes to know when it can run.
 /// SelectionScopeText describes the current scope for display.</summary>
-public partial class ReportScopeViewModel : ObservableObject
+public class ReportScopeViewModel : ReactiveViewModel
 {
     /// <summary>Replaces the raw IScheduleRepository this class used to read
     /// GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync through
@@ -41,9 +41,17 @@ public partial class ReportScopeViewModel : ObservableObject
     {
         _rosterProvider = rosterProvider;
         _viewStateStore = viewStateStore;
+
+        LoadEmployeeTreeCommand = ReactiveCommand.CreateFromTask(async () => await LoadEmployeeTreeAsync());
+        SelectAllTreeCommand = ReactiveCommand.Create(SelectAllTree, CanExecuteFrom(CanSelectAllTree));
+        ClearTreeSelectionCommand = ReactiveCommand.Create(ClearTreeSelection, CanExecuteFrom(CanClearTreeSelection));
     }
 
     public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
+
+    /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
+    /// what the Summary page's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).</summary>
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
 
     /// <summary>Set once LoadEmployeeTreeAsync has applied the saved report-scope
     /// selection for the first time this run -- guards against a later reload (the "↻
@@ -82,17 +90,30 @@ public partial class ReportScopeViewModel : ObservableObject
     /// are visible (EmployeeNodeViewModel.IsVisible, DepartmentGroupViewModel.IsVisible)
     /// rather than which are checked -- searching and scoping a report are independent,
     /// so typing here never changes what a report would actually include.</summary>
-    [ObservableProperty]
-    private string searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (EqualityComparer<string>.Default.Equals(_searchText, value)) return;
+            this.RaisePropertyChanging();
+            _searchText = value;
+            OnSearchTextChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnSearchTextChanged(string value) => ApplySearchFilter();
+    private string _searchText = string.Empty;
+
+    private void OnSearchTextChanged(string value) => ApplySearchFilter();
 
     /// <summary>See EmployeeTreeSearchFilter -- shared with the Schedule tab's tree
     /// (MainViewModel) so the two don't carry duplicate copies of the same matching
     /// rule.</summary>
-    private void ApplySearchFilter() => EmployeeTreeSearchFilter.Apply(Departments, SearchText);
+    private void ApplySearchFilter() => EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> LoadEmployeeTreeCommand { get; }
+
     private async Task LoadEmployeeTreeAsync()
     {
         Departments.Clear();
@@ -133,10 +154,9 @@ public partial class ReportScopeViewModel : ObservableObject
         // ReportViewModel's own TryAutoRun re-evaluates itself off SelectedEmployeeCount
         // changing (see its constructor), so there's no need to reach into it directly
         // here the way the pre-split code once did.
-        OnPropertyChanged(nameof(SelectedEmployeeCount));
-        OnPropertyChanged(nameof(SelectionScopeText));
-        SelectAllTreeCommand.NotifyCanExecuteChanged();
-        ClearTreeSelectionCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
+        this.RaisePropertyChanged(nameof(SelectionScopeText));
+        RequeryCanExecute();
 
         // Freshly-built nodes all default to IsVisible = true, so a reload (via "↻
         // Refresh") under an already-typed search term needs this to re-hide whatever
@@ -150,10 +170,9 @@ public partial class ReportScopeViewModel : ObservableObject
         if (e.PropertyName != nameof(EmployeeNodeViewModel.IsSelected)) return;
 
         SelectionVersion++;
-        OnPropertyChanged(nameof(SelectedEmployeeCount));
-        OnPropertyChanged(nameof(SelectionScopeText));
-        SelectAllTreeCommand.NotifyCanExecuteChanged();
-        ClearTreeSelectionCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
+        this.RaisePropertyChanged(nameof(SelectionScopeText));
+        RequeryCanExecute();
     }
 
     /// <summary>Employees currently checked in the report-scope tree, across every
@@ -196,7 +215,8 @@ public partial class ReportScopeViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanSelectAllTree))]
+    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand { get; }
+
     private void SelectAllTree()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
@@ -205,7 +225,8 @@ public partial class ReportScopeViewModel : ObservableObject
 
     private bool CanSelectAllTree() => SelectedEmployeeCount < TotalEmployeeCount;
 
-    [RelayCommand(CanExecute = nameof(CanClearTreeSelection))]
+    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand { get; }
+
     private void ClearTreeSelection()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))

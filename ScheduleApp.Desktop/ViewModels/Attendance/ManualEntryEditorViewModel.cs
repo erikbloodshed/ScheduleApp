@@ -1,11 +1,11 @@
 using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.Views;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -24,7 +24,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// order. Punch Records is deliberately not notified here: it never shows manual entries
 /// (see PunchRecordsViewModel's doc comment), so an Add/Edit/Delete here never affects
 /// it.</summary>
-public partial class ManualEntryEditorViewModel : ObservableObject
+public class ManualEntryEditorViewModel : ViewModelBase
 {
     private readonly IManualAttendanceLogRepository _manualAttendanceLogRepository;
 
@@ -35,7 +35,6 @@ public partial class ManualEntryEditorViewModel : ObservableObject
     /// IManualAttendanceLogRepository, not device punches.</summary>
     private readonly IAttendanceLogRepository _attendanceLogRepository;
 
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
     private readonly AttendanceEmployeeDirectory _employeeDirectory;
@@ -49,10 +48,10 @@ public partial class ManualEntryEditorViewModel : ObservableObject
         AttendanceDataVersion dataVersion,
         AttendanceEmployeeDirectory employeeDirectory,
         ManualEntriesViewModel manualEntries)
+        : base(statusBarService)
     {
         _manualAttendanceLogRepository = manualAttendanceLogRepository;
         _attendanceLogRepository = attendanceLogRepository;
-        _statusBarService = statusBarService;
         _busy = busy;
         _dataVersion = dataVersion;
         _employeeDirectory = employeeDirectory;
@@ -61,15 +60,17 @@ public partial class ManualEntryEditorViewModel : ObservableObject
         _busy.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
-            AddManualEntryCommand.NotifyCanExecuteChanged();
-            EditManualEntryCommand.NotifyCanExecuteChanged();
-            DeleteManualEntryCommand.NotifyCanExecuteChanged();
+            RequeryCanExecute();
 
             // Also lets MainViewModel.CanAddManualEntryForDay react -- see IsAttendanceBusy's
             // own doc comment for why that's a read, not a merge, of this instance's busy
             // state.
-            OnPropertyChanged(nameof(IsAttendanceBusy));
+            this.RaisePropertyChanged(nameof(IsAttendanceBusy));
         };
+
+        AddManualEntryCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(AddManualEntryAsync), CanExecuteFrom(CanAddManualEntry));
+        EditManualEntryCommand = ReactiveCommand.CreateFromTask<StoredPunchLogRow>(p => RunSafelyAsync(() => EditManualEntryAsync(p)), CanExecuteFrom(CanEditManualEntry));
+        DeleteManualEntryCommand = ReactiveCommand.CreateFromTask<StoredPunchLogRow>(p => RunSafelyAsync(() => DeleteManualEntryAsync(p)), CanExecuteFrom(CanDeleteManualEntry));
     }
 
     /// <summary>Read-only window onto this class's own (AttendanceViewModel-owned)
@@ -89,7 +90,8 @@ public partial class ManualEntryEditorViewModel : ObservableObject
     /// subscriber never sees IsRunning change without also seeing this change.</summary>
     public bool IsAttendanceBusy => _busy.IsRunning;
 
-    [RelayCommand(CanExecute = nameof(CanAddManualEntry))]
+    public ReactiveCommand<RxVoid, RxVoid> AddManualEntryCommand { get; }
+
     private Task AddManualEntryAsync() => AddOrEditManualEntryAsync(existingLog: null);
 
     private bool CanAddManualEntry() => !_busy.IsRunning;
@@ -100,7 +102,8 @@ public partial class ManualEntryEditorViewModel : ObservableObject
     /// prefilled via its Edit-mode constructor, via the shared AddOrEditManualEntryAsync
     /// below. row.IsManual is checked here regardless, since a CommandParameter binding
     /// can't itself guarantee the button that produced it was actually enabled.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditManualEntry))]
+    public ReactiveCommand<StoredPunchLogRow, RxVoid> EditManualEntryCommand { get; }
+
     private Task EditManualEntryAsync(StoredPunchLogRow row)
     {
         if (!row.IsManual)
@@ -117,7 +120,7 @@ public partial class ManualEntryEditorViewModel : ObservableObject
         });
     }
 
-    private bool CanEditManualEntry(StoredPunchLogRow row) => !_busy.IsRunning;
+    private bool CanEditManualEntry() => !_busy.IsRunning;
 
     /// <summary>Entry point for the calendar's right-click "Add Manual Entry…" command --
     /// see MainViewModel.AddManualEntryForDayCommand, the only caller. Opens
@@ -130,7 +133,7 @@ public partial class ManualEntryEditorViewModel : ObservableObject
     /// the Attendance tab's Manual Entries grid if it's open, for free, without a second,
     /// separately-maintained save path to keep in sync.
     ///
-    /// Not [RelayCommand]-attributed like AddManualEntryAsync/EditManualEntryAsync above
+    /// Not a command like AddManualEntryAsync/EditManualEntryAsync above
     /// -- this isn't bound to anything on this class's own consumer (the Attendance tab).
     /// MainViewModel.AddManualEntryForDayCommand is the actual ICommand the calendar's
     /// context menu binds to, and that command needs its own CanExecute/busy wrapping
@@ -208,7 +211,7 @@ public partial class ManualEntryEditorViewModel : ObservableObject
             var punchTypeText = dialog.PunchType == 0 ? "Clock In" : "Clock Out";
             var verb = existingLog is null ? "Added" : "Updated";
             var message = $"{verb} manual {punchTypeText} for {employeeName} at {dialog.Timestamp:MM/dd/yyyy h:mm tt}.";
-            _statusBarService.ShowSuccess(message);
+            StatusBar.ShowSuccess(message);
 
             // Refresh Manual Entries if it's currently showing something, so the
             // added/edited entry is visible immediately without a separate Load click --
@@ -225,7 +228,7 @@ public partial class ManualEntryEditorViewModel : ObservableObject
             // and why RunAsync itself (not this call site) is what now guards against it.
             await _manualEntries.RefreshIfLoadedAsync();
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Bound to the Delete button on a manual row in the Manual Entries grid
@@ -235,16 +238,16 @@ public partial class ManualEntryEditorViewModel : ObservableObject
     /// this way; see ManualAttendanceLog's doc comment). row.IsManual is checked again
     /// here regardless, since a CommandParameter binding can't itself guarantee the
     /// button that produced it was actually enabled.</summary>
-    [RelayCommand(CanExecute = nameof(CanDeleteManualEntry))]
+    public ReactiveCommand<StoredPunchLogRow, RxVoid> DeleteManualEntryCommand { get; }
+
     private async Task DeleteManualEntryAsync(StoredPunchLogRow row)
     {
         if (!row.IsManual)
             return;
 
-        var confirm = MessageBox.Show(
-            $"Delete this manual entry for {row.EmployeeName} at {row.Timestamp:MM/dd/yyyy h:mm tt}?",
-            "Delete manual entry", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes)
+        if (!await ConfirmAsync(
+                $"Delete this manual entry for {row.EmployeeName} at {row.Timestamp:MM/dd/yyyy h:mm tt}?",
+                "Delete manual entry"))
             return;
 
         // Previously missing entirely -- unlike Add/Edit/Load/Export, this method never
@@ -264,10 +267,10 @@ public partial class ManualEntryEditorViewModel : ObservableObject
 
             _manualEntries.RemoveById(row.Id);
 
-            _statusBarService.ShowSuccess("Manual entry deleted.");
+            StatusBar.ShowSuccess("Manual entry deleted.");
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
-    private bool CanDeleteManualEntry(StoredPunchLogRow row) => !_busy.IsRunning;
+    private bool CanDeleteManualEntry() => !_busy.IsRunning;
 }

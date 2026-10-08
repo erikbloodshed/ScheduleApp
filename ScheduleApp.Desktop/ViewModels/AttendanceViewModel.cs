@@ -1,12 +1,13 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using ScheduleApp.Attendance;
+﻿using ScheduleApp.Attendance;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -47,7 +48,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// just backed by seven smaller, independently-testable objects instead of one 1,400+
 /// line one.
 /// </summary>
-public partial class AttendanceViewModel : ObservableObject, IDisposable
+public class AttendanceViewModel : ReactiveObject, IDisposable
 {
     private readonly ViewStateStore _viewStateStore;
     private readonly AttendanceTabActivationGate _tabActivationGate = new();
@@ -198,23 +199,23 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         // ManualEntriesTab's stay the older single RefreshOrCancelGlyph (a plain Button
         // whose Content *is* the glyph) -- see PunchRecordsViewModel.RefreshOrCancelContent's
         // own doc comment for why that one page's button looks different.
-        Report.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
-        PunchRecords.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
-        ManualEntriesTab.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
-        ReportScope.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
+        Report.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+        PunchRecords.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+        ManualEntriesTab.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+        ReportScope.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
         _busy.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(AttendanceBusyState.IsVisiblyRunning)) return;
 
-            OnPropertyChanged(nameof(IsVisiblyRunning));
+            this.RaisePropertyChanged(nameof(IsVisiblyRunning));
 
-            OnPropertyChanged(nameof(SummaryRefreshOrCancelGlyph));
-            OnPropertyChanged(nameof(SummaryRefreshOrCancelToolTip));
-            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelContent));
-            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelIcon));
-            OnPropertyChanged(nameof(PunchRecordsRefreshOrCancelToolTip));
-            OnPropertyChanged(nameof(ManualEntriesRefreshOrCancelGlyph));
-            OnPropertyChanged(nameof(ManualEntriesRefreshOrCancelToolTip));
+            this.RaisePropertyChanged(nameof(SummaryRefreshOrCancelGlyph));
+            this.RaisePropertyChanged(nameof(SummaryRefreshOrCancelToolTip));
+            this.RaisePropertyChanged(nameof(PunchRecordsRefreshOrCancelContent));
+            this.RaisePropertyChanged(nameof(PunchRecordsRefreshOrCancelIcon));
+            this.RaisePropertyChanged(nameof(PunchRecordsRefreshOrCancelToolTip));
+            this.RaisePropertyChanged(nameof(ManualEntriesRefreshOrCancelGlyph));
+            this.RaisePropertyChanged(nameof(ManualEntriesRefreshOrCancelToolTip));
         };
     }
 
@@ -239,13 +240,14 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     /// running could be Load/Export/Generate Reports on any tab, an Import/Fetch, or a
     /// Manual Entry Add/Edit/Delete dialog. See AttendanceBusyState.Cancel's own doc
     /// comment for why CanExecute is tied to IsVisiblyRunning rather than IsRunning.</summary>
-    public IRelayCommand CancelCommand => _busy.CancelCommand;
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand => _busy.CancelCommand;
 
     public ObservableCollection<DepartmentGroupViewModel> Departments => ReportScope.Departments;
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments => ReportScope.VisibleDepartments;
     public string SelectionScopeText => ReportScope.SelectionScopeText;
-    public IAsyncRelayCommand LoadEmployeeTreeCommand => ReportScope.LoadEmployeeTreeCommand;
-    public IRelayCommand SelectAllTreeCommand => ReportScope.SelectAllTreeCommand;
-    public IRelayCommand ClearTreeSelectionCommand => ReportScope.ClearTreeSelectionCommand;
+    public ReactiveCommand<RxVoid, RxVoid> LoadEmployeeTreeCommand => ReportScope.LoadEmployeeTreeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand => ReportScope.SelectAllTreeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand => ReportScope.ClearTreeSelectionCommand;
 
     /// <summary>Named with the "ReportScope" prefix (unlike this tab's other forwarded
     /// members) specifically to stay distinct from PunchRecords.LogViewSearchText below --
@@ -257,9 +259,9 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         set => ReportScope.SearchText = value;
     }
 
-    public IAsyncRelayCommand ImportPunchLogCommand => Import.ImportPunchLogCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ImportPunchLogCommand => Import.ImportPunchLogCommand;
 
-    public IAsyncRelayCommand FetchFromDeviceCommand => DeviceFetch.FetchFromDeviceCommand;
+    public ReactiveCommand<RxVoid, RxVoid> FetchFromDeviceCommand => DeviceFetch.FetchFromDeviceCommand;
 
     public DateTime? PeriodStart
     {
@@ -273,8 +275,8 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         set => Report.PeriodEnd = value;
     }
 
-    public IRelayCommand PreviousPeriodCommand => Report.PreviousPeriodCommand;
-    public IRelayCommand NextPeriodCommand => Report.NextPeriodCommand;
+    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand => Report.PreviousPeriodCommand;
+    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand => Report.NextPeriodCommand;
 
     public bool HasResults => Report.HasResults;
     public bool HasSummaryRows => Report.HasSummaryRows;
@@ -295,7 +297,7 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     public int OrphanedCount => Report.OrphanedCount;
     public int UnscheduledCount => Report.UnscheduledCount;
     public ObservableCollection<AttendanceSummaryRow> SummaryRows => Report.SummaryRows;
-    public ICollectionView SummaryRowsView => Report.SummaryRowsView;
+    public FilteredCollection<AttendanceSummaryRow> SummaryRowsView => Report.SummaryRowsView;
 
     /// <summary>Which status tile currently narrows SummaryRowsView, or null when every
     /// status is showing -- see ReportViewModel.SelectedStatusFilter. Forwarded (not just
@@ -311,18 +313,18 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         set => Report.IsSummaryTabSelected = value;
     }
 
-    public IRelayCommand ExportSummaryCommand => Report.ExportSummaryCommand;
-    public IRelayCommand<PunchStatus> ShowStatusDetailCommand => Report.ShowStatusDetailCommand;
-    public IRelayCommand ClearStatusFilterCommand => Report.ClearStatusFilterCommand;
-    public IRelayCommand ShowOrphanedDetailCommand => Report.ShowOrphanedDetailCommand;
-    public IRelayCommand ShowUnscheduledDetailCommand => Report.ShowUnscheduledDetailCommand;
-    public IAsyncRelayCommand RefreshSummaryCommand => Report.RefreshSummaryCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ExportSummaryCommand => Report.ExportSummaryCommand;
+    public ReactiveCommand<PunchStatus, RxVoid> ShowStatusDetailCommand => Report.ShowStatusDetailCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ClearStatusFilterCommand => Report.ClearStatusFilterCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ShowOrphanedDetailCommand => Report.ShowOrphanedDetailCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ShowUnscheduledDetailCommand => Report.ShowUnscheduledDetailCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RefreshSummaryCommand => Report.RefreshSummaryCommand;
 
     /// <summary>What the Period row's icon button in AttendanceSummaryView.xaml is
     /// actually wired to now -- see ReportViewModel.RefreshOrCancelSummary's own doc
     /// comment for why this replaced a separate Cancel bar/button that used to appear
     /// and disappear above that row.</summary>
-    public IRelayCommand RefreshOrCancelSummaryCommand => Report.RefreshOrCancelSummaryCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelSummaryCommand => Report.RefreshOrCancelSummaryCommand;
 
     /// <summary>Prefixed "Summary"/"PunchRecords"/"ManualEntries" (unlike the Payroll/
     /// Schedule facades' plain RefreshOrCancelGlyph/RefreshOrCancelToolTip) -- this one
@@ -337,14 +339,14 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     /// command pattern as every other Report-owned command above, just parameterized
     /// on the row that was right-clicked. See ReportViewModel.AddManualEntryForRowAsync's
     /// own doc comment for the rest of the story.</summary>
-    public IAsyncRelayCommand<AttendanceSummaryRow> AddManualEntryForRowCommand => Report.AddManualEntryForRowCommand;
+    public ReactiveCommand<AttendanceSummaryRow, RxVoid> AddManualEntryForRowCommand => Report.AddManualEntryForRowCommand;
 
     /// <summary>Backs the Summary grid's own right-click "Edit Punch Pairing…" (see
     /// AttendanceSummaryView.xaml.cs's SummaryRow_MouseRightButtonDown, which only builds
     /// that item for a Flexible row) -- same forwarded-command pattern as
     /// AddManualEntryForRowCommand just above. See
     /// ReportViewModel.EditPunchPairingForRowAsync's own doc comment.</summary>
-    public IAsyncRelayCommand<AttendanceSummaryRow> EditPunchPairingForRowCommand => Report.EditPunchPairingForRowCommand;
+    public ReactiveCommand<AttendanceSummaryRow, RxVoid> EditPunchPairingForRowCommand => Report.EditPunchPairingForRowCommand;
 
     public bool IsPunchRecordsTabSelected
     {
@@ -378,14 +380,14 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         set => PunchRecords.IsLogViewSuggestionsOpen = value;
     }
 
-    public IRelayCommand<PunchSearchSuggestion> SelectLogViewSuggestionCommand => PunchRecords.SelectLogViewSuggestionCommand;
+    public ReactiveCommand<PunchSearchSuggestion?, RxVoid> SelectLogViewSuggestionCommand => PunchRecords.SelectLogViewSuggestionCommand;
 
     public int StoredLogsCount => PunchRecords.StoredLogsCount;
     public bool HasLoadedStoredLogs => PunchRecords.HasLoadedStoredLogs;
     public ObservableCollection<StoredPunchLogRow> StoredLogs => PunchRecords.StoredLogs;
-    public ICollectionView StoredLogsView => PunchRecords.StoredLogsView;
-    public IAsyncRelayCommand LoadStoredLogsCommand => PunchRecords.LoadStoredLogsCommand;
-    public IAsyncRelayCommand ExportStoredLogsCommand => PunchRecords.ExportStoredLogsCommand;
+    public FilteredCollection<StoredPunchLogRow> StoredLogsView => PunchRecords.StoredLogsView;
+    public ReactiveCommand<RxVoid, RxVoid> LoadStoredLogsCommand => PunchRecords.LoadStoredLogsCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ExportStoredLogsCommand => PunchRecords.ExportStoredLogsCommand;
 
     /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
     /// PunchRecordsViewModel.RefreshOrCancelStoredLogs's own doc comment. Named with the
@@ -393,7 +395,7 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     /// Content/Icon rather than a single Glyph -- see
     /// PunchRecordsViewModel.RefreshOrCancelContent's own doc comment -- since this
     /// button, unlike Summary's/ManualEntries', is a controls:IconButton.</summary>
-    public IRelayCommand RefreshOrCancelStoredLogsCommand => PunchRecords.RefreshOrCancelStoredLogsCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelStoredLogsCommand => PunchRecords.RefreshOrCancelStoredLogsCommand;
     public string PunchRecordsRefreshOrCancelContent => PunchRecords.RefreshOrCancelContent;
     public string PunchRecordsRefreshOrCancelIcon => PunchRecords.RefreshOrCancelIcon;
     public string PunchRecordsRefreshOrCancelToolTip => PunchRecords.RefreshOrCancelToolTip;
@@ -402,8 +404,8 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     /// NextPeriodCommand above) for the same reason ReportScopeSearchText is -- both
     /// PunchRecords and Report have their own period-nav pair on this same
     /// tab.</summary>
-    public IAsyncRelayCommand PreviousLogViewPeriodCommand => PunchRecords.PreviousPeriodCommand;
-    public IAsyncRelayCommand NextLogViewPeriodCommand => PunchRecords.NextPeriodCommand;
+    public ReactiveCommand<RxVoid, RxVoid> PreviousLogViewPeriodCommand => PunchRecords.PreviousPeriodCommand;
+    public ReactiveCommand<RxVoid, RxVoid> NextLogViewPeriodCommand => PunchRecords.NextPeriodCommand;
 
     public bool IsManualEntriesTabSelected
     {
@@ -426,26 +428,26 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
     public int ManualEntriesCount => ManualEntriesTab.ManualEntriesCount;
     public bool HasLoadedManualEntries => ManualEntriesTab.HasLoadedManualEntries;
     public ObservableCollection<StoredPunchLogRow> ManualEntries => ManualEntriesTab.ManualEntries;
-    public IAsyncRelayCommand LoadManualEntriesCommand => ManualEntriesTab.LoadManualEntriesCommand;
-    public IAsyncRelayCommand ExportManualEntriesCommand => ManualEntriesTab.ExportManualEntriesCommand;
-    public IAsyncRelayCommand ImportManualEntriesCommand => ManualEntriesTab.ImportManualEntriesCommand;
+    public ReactiveCommand<RxVoid, RxVoid> LoadManualEntriesCommand => ManualEntriesTab.LoadManualEntriesCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ExportManualEntriesCommand => ManualEntriesTab.ExportManualEntriesCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ImportManualEntriesCommand => ManualEntriesTab.ImportManualEntriesCommand;
 
     /// <summary>What ManualEntriesView's toolbar button is actually wired to now -- see
     /// ManualEntriesViewModel.RefreshOrCancelManualEntries's own doc comment. Named with
     /// the "ManualEntries" prefix for the same reason SummaryRefreshOrCancelGlyph is.</summary>
-    public IRelayCommand RefreshOrCancelManualEntriesCommand => ManualEntriesTab.RefreshOrCancelManualEntriesCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelManualEntriesCommand => ManualEntriesTab.RefreshOrCancelManualEntriesCommand;
     public string ManualEntriesRefreshOrCancelGlyph => ManualEntriesTab.RefreshOrCancelGlyph;
     public string ManualEntriesRefreshOrCancelToolTip => ManualEntriesTab.RefreshOrCancelToolTip;
 
     /// <summary>Named with the "ManualEntries" prefix for the same reason
     /// PreviousLogViewPeriodCommand/NextLogViewPeriodCommand are above -- keeps this
     /// tab's own pair distinct from Report's and PunchRecords'.</summary>
-    public IAsyncRelayCommand PreviousManualEntriesPeriodCommand => ManualEntriesTab.PreviousPeriodCommand;
-    public IAsyncRelayCommand NextManualEntriesPeriodCommand => ManualEntriesTab.NextPeriodCommand;
+    public ReactiveCommand<RxVoid, RxVoid> PreviousManualEntriesPeriodCommand => ManualEntriesTab.PreviousPeriodCommand;
+    public ReactiveCommand<RxVoid, RxVoid> NextManualEntriesPeriodCommand => ManualEntriesTab.NextPeriodCommand;
 
-    public IAsyncRelayCommand AddManualEntryCommand => ManualEntryEditor.AddManualEntryCommand;
-    public IAsyncRelayCommand<StoredPunchLogRow> EditManualEntryCommand => ManualEntryEditor.EditManualEntryCommand;
-    public IAsyncRelayCommand<StoredPunchLogRow> DeleteManualEntryCommand => ManualEntryEditor.DeleteManualEntryCommand;
+    public ReactiveCommand<RxVoid, RxVoid> AddManualEntryCommand => ManualEntryEditor.AddManualEntryCommand;
+    public ReactiveCommand<StoredPunchLogRow, RxVoid> EditManualEntryCommand => ManualEntryEditor.EditManualEntryCommand;
+    public ReactiveCommand<StoredPunchLogRow, RxVoid> DeleteManualEntryCommand => ManualEntryEditor.DeleteManualEntryCommand;
 
     // ---- View-state persistence ----
 
@@ -536,7 +538,7 @@ public partial class AttendanceViewModel : ObservableObject, IDisposable
         _busy.IsRunning = true;
         try
         {
-            await ReportScope.LoadEmployeeTreeCommand.ExecuteAsync(null);
+            await ReportScope.LoadEmployeeTreeCommand.Execute();
             _employeeDirectory.SeedCache(ReportScope.LoadedEmployees);
         }
         finally

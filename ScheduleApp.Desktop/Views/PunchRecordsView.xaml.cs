@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -30,7 +31,9 @@ public partial class PunchRecordsView : UserControl
         if (item?.Content is not PunchSearchSuggestion suggestion)
             return;
 
-        viewModel.SelectLogViewSuggestionCommand.Execute(suggestion);
+        // Through ICommand, which runs it: a ReactiveCommand's own Execute only returns an
+        // observable that nothing would subscribe to.
+        ((ICommand)viewModel.SelectLogViewSuggestionCommand).Execute(suggestion);
         e.Handled = true;
     }
 }

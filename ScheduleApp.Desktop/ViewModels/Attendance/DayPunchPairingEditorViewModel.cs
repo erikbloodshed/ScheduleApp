@@ -1,14 +1,14 @@
 ﻿using System.Collections.ObjectModel;
 using System.Windows;
 using System.Globalization;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Utilities;
 using ScheduleApp.Desktop.Views;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -34,7 +34,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// what the Summary grid will say after saving, including the Complete/Partial
 /// verdict.
 /// </summary>
-public partial class DayPunchPairingEditorViewModel : ObservableObject
+public class DayPunchPairingEditorViewModel : ReactiveViewModel
 {
     private readonly ScheduleEntry _schedule;
     private readonly AttendancePolicy _policy;
@@ -151,6 +151,10 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
 
         SeedRows(existingPairing);
         Recompute();
+
+        AddRowCommand = ReactiveCommand.Create(AddRow);
+        RemoveEmptySegmentsCommand = ReactiveCommand.Create(RemoveEmptySegments, CanExecuteFrom(CanRemoveEmptySegments));
+        UndoCommand = ReactiveCommand.Create(Undo, CanExecuteFrom(CanUndo));
     }
 
     public string EmployeeName { get; }
@@ -189,38 +193,78 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
 
     public ObservableCollection<DayPunchPairingRowViewModel> Rows { get; } = [];
 
-    [ObservableProperty]
-    private string workedText = "—";
+    public string WorkedText
+    {
+        get => _workedText;
+        set => this.RaiseAndSetIfChanged(ref _workedText, value);
+    }
 
-    [ObservableProperty]
-    private string remainderText = "—";
+    private string _workedText = "—";
+
+    public string RemainderText
+    {
+        get => _remainderText;
+        set => this.RaiseAndSetIfChanged(ref _remainderText, value);
+    }
+
+    private string _remainderText = "—";
 
     /// <summary>"Remaining" when short of the day's required hours, "Overtime"
     /// when past it -- the footer label next to <see cref="RemainderText"/>, so
     /// the same figure doesn't need two separate rows.</summary>
-    [ObservableProperty]
-    private string remainderLabel = "Remaining";
+    public string RemainderLabel
+    {
+        get => _remainderLabel;
+        set => this.RaiseAndSetIfChanged(ref _remainderLabel, value);
+    }
 
-    [ObservableProperty]
-    private PunchStatus previewStatus = PunchStatus.Absent;
+    private string _remainderLabel = "Remaining";
 
-    [ObservableProperty]
-    private string previewStatusText = PunchStatus.Absent.ToText();
+    public PunchStatus PreviewStatus
+    {
+        get => _previewStatus;
+        set => this.RaiseAndSetIfChanged(ref _previewStatus, value);
+    }
+
+    private PunchStatus _previewStatus = PunchStatus.Absent;
+
+    public string PreviewStatusText
+    {
+        get => _previewStatusText;
+        set => this.RaiseAndSetIfChanged(ref _previewStatusText, value);
+    }
+
+    private string _previewStatusText = PunchStatus.Absent.ToText();
 
     /// <summary>How many punches are currently sitting in a half-open segment.
     /// Zero is what makes the day Complete.</summary>
-    [ObservableProperty]
-    private int unpairedCount;
+    public int UnpairedCount
+    {
+        get => _unpairedCount;
+        set => this.RaiseAndSetIfChanged(ref _unpairedCount, value);
+    }
 
-    [ObservableProperty]
-    private bool hasUnpairedPunches;
+    private int _unpairedCount;
+
+    public bool HasUnpairedPunches
+    {
+        get => _hasUnpairedPunches;
+        set => this.RaiseAndSetIfChanged(ref _hasUnpairedPunches, value);
+    }
+
+    private bool _hasUnpairedPunches;
 
     /// <summary>"3 punches recorded" -- what the footer shows in place of the
     /// Worked/Required/status preview on a day whose pairing isn't read back (see
     /// <see cref="PairingAffectsResult"/>), where those figures would be computed
     /// with rules that day isn't actually calculated by.</summary>
-    [ObservableProperty]
-    private string punchCountText = "No punches recorded";
+    public string PunchCountText
+    {
+        get => _punchCountText;
+        set => this.RaiseAndSetIfChanged(ref _punchCountText, value);
+    }
+
+    private string _punchCountText = "No punches recorded";
 
     // ---- Layout -------------------------------------------------------------
 
@@ -350,14 +394,13 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// <summary>Run after any change to <see cref="Rows"/>' shape (a drop, Add
     /// Segment, Remove Empty, Undo, a manual punch add/delete): re-establish the
     /// trailing spare, then re-query the two commands whose CanExecute depends on
-    /// how many rows -- and how many empty ones -- there are now. CommunityToolkit
-    /// doesn't observe <see cref="Rows"/>.Count, so this is the only thing keeping
+    /// how many rows -- and how many empty ones -- there are now. Nothing observes
+    /// <see cref="Rows"/>.Count for them, so this is the only thing keeping
     /// "Remove Empty" and "Undo" enabled/disabled correctly after a drag.</summary>
     private void OnRowsChanged()
     {
         EnsureTrailingEmptyRow();
-        RemoveEmptySegmentsCommand.NotifyCanExecuteChanged();
-        UndoCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     // ---- Drag & drop --------------------------------------------------------
@@ -470,7 +513,8 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
             _undoStack.RemoveAt(0);
     }
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> AddRowCommand { get; }
+
     private void AddRow()
     {
         PushUndoSnapshot();
@@ -482,7 +526,8 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// This is the manual cleanup for the working rows a drag leaves behind now that
     /// a vacated row stays put (see <see cref="MoveCell"/>) instead of collapsing
     /// under the pointer. Bound to the "Remove Empty" button.</summary>
-    [RelayCommand(CanExecute = nameof(CanRemoveEmptySegments))]
+    public ReactiveCommand<RxVoid, RxVoid> RemoveEmptySegmentsCommand { get; }
+
     private void RemoveEmptySegments()
     {
         PushUndoSnapshot();
@@ -655,10 +700,9 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
         if (IsReadOnly || !cell.IsManual)
             return;
 
-        var confirm = MessageBox.Show(
-            $"Delete the manual {cell.TimeText} punch for {EmployeeName} on {Date:MMM d, yyyy}?",
-            "Delete manual punch", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes)
+        if (!await ConfirmAsync(
+                $"Delete the manual {cell.TimeText} punch for {EmployeeName} on {Date:MMM d, yyyy}?",
+                "Delete manual punch"))
             return;
 
         await _manualLogRepository.DeleteAsync(cell.Punch.Id);
@@ -817,7 +861,8 @@ public partial class DayPunchPairingEditorViewModel : ObservableObject
     /// added or deleted (see <see cref="AddManualPunchAsync"/>), since those hit the
     /// database and Undo can't reverse them. Cancelling the dialog still throws the
     /// whole layout away regardless -- this is for stepping back mid-edit.</summary>
-    [RelayCommand(CanExecute = nameof(CanUndo))]
+    public ReactiveCommand<RxVoid, RxVoid> UndoCommand { get; }
+
     private void Undo()
     {
         if (_undoStack.Count == 0)

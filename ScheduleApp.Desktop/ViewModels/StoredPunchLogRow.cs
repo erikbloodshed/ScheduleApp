@@ -38,6 +38,12 @@ public class StoredPunchLogRow
     public required string EmployeeName { get; init; }
     public required string DepartmentName { get; init; }
     public DateTime Timestamp { get; init; }
+
+    /// <summary>Timestamp's date and time of day, each a grid column of its own (Date, Time):
+    /// an SfDataGrid column is keyed by the one property it shows and sorts by.</summary>
+    public DateOnly Date => DateOnly.FromDateTime(Timestamp);
+
+    public TimeOnly Time => TimeOnly.FromDateTime(Timestamp);
     public required string PunchTypeText { get; init; }
     public required string Source { get; init; }
     public DateTime ImportedAt { get; init; }

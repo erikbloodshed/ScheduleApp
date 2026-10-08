@@ -1,11 +1,11 @@
 using System.IO;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Desktop.Services;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -18,10 +18,9 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// all three end up calling AddLogsAsync/AddAsync, so re-running any one after another is
 /// safe; a punch already on file from one path is just a duplicate from another's
 /// perspective.</summary>
-public partial class AttendanceImportViewModel : ObservableObject
+public class AttendanceImportViewModel : ViewModelBase
 {
     private readonly IAttendanceLogRepository _attendanceLogRepository;
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
 
@@ -31,9 +30,9 @@ public partial class AttendanceImportViewModel : ObservableObject
         AttendanceBusyState busy,
         AttendanceDataVersion dataVersion,
         string? initialLogDatFile)
+        : base(statusBarService)
     {
         _attendanceLogRepository = attendanceLogRepository;
-        _statusBarService = statusBarService;
         _busy = busy;
         _dataVersion = dataVersion;
 
@@ -42,14 +41,22 @@ public partial class AttendanceImportViewModel : ObservableObject
         _busy.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
-                ImportPunchLogCommand.NotifyCanExecuteChanged();
+                RequeryCanExecute();
         };
+
+        ImportPunchLogCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportPunchLogAsync), CanExecuteFrom(CanImportPunchLog));
     }
 
-    [ObservableProperty]
-    private string logDatFilePath = string.Empty;
+    public string LogDatFilePath
+    {
+        get => _logDatFilePath;
+        set => this.RaiseAndSetIfChanged(ref _logDatFilePath, value);
+    }
 
-    [RelayCommand(CanExecute = nameof(CanImportPunchLog))]
+    private string _logDatFilePath = string.Empty;
+
+    public ReactiveCommand<RxVoid, RxVoid> ImportPunchLogCommand { get; }
+
     private async Task ImportPunchLogAsync()
     {
         var dialog = new OpenFileDialog
@@ -87,9 +94,9 @@ public partial class AttendanceImportViewModel : ObservableObject
             var message =
                 $"Imported {result.NewRecords} new punch(es) from {Path.GetFileName(LogDatFilePath)} " +
                 $"({result.DuplicateRecords} already on file, {result.TotalInFile} total in the file).";
-            _statusBarService.ShowSuccess(message);
+            StatusBar.ShowSuccess(message);
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     private bool CanImportPunchLog() => !_busy.IsRunning;

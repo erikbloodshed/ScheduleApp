@@ -194,12 +194,7 @@
                        VerticalAlignment="Center"
                        Text="{Binding CalendarHeaderText}" />
 
-            <DockPanel Grid.Row="2" Margin="0,0,0,8" LastChildFill="False">
-                <TextBlock DockPanel.Dock="Left"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource MutedForegroundBrush}"
-                           FontSize="11"
-                           Text="Click a day, Shift+click or drag for a range, Ctrl+click to pick several days" />
+            <DockPanel Grid.Row="2" Margin="0,0,0,8">
                 <syncfusion:ButtonAdv DockPanel.Dock="Right"
                                       Label="{Binding SetScheduleButtonText}"
                                       IconTemplate="{StaticResource CalendarIconTemplate}"
@@ -215,6 +210,13 @@
                                       IconTemplate="{StaticResource ClearSelectionIconTemplate}"
                                       Style="{StaticResource CommandButton}"
                                       Command="{Binding ClearCalendarSelectionCommand}" />
+                <!-- Last, so the buttons keep their width and the hint trims instead. -->
+                <TextBlock VerticalAlignment="Center"
+                           Foreground="{DynamicResource MutedForegroundBrush}"
+                           FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           Text="Click a day, Shift+click or drag for a range, Ctrl+click to pick several days"
+                           ToolTip="Click a day, Shift+click or drag for a range, Ctrl+click to pick several days" />
             </DockPanel>
 
             <controls:MonthCalendarControl Grid.Row="3" Days="{Binding CalendarDays}" />

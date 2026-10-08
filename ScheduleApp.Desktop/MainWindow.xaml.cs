@@ -183,12 +183,19 @@ public partial class MainWindow : Controls.AppWindow
     /// an icon rail whose toggle expands the menu over the page until a page is picked (see
     /// <see cref="NavigationDrawer_ItemClicked"/>), with Attendance's three pages in a popup
     /// off the rail. The pin glyph is filled while pinned, and its tooltip says what a click
-    /// will do.</summary>
+    /// will do.
+    ///
+    /// Expanded, the drawer pushes the content right by the difference between its two
+    /// widths but still sizes it as if it were Compact, so the page's right edge would run
+    /// that far off the window. The Frame's right margin takes the difference back.</summary>
     private void ApplyNavDrawerPinned()
     {
         NavigationDrawer.DisplayMode = _navDrawerPinned ? DisplayMode.Expanded : DisplayMode.Compact;
         NavigationDrawer.IsToggleButtonVisible = !_navDrawerPinned;
         NavigationDrawer.IsOpen = _navDrawerPinned;
+        ContentFrame.Margin = _navDrawerPinned
+            ? new Thickness(0, 0, NavigationDrawer.ExpandedModeWidth - NavigationDrawer.CompactModeWidth, 0)
+            : default;
 
         PinPaneGlyph.Text = _navDrawerPinned ? "" : ""; // PinFill : Pin
         PinPaneButton.ToolTip = _navDrawerPinned

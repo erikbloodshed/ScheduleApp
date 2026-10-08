@@ -1,6 +1,7 @@
 <controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PunchTimeEntryDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         Title="Add Manual Punch"
         Width="380" SizeToContent="Height"
@@ -43,19 +44,21 @@
         <controls:TimeInput x:Name="TimeBox" Grid.Row="2" Density="Compact" Margin="0,0,0,12" />
 
         <TextBlock Grid.Row="4" Text="Reason" Margin="0,0,0,4" />
-        <TextBox x:Name="ReasonBox" Grid.Row="5" Margin="0,0,0,12"
+        <syncfusion:SfTextBoxExt x:Name="ReasonBox" Grid.Row="5" Margin="0,0,0,12"
                  ToolTip="Why this punch couldn't come from the device (optional) -- grayed-out shows the default; type over it for something specific." />
 
         <TextBlock Grid.Row="6" Text="Entered by" Margin="0,0,0,4" />
-        <TextBox x:Name="EnteredByBox" Grid.Row="7" Margin="0,0,0,4" />
+        <syncfusion:SfTextBoxExt x:Name="EnteredByBox" Grid.Row="7" Margin="0,0,0,4" />
 
         <TextBlock x:Name="ErrorText" Grid.Row="8" Foreground="#DC2626" TextWrapping="Wrap"
                    Visibility="Collapsed" Margin="0,8,0,0" />
 
         <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button x:Name="SaveButton" Content="Add" Width="86" Margin="0,0,8,0"
-                    IsDefault="True" Click="SaveButton_Click" />
-            <Button Content="Cancel" Width="86" IsCancel="True" />
+            <syncfusion:ButtonAdv x:Name="SaveButton" Label="Add" MinWidth="86" Margin="0,0,8,0"
+                                  IconTemplate="{StaticResource ApplyIconTemplate}" SizeMode="Normal"
+                                  IsDefault="True" Click="SaveButton_Click" />
+            <syncfusion:ButtonAdv Label="Cancel" MinWidth="86" IsCancel="True"
+                                  IconTemplate="{StaticResource CancelIconTemplate}" SizeMode="Normal" />
         </StackPanel>
     </Grid>
 </Grid>

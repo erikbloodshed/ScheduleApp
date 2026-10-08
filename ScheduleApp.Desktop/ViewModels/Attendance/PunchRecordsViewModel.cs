@@ -3,13 +3,13 @@ using System.ComponentModel;
 using System.Windows.Data;
 using Microsoft.Win32;
 using System.Globalization;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Excel;
 using ScheduleApp.Desktop.Services;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -26,10 +26,9 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// generation is the one place the two sources are still combined (see
 /// AttendanceWorkflowService), since a manual entry should still be able to fill a gap in
 /// the calculated result even though it's never shown alongside device punches here.</summary>
-public partial class PunchRecordsViewModel : ObservableObject
+public class PunchRecordsViewModel : ViewModelBase
 {
     private readonly IAttendanceLogRepository _attendanceLogRepository;
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
     private readonly AttendanceEmployeeDirectory _employeeDirectory;
@@ -56,19 +55,19 @@ public partial class PunchRecordsViewModel : ObservableObject
         bool initialIsPunchRecordsTabSelected,
         Action saveViewState,
         AttendanceTabActivationGate tabActivationGate)
+        : base(statusBarService)
     {
         _attendanceLogRepository = attendanceLogRepository;
-        _statusBarService = statusBarService;
         _busy = busy;
         _dataVersion = dataVersion;
         _employeeDirectory = employeeDirectory;
         _saveViewState = saveViewState;
         _tabActivationGate = tabActivationGate;
 
-        logViewStart = initialLogViewStart;
-        logViewEnd = initialLogViewEnd;
-        logViewSearchText = initialLogViewSearchText;
-        isPunchRecordsTabSelected = initialIsPunchRecordsTabSelected;
+        _logViewStart = initialLogViewStart;
+        _logViewEnd = initialLogViewEnd;
+        _logViewSearchText = initialLogViewSearchText;
+        _isPunchRecordsTabSelected = initialIsPunchRecordsTabSelected;
 
         // Assigned directly (bypassing ApplySearchValue) for the same reason
         // logViewSearchText above is assigned to its backing field rather than through
@@ -84,11 +83,7 @@ public partial class PunchRecordsViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
             {
-                LoadStoredLogsCommand.NotifyCanExecuteChanged();
-                ExportStoredLogsCommand.NotifyCanExecuteChanged();
-                PreviousPeriodCommand.NotifyCanExecuteChanged();
-                NextPeriodCommand.NotifyCanExecuteChanged();
-                RefreshOrCancelStoredLogsCommand.NotifyCanExecuteChanged();
+                RequeryCanExecute();
 
                 // A keystroke that arrived while busy never got a suggestion fetch (see
                 // OnLogViewSearchTextChanged below) -- catch up now that the shared
@@ -103,17 +98,23 @@ public partial class PunchRecordsViewModel : ObservableObject
                 // this is what flips the toolbar's "Load" button between Load and Cancel,
                 // same mechanism ReportViewModel's own analogous handler uses for the
                 // Attendance Summary tab's Refresh/Cancel button.
-                OnPropertyChanged(nameof(RefreshOrCancelContent));
-                OnPropertyChanged(nameof(RefreshOrCancelIcon));
-                OnPropertyChanged(nameof(RefreshOrCancelToolTip));
-                RefreshOrCancelStoredLogsCommand.NotifyCanExecuteChanged();
+                this.RaisePropertyChanged(nameof(RefreshOrCancelContent));
+                this.RaisePropertyChanged(nameof(RefreshOrCancelIcon));
+                this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
+                RequeryCanExecute();
             }
         };
 
         // Mirrors ReportViewModel's SummaryRowsView setup -- see StoredLogsView's own
         // doc comment.
-        StoredLogsView = CollectionViewSource.GetDefaultView(StoredLogs);
-        StoredLogsView.Filter = FilterStoredLogRow;
+        StoredLogsView = new FilteredCollection<StoredPunchLogRow>(StoredLogs) { Filter = FilterStoredLogRow };
+
+        PreviousPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(PreviousPeriodAsync), CanExecuteFrom(CanLoad));
+        NextPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(NextPeriodAsync), CanExecuteFrom(CanLoad));
+        SelectLogViewSuggestionCommand = ReactiveCommand.Create<PunchSearchSuggestion?>(SelectLogViewSuggestion);
+        LoadStoredLogsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(LoadStoredLogsAsync), CanExecuteFrom(CanLoad));
+        RefreshOrCancelStoredLogsCommand = ReactiveCommand.Create(RefreshOrCancelStoredLogs, CanExecuteFrom(CanRefreshOrCancelStoredLogs));
+        ExportStoredLogsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportStoredLogsAsync), CanExecuteFrom(CanExportStoredLogs));
     }
 
     /// <summary>Bound to the Punch Records TabItem's IsSelected -- OnIsPunchRecordsTabSelectedChanged
@@ -123,10 +124,22 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// the constructor above (not the property) so the initial value from saved view
     /// state doesn't trigger the auto-load/save logic below before the tab-activation
     /// gate is even open.</summary>
-    [ObservableProperty]
-    private bool isPunchRecordsTabSelected;
+    public bool IsPunchRecordsTabSelected
+    {
+        get => _isPunchRecordsTabSelected;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isPunchRecordsTabSelected, value)) return;
+            this.RaisePropertyChanging();
+            _isPunchRecordsTabSelected = value;
+            OnIsPunchRecordsTabSelectedChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnIsPunchRecordsTabSelectedChanged(bool value)
+    private bool _isPunchRecordsTabSelected;
+
+    private void OnIsPunchRecordsTabSelectedChanged(bool value)
     {
         if (!_tabActivationGate.IsReady) return;
 
@@ -155,15 +168,39 @@ public partial class PunchRecordsViewModel : ObservableObject
     private bool ShouldAutoReload() =>
         _loadedSnapshot != (LogViewStart, LogViewEnd, _dataVersion.DeviceLogsVersion);
 
-    [ObservableProperty]
-    private DateTime? logViewStart;
+    public DateTime? LogViewStart
+    {
+        get => _logViewStart;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_logViewStart, value)) return;
+            this.RaisePropertyChanging();
+            _logViewStart = value;
+            OnLogViewStartChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnLogViewStartChanged(DateTime? value) => _saveViewState();
+    private DateTime? _logViewStart;
 
-    [ObservableProperty]
-    private DateTime? logViewEnd;
+    private void OnLogViewStartChanged(DateTime? value) => _saveViewState();
 
-    partial void OnLogViewEndChanged(DateTime? value) => _saveViewState();
+    public DateTime? LogViewEnd
+    {
+        get => _logViewEnd;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_logViewEnd, value)) return;
+            this.RaisePropertyChanging();
+            _logViewEnd = value;
+            OnLogViewEndChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private DateTime? _logViewEnd;
+
+    private void OnLogViewEndChanged(DateTime? value) => _saveViewState();
 
     /// <summary>Backs the Punch Records tab's own "◀"/"▶" period-nav buttons -- same
     /// AttendancePeriodNavigation.AdjacentCutoffPeriod step ReportViewModel's Summary tab
@@ -173,7 +210,8 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// this command reloads directly afterward rather than relying on a property-changed
     /// handler to notice; showFeedback: true, same as a direct Load click, since stepping
     /// the period is just as much an explicit action as pressing Load.</summary>
-    [RelayCommand(CanExecute = nameof(CanLoad))]
+    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand { get; }
+
     private Task PreviousPeriodAsync()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(LogViewStart ?? LogViewEnd ?? DateTime.Today, forward: false);
@@ -184,7 +222,8 @@ public partial class PunchRecordsViewModel : ObservableObject
 
     /// <summary>See PreviousPeriodCommand's doc comment -- same step, the other
     /// direction.</summary>
-    [RelayCommand(CanExecute = nameof(CanLoad))]
+    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand { get; }
+
     private Task NextPeriodAsync()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(LogViewStart ?? LogViewEnd ?? DateTime.Today, forward: true);
@@ -204,8 +243,20 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// separate, more deliberately-triggered step. Never re-queries the database either
     /// way, and never touches what Load/Export actually fetch (see
     /// QueryStoredLogsInRangeAsync).</summary>
-    [ObservableProperty]
-    private string logViewSearchText = string.Empty;
+    public string LogViewSearchText
+    {
+        get => _logViewSearchText;
+        set
+        {
+            if (EqualityComparer<string>.Default.Equals(_logViewSearchText, value)) return;
+            this.RaisePropertyChanging();
+            _logViewSearchText = value;
+            OnLogViewSearchTextChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private string _logViewSearchText = string.Empty;
 
     /// <summary>What FilterStoredLogRow actually filters StoredLogsView against --
     /// deliberately a separate field from LogViewSearchText above, updated only by
@@ -219,7 +270,7 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// -- see OnLogViewSearchTextChanged.</summary>
     private string _appliedSearchValue = string.Empty;
 
-    partial void OnLogViewSearchTextChanged(string value)
+    private void OnLogViewSearchTextChanged(string value)
     {
         // Skipped while _busy.IsRunning -- UpdateLogViewSuggestionsAsync falls through to
         // AttendanceEmployeeDirectory.GetAllAsync() (a real query) whenever the
@@ -260,8 +311,13 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// one is chosen.</summary>
     public ObservableCollection<PunchSearchSuggestion> LogViewSuggestions { get; } = new();
 
-    [ObservableProperty]
-    private bool isLogViewSuggestionsOpen;
+    public bool IsLogViewSuggestionsOpen
+    {
+        get => _isLogViewSuggestionsOpen;
+        set => this.RaiseAndSetIfChanged(ref _isLogViewSuggestionsOpen, value);
+    }
+
+    private bool _isLogViewSuggestionsOpen;
 
     /// <summary>Guards against an older keystroke's suggestions arriving after a newer
     /// one's (both awaiting the same employee fetch) and clobbering what should be on
@@ -364,7 +420,8 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// shows what's now applied rather than whatever fragment was last typed, and closes
     /// the dropdown -- there's nothing left to pick once the one thing being searched
     /// for has just been chosen.</summary>
-    [RelayCommand]
+    public ReactiveCommand<PunchSearchSuggestion?, RxVoid> SelectLogViewSuggestionCommand { get; }
+
     private void SelectLogViewSuggestion(PunchSearchSuggestion? suggestion)
     {
         if (suggestion is null) return;
@@ -374,11 +431,21 @@ public partial class PunchRecordsViewModel : ObservableObject
         IsLogViewSuggestionsOpen = false;
     }
 
-    [ObservableProperty]
-    private int storedLogsCount;
+    public int StoredLogsCount
+    {
+        get => _storedLogsCount;
+        set => this.RaiseAndSetIfChanged(ref _storedLogsCount, value);
+    }
 
-    [ObservableProperty]
-    private bool hasLoadedStoredLogs;
+    private int _storedLogsCount;
+
+    public bool HasLoadedStoredLogs
+    {
+        get => _hasLoadedStoredLogs;
+        set => this.RaiseAndSetIfChanged(ref _hasLoadedStoredLogs, value);
+    }
+
+    private bool _hasLoadedStoredLogs;
 
     public ObservableCollection<StoredPunchLogRow> StoredLogs { get; } = new();
 
@@ -387,11 +454,10 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// rows without touching the underlying data (needed intact for Export…, which --
     /// like ReportViewModel's Export Summary… -- always exports every punch actually in
     /// range regardless of what's currently filtered on-screen; see
-    /// QueryStoredLogsInRangeAsync). Set up once in the constructor via
-    /// CollectionViewSource.GetDefaultView(StoredLogs), which returns the *same* view for
-    /// that source collection every time, so rows Load adds/clears show up here
-    /// automatically with whatever filter is currently active already applied.</summary>
-    public ICollectionView StoredLogsView { get; }
+    /// QueryStoredLogsInRangeAsync). Follows StoredLogs, so rows Load adds/clears show up
+    /// here automatically with whatever filter is currently active already applied (see
+    /// FilteredCollection).</summary>
+    public FilteredCollection<StoredPunchLogRow> StoredLogsView { get; }
 
     /// <summary>_appliedSearchValue's blank-means-everyone / numeric-means-exact-
     /// Employee-ID / otherwise-substring-against-name-or-department rules, applied to one
@@ -415,7 +481,8 @@ public partial class PunchRecordsViewModel : ObservableObject
             || row.DepartmentName.Contains(term, StringComparison.OrdinalIgnoreCase);
     }
 
-    [RelayCommand(CanExecute = nameof(CanLoad))]
+    public ReactiveCommand<RxVoid, RxVoid> LoadStoredLogsCommand { get; }
+
     private Task LoadStoredLogsAsync() => LoadStoredLogsCoreAsync(showFeedback: true);
 
     /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
@@ -435,7 +502,8 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// makes it look like a live Cancel button.</summary>
     private bool CanRefreshOrCancelStoredLogs() => _busy.IsVisiblyRunning || CanLoad();
 
-    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelStoredLogs))]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelStoredLogsCommand { get; }
+
     private void RefreshOrCancelStoredLogs()
     {
         if (_busy.IsVisiblyRunning)
@@ -476,7 +544,7 @@ public partial class PunchRecordsViewModel : ObservableObject
         if (validationError is not null)
         {
             if (showFeedback)
-                _statusBarService.ShowCaution(validationError);
+                StatusBar.ShowCaution(validationError);
             return;
         }
 
@@ -503,12 +571,12 @@ public partial class PunchRecordsViewModel : ObservableObject
             _saveViewState();
 
             if (showFeedback)
-                _statusBarService.ShowSuccess($"Found {StoredLogsCount} punch(es) in range.");
+                StatusBar.ShowSuccess($"Found {StoredLogsCount} punch(es) in range.");
         },
         onError: ex =>
         {
             if (showFeedback)
-                _statusBarService.ShowError(ex.Message);
+                ShowFailure(ex);
         });
     }
 
@@ -517,13 +585,14 @@ public partial class PunchRecordsViewModel : ObservableObject
     /// one implementation.</summary>
     internal bool CanLoad() => !_busy.IsRunning;
 
-    [RelayCommand(CanExecute = nameof(CanExportStoredLogs))]
+    public ReactiveCommand<RxVoid, RxVoid> ExportStoredLogsCommand { get; }
+
     private async Task ExportStoredLogsAsync()
     {
         var validationError = ValidateLogViewRange();
         if (validationError is not null)
         {
-            _statusBarService.ShowCaution(validationError);
+            StatusBar.ShowCaution(validationError);
             return;
         }
 
@@ -552,9 +621,9 @@ public partial class PunchRecordsViewModel : ObservableObject
             AttendanceExcelExporter.ExportLogsToExcel(dialog.FileName, logs, employees);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
             _saveViewState();
-            _statusBarService.ShowSuccess($"Saved {logs.Count} punch(es) to {dialog.FileName}.");
+            StatusBar.ShowSuccess($"Saved {logs.Count} punch(es) to {dialog.FileName}.");
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     private bool CanExportStoredLogs() => !_busy.IsRunning;

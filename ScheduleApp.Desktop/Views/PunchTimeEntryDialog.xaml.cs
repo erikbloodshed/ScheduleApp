@@ -55,7 +55,7 @@ public partial class PunchTimeEntryDialog : Controls.AppWindow
         if (existingLog is not null)
         {
             Title = "Edit Manual Punch";
-            SaveButton.Content = "Save";
+            SaveButton.Label = "Save";
 
             // A real saved Reason overrides the default DefaultTextBox.Initialize
             // just put in ReasonBox above; a blank one (older data from before

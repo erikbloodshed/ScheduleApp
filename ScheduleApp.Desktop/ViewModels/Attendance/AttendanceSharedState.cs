@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Desktop.Services;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -15,7 +15,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// gated by it; each of those subscribes to PropertyChanged(IsRunning) in its own
 /// constructor and re-evaluates its own commands' CanExecute, the same way the original
 /// single OnIsRunningChanged handler used to notify all of them at once.</summary>
-public partial class AttendanceBusyState : ObservableObject, IDisposable
+public class AttendanceBusyState : ReactiveViewModel, IDisposable
 {
     private readonly IStatusBarService _statusBarService;
     private readonly CancellationToken _shutdownToken;
@@ -60,10 +60,24 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
     {
         _statusBarService = statusBarService;
         _shutdownToken = shutdownToken;
+
+        CancelCommand = ReactiveCommand.Create(Cancel, CanExecuteFrom(() => IsVisiblyRunning));
     }
 
-    [ObservableProperty]
-    private bool isRunning;
+    public bool IsRunning
+    {
+        get => _isRunning;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isRunning, value)) return;
+            this.RaisePropertyChanging();
+            _isRunning = value;
+            OnIsRunningChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private bool _isRunning;
 
     /// <summary>True only while an operation the person actually asked for -- a Period
     /// edit, a report-scope tree check/uncheck, or some other explicit action -- is in
@@ -95,19 +109,24 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
     /// so it doesn't also flip this property (see RefreshPayrollGroupRowsAsync's own doc
     /// comment), so ShowProgress is never asked to show both at once.
     ///
-    /// [NotifyCanExecuteChangedFor(nameof(CancelCommand))] is required here, not optional
-    /// -- CommunityToolkit.Mvvm does NOT automatically call CancelCommand.
-    /// NotifyCanExecuteChanged() just because CancelCommand's [RelayCommand(CanExecute =
-    /// nameof(IsVisiblyRunning))] attribute references this property; that inference has
-    /// to be declared explicitly, on this side, or the generated setter never tells
-    /// CancelCommand anything changed. Without it, Visibility below still updates fine
-    /// (it's a plain property binding, unrelated to ICommand) so the button correctly
-    /// appears -- but WPF never re-queries CanExecute, so it stays stuck disabled at
-    /// whatever it evaluated to when the button was first bound (false, since nothing was
-    /// running yet). That's the "button shows up but isn't clickable" bug this fixes.</summary>
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
-    private bool isVisiblyRunning;
+    /// CancelCommand's CanExecute is this property, re-asked whenever this class raises
+    /// PropertyChanged (ReactiveViewModel.CanExecuteFrom) -- without that, the Cancel
+    /// button's Visibility would still update (a plain property binding) but WPF would
+    /// never re-query its CanExecute, leaving it shown but stuck disabled.</summary>
+    public bool IsVisiblyRunning
+    {
+        get => _isVisiblyRunning;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isVisiblyRunning, value)) return;
+            this.RaisePropertyChanging();
+            _isVisiblyRunning = value;
+            OnIsVisiblyRunningChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private bool _isVisiblyRunning;
 
     /// <summary>Drives the status bar's left-aligned progress indicator off this
     /// property directly, rather than each of the three pages that share this one
@@ -123,7 +142,7 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
     /// RunAsync's own doc comment for why every true this sets is guaranteed to
     /// eventually reach a matching false in the same method's finally, so there's no
     /// path that leaves the status bar stuck reading "Working…" forever.</summary>
-    partial void OnIsVisiblyRunningChanged(bool value)
+    private void OnIsVisiblyRunningChanged(bool value)
     {
         if (value)
             _statusBarService.ShowProgress("Working…");
@@ -149,7 +168,7 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
     /// that exception itself rather than let it surface as an error; this method only
     /// requests the cancellation, it doesn't wait for or confirm it.
     ///
-    /// [RelayCommand] here (rather than a separately-named wrapper method) is what backs
+    /// CancelCommand (rather than a separately-named wrapper method) is what backs
     /// AttendanceView.xaml's global Cancel button (see the toolbar row above the
     /// TabControl) -- CancelCommand is forwarded from AttendanceViewModel the same way
     /// every other child command is, so the button doesn't care which tab or dialog
@@ -157,9 +176,10 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
     /// IsRunning, for the same reason the button's own Visibility is (see
     /// IsVisiblyRunning's doc comment): a tab's silent auto-load-on-select sets IsRunning
     /// but was never something the person asked to wait on, so it shouldn't make a Cancel
-    /// button appear enabled either. See IsVisiblyRunning's [NotifyCanExecuteChangedFor]
-    /// above for what actually keeps this in sync -- it isn't automatic.</summary>
-    [RelayCommand(CanExecute = nameof(IsVisiblyRunning))]
+    /// button appear enabled either. See IsVisiblyRunning's doc comment above for what
+    /// keeps this in sync.</summary>
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
+
     public void Cancel() => _cts?.Cancel();
 
     /// <summary>Runs <paramref name="action"/> wrapped in the exact IsRunning/
@@ -394,7 +414,7 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
 
     /// <summary>Creates a fresh CancellationTokenSource exactly when IsRunning transitions
     /// to true, and disposes it (without creating a new one) when IsRunning transitions
-    /// back to false -- CommunityToolkit.Mvvm's [ObservableProperty] only invokes this on
+    /// back to false -- IsRunning's setter only invokes this on
     /// an actual value change, so redundant same-value assignments (there aren't any
     /// today, but nothing enforces that) can't leak or recreate a source mid-operation.
     /// The previous source (if any) is always safe to dispose here regardless of which
@@ -406,7 +426,7 @@ public partial class AttendanceBusyState : ObservableObject, IDisposable
     /// shutdown (Phase 5 -- see AppShutdownSignal) cancels whatever's currently running
     /// the same way an explicit Cancel click (Phase 4) does, without this class needing
     /// to know or care which of the two actually fired.</summary>
-    partial void OnIsRunningChanged(bool value)
+    private void OnIsRunningChanged(bool value)
     {
         _cts?.Dispose();
         _cts = value ? CancellationTokenSource.CreateLinkedTokenSource(_shutdownToken) : null;
@@ -497,7 +517,7 @@ public sealed class AttendanceTabActivationGate
 /// already forces a real load with no need to consult these at all.
 ///
 /// Deliberately plain auto-incrementing properties on a plain class, not
-/// ObservableObject/[ObservableProperty] -- nothing binds to these in XAML or needs to
+/// notifying ReactiveObject properties -- nothing binds to these in XAML or needs to
 /// react the instant one changes; each reader only ever polls the current value at the
 /// one moment it's deciding whether to reload.</summary>
 public sealed class AttendanceDataVersion

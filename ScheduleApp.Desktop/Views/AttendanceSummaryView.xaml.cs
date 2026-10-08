@@ -1,8 +1,11 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Desktop.ViewModels;
+using Syncfusion.UI.Xaml.Grid;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -21,10 +24,10 @@ public partial class AttendanceSummaryView : UserControl
     /// tree with no DataContext of its own to inherit, so it can't reach both "the row
     /// that was clicked" (for CommandParameter) and "the page's own AttendanceViewModel"
     /// (for Command) without exactly this kind of PlacementTarget/Tag tunnel -- reading
-    /// both directly off the sender and this control's own DataContext here is simpler.
-    /// Wired up via an EventSetter on the Summary DataGrid's own RowStyle in
-    /// AttendanceSummaryView.xaml, so it fires for every row, not just ones the person
-    /// happens to have selected first.
+    /// the row off the clicked element and the command off this control's own DataContext
+    /// here is simpler. The grid's own PreviewMouseRightButtonDown, so it fires for every
+    /// row, not just ones the person happens to have selected first; a click anywhere but
+    /// on a data row (a header, the empty space below) finds no row and does nothing.
     ///
     /// Offers "Add Manual Entry…" only for a Partial/Absent row -- same restriction,
     /// and same reasoning (nothing else has a missing punch worth filling in), as the
@@ -36,9 +39,9 @@ public partial class AttendanceSummaryView : UserControl
     /// see DayPunchPairingEditorViewModel.IsReadOnly for how the dialog decides its
     /// mode. TypeText, not a ScheduleType field -- AttendanceSummaryRow is a
     /// display-only projection and carries the label, not the enum.</summary>
-    private void SummaryRow_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    private void SummaryGrid_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not DataGridRow { DataContext: AttendanceSummaryRow row } gridRow) return;
+        if (RowAt(e.OriginalSource as DependencyObject) is not { DataContext: AttendanceSummaryRow row }) return;
         if (DataContext is not AttendanceViewModel viewModel) return;
 
         var menu = new ContextMenu();
@@ -74,9 +77,18 @@ public partial class AttendanceSummaryView : UserControl
         // in case a future gate removes it.
         if (menu.Items.Count == 0) return;
 
-        gridRow.ContextMenu = menu;
-        gridRow.ContextMenu.PlacementTarget = gridRow;
-        gridRow.ContextMenu.IsOpen = true;
+        menu.PlacementTarget = SummaryGrid;
+        menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    /// <summary>The grid row (VirtualizingCellsControl) the clicked element sits in, or null
+    /// when the click wasn't on one.</summary>
+    private static VirtualizingCellsControl? RowAt(DependencyObject? element)
+    {
+        while (element is not null and not VirtualizingCellsControl)
+            element = element is Visual ? VisualTreeHelper.GetParent(element) : LogicalTreeHelper.GetParent(element);
+
+        return element as VirtualizingCellsControl;
     }
 }

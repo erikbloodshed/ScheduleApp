@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
              xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels.Attendance"
              xmlns:conv="clr-namespace:ScheduleApp.Desktop.Converters"
              mc:Ignorable="d"
@@ -218,9 +219,12 @@
              read-only "View Punches…" open (see DayPunchPairingEditorViewModel.IsReadOnly). -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8"
                     Visibility="{Binding IsReadOnly, Converter={StaticResource InverseBoolToVisible}}">
-            <Button Content="Add Segment" Command="{Binding AddRowCommand}" Padding="10,4" />
-            <Button Content="Remove Empty" Command="{Binding RemoveEmptySegmentsCommand}" Padding="10,4" Margin="8,0,0,0" />
-            <Button Content="Undo" Command="{Binding UndoCommand}" Padding="10,4" Margin="8,0,0,0" />
+            <syncfusion:ButtonAdv Label="Add Segment" IconTemplate="{StaticResource AddIconTemplate}" SizeMode="Normal"
+                                  Command="{Binding AddRowCommand}" />
+            <syncfusion:ButtonAdv Label="Remove Empty" IconTemplate="{StaticResource DeleteIconTemplate}" SizeMode="Normal"
+                                  Command="{Binding RemoveEmptySegmentsCommand}" Margin="8,0,0,0" />
+            <syncfusion:ButtonAdv Label="Undo" Tag="&#xE7A7;" IconTemplate="{StaticResource TagGlyphIconTemplate}" SizeMode="Normal"
+                                  Command="{Binding UndoCommand}" Margin="8,0,0,0" />
             <TextBlock Text="Drag onto a slot to insert · double-click an empty slot to add, or a manual punch to edit"
                        Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="14,0,0,0" />
         </StackPanel>

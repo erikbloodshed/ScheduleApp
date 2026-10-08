@@ -1,97 +1,66 @@
 <UserControl x:Class="ScheduleApp.Desktop.Views.PunchRecordsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- One of three views the "Attendance" drawer item's submenu navigates between - see
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:syncfusion="http://schemas.syncfusion.com/wpf">
+    <!-- One of three views the "Attendance" drawer item's sub-items navigate between - see
          AttendanceSummaryView.xaml's own doc comment for the shared AttendanceViewModel/
-         page-navigation story all three follow. This one used to be the "Punch Records"
-         TabItem inside a single AttendanceView/AttendancePage; it now also owns the
-         Import…/Fetch from Device buttons, moved here from that old shared toolbar (which
-         used to sit above the TabControl, visible regardless of which tab was showing) -
-         importing punches is what this page is *for*, so it made more sense living on the
-         page that actually displays them than on a page-external strip. They used to sit
-         in their own boxed toolbar row above this one; now folded into the same row as
-         Load/Export below (see that row's own comment) since all four are just different
-         ways of getting punches into/out of the grid beneath them - no reason to spread
-         that across two rows. Generate Reports (AttendanceSummaryView) still picks up
-         whatever a fetch/import here added the same way it always has, via the shared
-         AttendanceDataVersion.DeviceLogsVersion counter - moving the buttons only changes
-         where they're clicked from, not what they affect. -->
+         page-navigation story all three follow. This one also owns the Import…/Fetch from
+         Device buttons: importing punches is what this page is *for*, so they live on the page
+         that actually displays them, in the same row as Refresh/Export, since all four are
+         ways of getting punches into/out of the grid beneath them. Generate Reports
+         (AttendanceSummaryView) picks up whatever a fetch/import here added via the shared
+         AttendanceDataVersion.DeviceLogsVersion counter. -->
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- A Range date: "October 1, 2026", typed or picked from the drop-down calendar. -->
+        <Style x:Key="RangeDate" TargetType="syncfusion:DateTimeEdit">
+            <Setter Property="Pattern" Value="CustomPattern" />
+            <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
+            <Setter Property="IsEmptyDateEnabled" Value="True" />
+            <Setter Property="NullValue" Value="{x:Null}" />
+            <Setter Property="ShowMaskOnNullValue" Value="False" />
+            <Setter Property="Width" Value="190" />
+        </Style>
     </UserControl.Resources>
 
-    <Grid Margin="10"
-          RowDefinitions="Auto,Auto,*">
-        <StackPanel Grid.Row="0"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,10">
-            <TextBlock Text="Start"
-                       Width="40"
-                       VerticalAlignment="Center"/>
-            <!-- Steps LogViewStart/LogViewEnd to the adjacent cut-off period
-                 and reloads immediately; see
-                 PunchRecordsViewModel.PreviousPeriodAsync. -->
-            <Button Content="◀"
-                    Command="{Binding PreviousLogViewPeriodCommand}"
-                    Padding="8,3"
-                    Margin="0,0,6,0"
-                    ToolTip="Previous cut-off period."/>
-            <DatePicker SelectedDate="{Binding LogViewStart}"
-                        Width="190"
-                        Margin="0,0,24,0">
-                <DatePicker.Resources>
-                    <Style TargetType="DatePickerTextBox">
-                        <Setter Property="Control.Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="DatePickerTextBox">
-                                    <!-- Overriding the text binding to apply the custom string format -->
-                                    <TextBox Text="{Binding Path=SelectedDate,
-                                            RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                             TextAlignment="Center"/>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </DatePicker.Resources>
-            </DatePicker>
-            <TextBlock Text="End"
-                       Width="32"
-                       VerticalAlignment="Center"/>
-            <DatePicker SelectedDate="{Binding LogViewEnd}"
-                        Width="190"
-                        Margin="0,0,6,0">
-                <DatePicker.Resources>
-                    <Style TargetType="DatePickerTextBox">
-                        <Setter Property="Control.Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="DatePickerTextBox">
-                                    <!-- Overriding the text binding to apply the custom string format -->
-                                    <TextBox Text="{Binding Path=SelectedDate,
-                                            RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                             TextAlignment="Center"/>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </DatePicker.Resources>
-            </DatePicker>
-            <!-- See PreviousLogViewPeriodCommand's own comment above;
-                 NextLogViewPeriodCommand is the same step in the other
-                 direction. -->
-            <Button Content="▶"
-                    Command="{Binding NextLogViewPeriodCommand}"
-                    Padding="8,3"
-                    Margin="0,0,18,0"
-                    ToolTip="Next cut-off period."/>
-            <TextBlock Text="Search"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0"/>
+    <Grid Margin="10" RowDefinitions="Auto,Auto,*">
+        <!-- Two groups in a WrapPanel: on a narrow window the buttons drop to a second line
+             together rather than running off the edge. -->
+        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Start" Width="40" VerticalAlignment="Center" />
+            <!-- Steps LogViewStart/LogViewEnd to the adjacent cut-off period and reloads
+                 immediately; see PunchRecordsViewModel.PreviousPeriodAsync. -->
+            <syncfusion:ButtonAdv SizeMode="Small"
+                                  Tag="&#xE76B;"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  Command="{Binding PreviousLogViewPeriodCommand}"
+                                  Margin="0,0,6,0"
+                                  ToolTip="Previous cut-off period." />
+            <syncfusion:DateTimeEdit Style="{StaticResource RangeDate}"
+                                     DateTime="{Binding LogViewStart, Mode=TwoWay}"
+                                     Margin="0,0,24,0" />
+            <TextBlock Text="End" Width="32" VerticalAlignment="Center" />
+            <syncfusion:DateTimeEdit Style="{StaticResource RangeDate}"
+                                     DateTime="{Binding LogViewEnd, Mode=TwoWay}"
+                                     Margin="0,0,6,0" />
+            <syncfusion:ButtonAdv SizeMode="Small"
+                                  Tag="&#xE76C;"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  Command="{Binding NextLogViewPeriodCommand}"
+                                  Margin="0,0,18,0"
+                                  ToolTip="Next cut-off period." />
+            <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <!-- The suggestions under the box are the ViewModel's (LogViewSuggestions,
+                 IsLogViewSuggestionsOpen); picking one runs SelectLogViewSuggestionCommand
+                 (the code-behind). -->
             <Grid VerticalAlignment="Center">
-                <TextBox x:Name="PunchSearchTextBox"
-                         Width="220"
-                         Text="{Binding LogViewSearchText, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Filter by Employee ID, name, or department -- doesn't change what Export saves."/>
+                <syncfusion:SfTextBoxExt x:Name="PunchSearchTextBox"
+                                         Width="220"
+                                         Watermark="ID, name or department"
+                                         Text="{Binding LogViewSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Filter by Employee ID, name, or department -- doesn't change what Export saves." />
                 <Popup PlacementTarget="{Binding ElementName=PunchSearchTextBox}"
                        Placement="Bottom"
                        Width="220"
@@ -105,9 +74,7 @@
                             Padding="2"
                             Margin="0,2,0,0">
                         <Border.Effect>
-                            <DropShadowEffect BlurRadius="8"
-                                              ShadowDepth="1"
-                                              Opacity="0.2"/>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.2" />
                         </Border.Effect>
                         <ListBox x:Name="PunchSearchSuggestionList"
                                  ItemsSource="{Binding LogViewSuggestions}"
@@ -116,99 +83,85 @@
                                  PreviewMouseLeftButtonUp="PunchSearchSuggestionList_PreviewMouseLeftButtonUp">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
-                                    <Setter Property="Padding"
-                                            Value="8,4"/>
-                                    <Setter Property="Cursor"
-                                            Value="Hand"/>
+                                    <Setter Property="Padding" Value="8,4" />
+                                    <Setter Property="Cursor" Value="Hand" />
                                 </Style>
                             </ListBox.ItemContainerStyle>
                         </ListBox>
                     </Border>
                 </Popup>
             </Grid>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <!-- Doubles as a Cancel button while anything's running (see
-                 RefreshOrCancelStoredLogsCommand/PunchRecordsRefreshOrCancelGlyph/
-                 PunchRecordsRefreshOrCancelToolTip on AttendanceViewModel) - replaces what
-                 used to be a separate Cancel button in this page's own toolbar CardBorder
-                 above, visible only while something was running; this one button now
-                 toggles in place instead, same pattern as AttendanceSummaryView's own
-                 Period-row button. Also the one place to cancel Import…/Fetch from Device
-                 alongside it below, not just this page's own Load. -->
-            <controls:IconButton Content="{Binding PunchRecordsRefreshOrCancelContent}"
-                                 Icon="{Binding PunchRecordsRefreshOrCancelIcon}"
-                                 Command="{Binding RefreshOrCancelStoredLogsCommand}"
-                                 Width="90"
-                                 Margin="12,0,0,0"
-                                 ToolTip="{Binding PunchRecordsRefreshOrCancelToolTip}"/>
-            <controls:IconButton Content="Export"
-                    Icon="&#xE8A5;"
-                    Command="{Binding ExportStoredLogsCommand}"
-                    Margin="8,0,0,0"
-                    ToolTip="Save these punches to Excel, independent of any report -- opens automatically."/>
-            <!-- Two more ways in, alongside Load/Export above rather than in their own
-                 boxed toolbar row (see this file's own doc comment) - .dat import and
-                 ZKTeco device fetch. Both call the same underlying import, so it's fine to
-                 use either one, or both, for the same period; already-known punches are
-                 simply skipped as duplicates either way. Fetch from Device connects
-                 straight to the terminal configured in Settings (IP/port/comm key/UDP) -
-                 no per-fetch dialog, since a deployment only ever talks to one device (see
+                 RefreshOrCancelStoredLogsCommand/PunchRecordsRefreshOrCancelContent/Icon/
+                 ToolTip on AttendanceViewModel), same pattern as AttendanceSummaryView's own
+                 Period-row button. Also the one place to cancel Import…/Fetch from Device. -->
+            <syncfusion:ButtonAdv Label="{Binding PunchRecordsRefreshOrCancelContent}"
+                                  Tag="{Binding PunchRecordsRefreshOrCancelIcon}"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  SizeMode="Normal"
+                                  Command="{Binding RefreshOrCancelStoredLogsCommand}"
+                                  MinWidth="90"
+                                  Margin="12,0,0,0"
+                                  ToolTip="{Binding PunchRecordsRefreshOrCancelToolTip}" />
+            <syncfusion:ButtonAdv Label="Export"
+                                  IconTemplate="{StaticResource ExportIconTemplate}"
+                                  SizeMode="Normal"
+                                  Command="{Binding ExportStoredLogsCommand}"
+                                  Margin="8,0,0,0"
+                                  ToolTip="Save these punches to Excel, independent of any report -- opens automatically." />
+            <!-- .dat import and ZKTeco device fetch. Both call the same underlying import, so
+                 it's fine to use either one, or both, for the same period; already-known
+                 punches are simply skipped as duplicates either way. Fetch from Device connects
+                 straight to the terminal configured in Settings - no per-fetch dialog, since a
+                 deployment only ever talks to one device (see
                  DeviceFetchViewModel.FetchFromDeviceAsync). -->
-            <controls:IconButton Content="Import"
-                    Icon="&#xE8E5;"
-                    Command="{Binding ImportPunchLogCommand}"
-                    Margin="12,0,0,0"
-                    ToolTip="Add punches from a .dat file to the database -- Generate Reports and this grid both need at least one import first."/>
-            <controls:IconButton Content="Fetch from Device"
-                    Icon="&#xE814;"
-                    Command="{Binding FetchFromDeviceCommand}"
-                    Margin="6,0,0,0"
-                    ToolTip="Pull the full log from the device configured in Settings -- same as Import, without a file. Already-known punches are skipped, so it's safe to re-run."/>
-        </StackPanel>
+            <syncfusion:ButtonAdv Label="Import"
+                                  IconTemplate="{StaticResource ImportIconTemplate}"
+                                  SizeMode="Normal"
+                                  Command="{Binding ImportPunchLogCommand}"
+                                  Margin="12,0,0,0"
+                                  ToolTip="Add punches from a .dat file to the database -- Generate Reports and this grid both need at least one import first." />
+            <syncfusion:ButtonAdv Label="Fetch from Device"
+                                  Tag="&#xE896;"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  SizeMode="Normal"
+                                  Command="{Binding FetchFromDeviceCommand}"
+                                  Margin="6,0,0,0"
+                                  ToolTip="Pull the full log from the device configured in Settings -- same as Import, without a file. Already-known punches are skipped, so it's safe to re-run." />
+          </StackPanel>
+        </WrapPanel>
 
         <TextBlock Grid.Row="1"
                    Margin="0,0,0,6"
                    Foreground="{DynamicResource MutedForegroundBrush}"
                    Visibility="{Binding HasLoadedStoredLogs, Converter={StaticResource BoolToVisibility}}">
-            <Run Text="{Binding StoredLogsCount, Mode=OneWay}"
-                 FontWeight="Bold"/>
-            <Run Text="punch(es) found in range."/>
+            <Run Text="{Binding StoredLogsCount, Mode=OneWay}" FontWeight="Bold" />
+            <Run Text="punch(es) found in range." />
         </TextBlock>
 
-        <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding StoredLogsView}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False"
-                  CanUserDeleteRows="False"
-                  CanUserReorderColumns="False"
-                  GridLinesVisibility="Horizontal"
-                  HeadersVisibility="Column">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="PIN"
-                                    Binding="{Binding EmployeeId}"
-                                    Width="90"/>
-                <DataGridTextColumn Header="Employee Name"
-                                    Binding="{Binding EmployeeName}"
-                                    Width="200"/>
-                <DataGridTextColumn Header="Department"
-                                    Binding="{Binding DepartmentName}"
-                                    Width="140"/>
-                <DataGridTextColumn Header="Date"
-                                    Binding="{Binding Timestamp, StringFormat={}{0:MM/dd/yyyy}}"
-                                    Width="100"/>
-                <DataGridTextColumn Header="Time"
-                                    Binding="{Binding Timestamp, StringFormat={}{0:hh:mm tt}}"
-                                    Width="90"/>
-                <DataGridTextColumn Header="Type"
-                                    Binding="{Binding PunchTypeText}"
-                                    Width="90"/>
-                <DataGridTextColumn Header="Source"
-                                    Binding="{Binding Source}"
-                                    Width="70"/>
-                <DataGridTextColumn Header="Imported"
-                                    Binding="{Binding ImportedAt, StringFormat={}{0:MM/dd/yyyy h:mm tt}}"
-                                    Width="*"/>
-            </DataGrid.Columns>
-        </DataGrid>
+        <syncfusion:SfDataGrid Grid.Row="2"
+                               ItemsSource="{Binding StoredLogsView}"
+                               AutoGenerateColumns="False"
+                               AllowEditing="False"
+                               AllowDraggingColumns="False"
+                               GridLinesVisibility="Horizontal"
+                               NavigationMode="Row"
+                               SelectionMode="Single">
+            <syncfusion:SfDataGrid.Columns>
+                <syncfusion:GridTextColumn MappingName="EmployeeId" HeaderText="PIN" Width="90" />
+                <syncfusion:GridTextColumn MappingName="EmployeeName" HeaderText="Employee Name" Width="200" />
+                <syncfusion:GridTextColumn MappingName="DepartmentName" HeaderText="Department" Width="140" />
+                <syncfusion:GridTextColumn MappingName="Date" HeaderText="Date" Width="100"
+                                           DisplayBinding="{Binding Timestamp, StringFormat={}{0:MM/dd/yyyy}}" />
+                <syncfusion:GridTextColumn MappingName="Time" HeaderText="Time" Width="90"
+                                           DisplayBinding="{Binding Timestamp, StringFormat={}{0:hh:mm tt}}" />
+                <syncfusion:GridTextColumn MappingName="PunchTypeText" HeaderText="Type" Width="90" />
+                <syncfusion:GridTextColumn MappingName="Source" HeaderText="Source" Width="70" />
+                <syncfusion:GridTextColumn MappingName="ImportedAt" HeaderText="Imported" ColumnSizer="Star"
+                                           DisplayBinding="{Binding ImportedAt, StringFormat={}{0:MM/dd/yyyy h:mm tt}}" />
+            </syncfusion:SfDataGrid.Columns>
+        </syncfusion:SfDataGrid>
     </Grid>
 </UserControl>

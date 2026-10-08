@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Reactive.Linq;
 using ReactiveUI;
 using ScheduleApp.Desktop.Services;
@@ -15,23 +14,17 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// <see cref="Notify"/>, which the View answers with a MessageBox (see
 /// Views/MessageBoxInteractions.cs) -- so the ViewModel itself never shows a window.
 ///
-/// Row and node ViewModels (a tree node, a grid row) derive from ReactiveObject directly: they
-/// have nothing to report.
+/// Commands get their CanExecute from ReactiveViewModel (CanExecuteFrom/CanExecuteWhen). Row and
+/// node ViewModels (a tree node, a grid row) derive from ReactiveObject directly: they have
+/// nothing to report.
 /// </summary>
-public abstract class ViewModelBase(IStatusBarService statusBarService) : ReactiveObject
+public abstract class ViewModelBase(IStatusBarService statusBarService) : ReactiveViewModel
 {
     private ILogger? _logger;
 
     protected IStatusBarService StatusBar { get; } = statusBarService;
 
     protected ILogger Logger => _logger ??= Log.ForContext(GetType());
-
-    /// <summary>A Yes/No question; the output is true for Yes.</summary>
-    public Interaction<Confirmation, bool> Confirm { get; } = new();
-
-    /// <summary>A message the user has to acknowledge (OK only), for one too long or too
-    /// important for the status bar, such as the problems an import found.</summary>
-    public Interaction<Notice, RxVoid> Notify { get; } = new();
 
     /// <summary>
     /// Runs <paramref name="action"/>. A cancellation (a newer run took over, or the app is
@@ -82,26 +75,6 @@ public abstract class ViewModelBase(IStatusBarService statusBarService) : Reacti
             .Subscribe();
 
     /// <summary>
-    /// A command's CanExecute that re-asks <paramref name="canExecute"/> whenever any of
-    /// <paramref name="sources"/> raises PropertyChanged -- the ReactiveUI form of the
-    /// "PropertyChanged, then NotifyCanExecuteChanged" wiring a CommunityToolkit command
-    /// needed. For a condition read off shared state some other object owns
-    /// (AttendanceBusyState.IsRunning, MultiSelectModeState, a sibling's selection), where a
-    /// WhenAnyValue on this ViewModel's own properties can't see the change. Asked first when
-    /// the command subscribes, not when this is called, so it can be built before every
-    /// field the condition reads is set.
-    /// </summary>
-    protected static IObservable<bool> CanExecuteWhen(Func<bool> canExecute, params INotifyPropertyChanged[] sources) =>
-        Observable.Defer(() => Observable.Return(canExecute()))
-            .Concat(sources
-                .Select(source => Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
-                    handler => source.PropertyChanged += handler,
-                    handler => source.PropertyChanged -= handler))
-                .Merge()
-                .Select(_ => canExecute()))
-            .DistinctUntilChanged();
-
-    /// <summary>
     /// Shows <paramref name="exception"/> on the status bar in <see cref="Failure"/>'s words, under
     /// <paramref name="title"/>, and logs it: a refusal as a warning, anything else as an error
     /// with its stack.
@@ -116,20 +89,12 @@ public abstract class ViewModelBase(IStatusBarService statusBarService) : Reacti
         else
             Logger.Error(exception, "Failed: {Reason}", failure.Text);
     }
-
-    /// <summary>Asks <paramref name="message"/> as a Yes/No question (see <see cref="Confirm"/>).</summary>
-    protected async Task<bool> ConfirmAsync(string message, string title, bool isWarning = false) =>
-        await Confirm.Handle(new Confirmation(title, message, isWarning));
-
-    /// <summary>Shows <paramref name="message"/> until the user acknowledges it (see <see cref="Notify"/>).</summary>
-    protected async Task NotifyAsync(string message, string title, NoticeKind kind = NoticeKind.Information) =>
-        await Notify.Handle(new Notice(title, message, kind));
 }
 
-/// <summary>A Yes/No question for <see cref="ViewModelBase.Confirm"/>. A warning is one whose Yes can't be taken back.</summary>
+/// <summary>A Yes/No question for <see cref="ReactiveViewModel.Confirm"/>. A warning is one whose Yes can't be taken back.</summary>
 public sealed record Confirmation(string Title, string Message, bool IsWarning = false);
 
-/// <summary>A message for <see cref="ViewModelBase.Notify"/>.</summary>
+/// <summary>A message for <see cref="ReactiveViewModel.Notify"/>.</summary>
 public sealed record Notice(string Title, string Message, NoticeKind Kind = NoticeKind.Information);
 
 public enum NoticeKind
