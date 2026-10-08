@@ -1,0 +1,104 @@
+<!--
+    The app's colour scale: Catppuccin Latte (catppuccin.com/palette), the light flavour, all 26 of its colours by their
+    Catppuccin names. App.xaml's design tokens name these rather than repeating hex codes; views use the tokens, not the
+    scale. Base, Mantle and Crust are the backgrounds, Surface 0-2 and Overlay 0-2 the greys between, and Text and
+    Subtext 0-1 the type; the rest are the accent hues.
+
+    Latte's hues are pastels: as text on a light background only Mauve, Blue and Red reach 4.5:1, and Green, Yellow,
+    Peach, Sky, Sapphire and Teal fall to 2.3-3.3:1. So below the palette are two derived steps, made the same way for every
+    hue that needs them, the way Catppuccin's own ports tint and shade their hues:
+      - a Tint, the hue at 10% over Base, for a banner or badge's background;
+      - a Deep shade, the hue darkened toward black (in 5% steps) just until it makes 4.5:1 on its own Tint and on Base,
+        for text in that hue. Darkening toward black rather than toward Text keeps the hue: toward Text, Green and
+        Yellow turned grey.
+    The accent, Sky, also has an Ink: Sky darkened the same way until it makes 4.5:1 on Sky itself, for text on a
+    Sky fill, since white on Sky is only 2.8:1 and none of Latte's own colours reaches 3:1 on it.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Catppuccin Latte -->
+    <Color x:Key="LatteRosewaterColor">#FFDC8A78</Color>
+    <Color x:Key="LatteFlamingoColor">#FFDD7878</Color>
+    <Color x:Key="LattePinkColor">#FFEA76CB</Color>
+    <Color x:Key="LatteMauveColor">#FF8839EF</Color>
+    <Color x:Key="LatteRedColor">#FFD20F39</Color>
+    <Color x:Key="LatteMaroonColor">#FFE64553</Color>
+    <Color x:Key="LattePeachColor">#FFFE640B</Color>
+    <Color x:Key="LatteYellowColor">#FFDF8E1D</Color>
+    <Color x:Key="LatteGreenColor">#FF40A02B</Color>
+    <Color x:Key="LatteTealColor">#FF179299</Color>
+    <Color x:Key="LatteSkyColor">#FF04A5E5</Color>
+    <Color x:Key="LatteSapphireColor">#FF209FB5</Color>
+    <Color x:Key="LatteBlueColor">#FF1E66F5</Color>
+    <Color x:Key="LatteLavenderColor">#FF7287FD</Color>
+    <Color x:Key="LatteTextColor">#FF4C4F69</Color>
+    <Color x:Key="LatteSubtext1Color">#FF5C5F77</Color>
+    <Color x:Key="LatteSubtext0Color">#FF6C6F85</Color>
+    <Color x:Key="LatteOverlay2Color">#FF7C7F93</Color>
+    <Color x:Key="LatteOverlay1Color">#FF8C8FA1</Color>
+    <Color x:Key="LatteOverlay0Color">#FF9CA0B0</Color>
+    <Color x:Key="LatteSurface2Color">#FFACB0BE</Color>
+    <Color x:Key="LatteSurface1Color">#FFBCC0CC</Color>
+    <Color x:Key="LatteSurface0Color">#FFCCD0DA</Color>
+    <Color x:Key="LatteBaseColor">#FFEFF1F5</Color>
+    <Color x:Key="LatteMantleColor">#FFE6E9EF</Color>
+    <Color x:Key="LatteCrustColor">#FFDCE0E8</Color>
+
+    <SolidColorBrush x:Key="LatteRosewaterBrush" Color="{StaticResource LatteRosewaterColor}" />
+    <SolidColorBrush x:Key="LatteFlamingoBrush" Color="{StaticResource LatteFlamingoColor}" />
+    <SolidColorBrush x:Key="LattePinkBrush" Color="{StaticResource LattePinkColor}" />
+    <SolidColorBrush x:Key="LatteMauveBrush" Color="{StaticResource LatteMauveColor}" />
+    <SolidColorBrush x:Key="LatteRedBrush" Color="{StaticResource LatteRedColor}" />
+    <SolidColorBrush x:Key="LatteMaroonBrush" Color="{StaticResource LatteMaroonColor}" />
+    <SolidColorBrush x:Key="LattePeachBrush" Color="{StaticResource LattePeachColor}" />
+    <SolidColorBrush x:Key="LatteYellowBrush" Color="{StaticResource LatteYellowColor}" />
+    <SolidColorBrush x:Key="LatteGreenBrush" Color="{StaticResource LatteGreenColor}" />
+    <SolidColorBrush x:Key="LatteTealBrush" Color="{StaticResource LatteTealColor}" />
+    <SolidColorBrush x:Key="LatteSkyBrush" Color="{StaticResource LatteSkyColor}" />
+    <SolidColorBrush x:Key="LatteSapphireBrush" Color="{StaticResource LatteSapphireColor}" />
+    <SolidColorBrush x:Key="LatteBlueBrush" Color="{StaticResource LatteBlueColor}" />
+    <SolidColorBrush x:Key="LatteLavenderBrush" Color="{StaticResource LatteLavenderColor}" />
+    <SolidColorBrush x:Key="LatteTextBrush" Color="{StaticResource LatteTextColor}" />
+    <SolidColorBrush x:Key="LatteSubtext1Brush" Color="{StaticResource LatteSubtext1Color}" />
+    <SolidColorBrush x:Key="LatteSubtext0Brush" Color="{StaticResource LatteSubtext0Color}" />
+    <SolidColorBrush x:Key="LatteOverlay2Brush" Color="{StaticResource LatteOverlay2Color}" />
+    <SolidColorBrush x:Key="LatteOverlay1Brush" Color="{StaticResource LatteOverlay1Color}" />
+    <SolidColorBrush x:Key="LatteOverlay0Brush" Color="{StaticResource LatteOverlay0Color}" />
+    <SolidColorBrush x:Key="LatteSurface2Brush" Color="{StaticResource LatteSurface2Color}" />
+    <SolidColorBrush x:Key="LatteSurface1Brush" Color="{StaticResource LatteSurface1Color}" />
+    <SolidColorBrush x:Key="LatteSurface0Brush" Color="{StaticResource LatteSurface0Color}" />
+    <SolidColorBrush x:Key="LatteBaseBrush" Color="{StaticResource LatteBaseColor}" />
+    <SolidColorBrush x:Key="LatteMantleBrush" Color="{StaticResource LatteMantleColor}" />
+    <SolidColorBrush x:Key="LatteCrustBrush" Color="{StaticResource LatteCrustColor}" />
+
+    <!-- Derived: each hue's Tint (10% over Base) and Deep shade (darkened until 4.5:1 on the Tint and on Base), and Sky's Ink -->
+    <Color x:Key="LatteSkyTintColor">#FFD8E9F3</Color>
+    <Color x:Key="LatteSkyDeepColor">#FF036B95</Color>
+    <Color x:Key="LatteSkyInkColor">#FF013245</Color>
+    <Color x:Key="LatteMauveTintColor">#FFE5DFF4</Color>
+    <Color x:Key="LatteMauveDeepColor">#FF8136E3</Color>
+    <Color x:Key="LatteRedTintColor">#FFECDAE2</Color>
+    <Color x:Key="LatteRedDeepColor">#FFBD0E33</Color>
+    <Color x:Key="LatteYellowTintColor">#FFEDE7DF</Color>
+    <Color x:Key="LatteYellowDeepColor">#FF915C13</Color>
+    <Color x:Key="LatteGreenTintColor">#FFDEE9E1</Color>
+    <Color x:Key="LatteGreenDeepColor">#FF2D701E</Color>
+    <Color x:Key="LatteBlueTintColor">#FFDAE3F5</Color>
+    <Color x:Key="LatteBlueDeepColor">#FF1B5CDC</Color>
+
+    <!--
+        Derived: a Wash, the hue at 20% over Base, for a header figure's tile: twice a Tint's strength, so a row of them
+        reads as distinct colours, and still pale enough for Text on it (5.3:1 on Mauve's, the darkest; 5.5-6:1 on the rest)
+    -->
+    <Color x:Key="LatteRosewaterWashColor">#FFEBDCDC</Color>
+    <Color x:Key="LatteFlamingoWashColor">#FFEBD9DC</Color>
+    <Color x:Key="LattePinkWashColor">#FFEED8ED</Color>
+    <Color x:Key="LatteMauveWashColor">#FFDACCF4</Color>
+    <Color x:Key="LattePeachWashColor">#FFF2D5C6</Color>
+    <Color x:Key="LatteYellowWashColor">#FFECDDCA</Color>
+    <Color x:Key="LatteGreenWashColor">#FFCCE1CD</Color>
+    <Color x:Key="LatteTealWashColor">#FFC4DEE3</Color>
+    <Color x:Key="LatteSkyWashColor">#FFC0E2F2</Color>
+
+</ResourceDictionary>

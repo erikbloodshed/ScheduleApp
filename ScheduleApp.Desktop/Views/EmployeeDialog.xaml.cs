@@ -8,7 +8,7 @@ using ScheduleApp.Desktop.Controls;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class EmployeeDialog : Wpf.Ui.Controls.FluentWindow
+public partial class EmployeeDialog : Controls.AppWindow
 {
     private readonly IReadOnlySet<int> _takenEmployeeIds;
 

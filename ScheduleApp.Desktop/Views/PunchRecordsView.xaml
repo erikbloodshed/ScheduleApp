@@ -98,8 +98,8 @@
                        StaysOpen="False"
                        AllowsTransparency="True"
                        IsOpen="{Binding IsLogViewSuggestionsOpen, Mode=TwoWay}">
-                    <Border Background="{DynamicResource ApplicationBackgroundBrush}"
-                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Padding="2"
@@ -167,7 +167,7 @@
 
         <TextBlock Grid.Row="1"
                    Margin="0,0,0,6"
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Foreground="{DynamicResource MutedForegroundBrush}"
                    Visibility="{Binding HasLoadedStoredLogs, Converter={StaticResource BoolToVisibility}}">
             <Run Text="{Binding StoredLogsCount, Mode=OneWay}"
                  FontWeight="Bold"/>

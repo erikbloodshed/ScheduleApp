@@ -1,13 +1,12 @@
-<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.PayslipScopeDialog"
+<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PayslipScopeDialog" ShowMinimizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
         Width="500" Height="600"
         MinWidth="440" MinHeight="440"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        ExtendsContentIntoTitleBar="True"
 >
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -55,21 +54,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
-             one of these - WPF-UI removes the native title bar entirely otherwise. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMinimize="False"
-                ShowMaximize="True"
-                CanMaximize="True" />
-
     <Grid Grid.Row="1" Margin="16"
           RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
 
         <TextBlock x:Name="DescriptionText"
                    Grid.Row="0"
                    TextWrapping="Wrap"
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Foreground="{DynamicResource MutedForegroundBrush}"
                    Margin="0,0,0,12" />
 
         <!-- Period pickers - plain named controls, not bound to
@@ -113,7 +104,7 @@
                     Margin="0,0,0,8">
             <TextBlock Text="Search"
                        FontSize="11"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Foreground="{DynamicResource MutedForegroundBrush}"
                        Margin="0,0,0,4" />
             <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
@@ -127,7 +118,7 @@
         <TreeView Grid.Row="3"
                   ItemsSource="{Binding Departments}"
                   BorderThickness="1"
-                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                  BorderBrush="{DynamicResource CardBorderBrush}"
                   ItemContainerStyle="{StaticResource PayslipScopeDepartmentItemStyle}">
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
@@ -155,7 +146,7 @@
                                                 <DataTrigger Binding="{Binding HasPin}"
                                                              Value="False">
                                                     <Setter Property="Foreground"
-                                                            Value="{DynamicResource TextFillColorTertiaryBrush}" />
+                                                            Value="{DynamicResource TertiaryForegroundBrush}" />
                                                     <Setter Property="ToolTip"
                                                             Value="No Employee ID (Pin) set for this person -- payroll can't be computed until one is. Set it in the Add/Edit Employee dialog on the Schedule tab." />
                                                 </DataTrigger>
@@ -165,8 +156,8 @@
                                 </TextBlock>
                                 <!-- Optional per the Phase 4 plan (row 9) - same Monthly badge
                                      as AddToPayrollGroupDialog's tree, same reasoning. -->
-                                <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                <Border Background="{DynamicResource CardBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="4"
                                         Padding="4,1"
@@ -176,7 +167,7 @@
                                     <TextBlock Text="Monthly"
                                                FontSize="10"
                                                FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                               Foreground="{DynamicResource MutedForegroundBrush}" />
                                 </Border>
                             </StackPanel>
                         </DataTemplate>
@@ -189,7 +180,7 @@
                     Margin="0,8,0,0">
             <TextBlock Text="{Binding SelectionScopeText}"
                        FontSize="11"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Foreground="{DynamicResource MutedForegroundBrush}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8" />
             <StackPanel Orientation="Horizontal">
@@ -218,4 +209,4 @@
         </StackPanel>
     </Grid>
 </Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

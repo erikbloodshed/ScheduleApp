@@ -39,7 +39,7 @@ public class PunchStatusToRowBackgroundBrushConverter : IValueConverter
     // on every Convert() call rather than cached in a static field, same reasoning as
     // CalendarDayToBrushConverter's own EmptyBrush.
     private static SolidColorBrush DefaultBrush =>
-        Application.Current?.TryFindResource("ApplicationBackgroundBrush") as SolidColorBrush
+        Application.Current?.TryFindResource("SurfaceBackgroundBrush") as SolidColorBrush
         ?? Brushes.White;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

@@ -7,7 +7,6 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
-using Wpf.Ui.Abstractions.Controls;
 
 namespace ScheduleApp.Desktop.Views;
 

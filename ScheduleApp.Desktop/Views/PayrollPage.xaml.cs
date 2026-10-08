@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ScheduleApp.Desktop.ViewModels;
-using Wpf.Ui.Abstractions.Controls;
 
 namespace ScheduleApp.Desktop.Views;
 

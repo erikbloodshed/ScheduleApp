@@ -17,7 +17,7 @@ namespace ScheduleApp.Desktop.Views;
 /// reason: a punch is a real clock event ("5:11 PM"), so the minute has to be
 /// exact -- unlike Controls.TimePicker (now retired), which only offered :00/:30.
 /// </summary>
-public partial class PunchTimeEntryDialog : Wpf.Ui.Controls.FluentWindow
+public partial class PunchTimeEntryDialog : Controls.AppWindow
 {
     /// <summary>Kept only for SaveButton_Click's blank-Reason default below -- see
     /// Reason's own doc comment. Everywhere else, the constructor already folds this

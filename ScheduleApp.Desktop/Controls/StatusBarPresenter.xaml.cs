@@ -9,7 +9,7 @@ namespace ScheduleApp.Desktop.Controls;
 /// The status bar's notification area -- see MainWindow.xaml (docked along the
 /// bottom of the window, right-aligned within the bar) and StatusBarService,
 /// which owns the single instance of this control (RootStatusBarPresenter) the
-/// same way RootSnackbarPresenter used to be owned by Wpf.Ui's ISnackbarService.
+/// same way RootSnackbarPresenter used to be owned by WPF-UI's ISnackbarService.
 /// A new ShowMessage call always replaces whatever's currently shown and resets
 /// the auto-clear timer, same "one at a time" behavior the Snackbar had.
 /// </summary>
@@ -28,15 +28,15 @@ public partial class StatusBarPresenter : UserControl
         };
     }
 
-    /// <summary>Shows title/message right-aligned in the bar with the given icon and
-    /// color, then auto-clears after timeout -- icon is typically a fresh
-    /// Wpf.Ui.Controls.SymbolIcon per call (see StatusBarNotificationExtensions), so
-    /// no reuse/parent-detach concerns swapping IconHost.Content here.</summary>
-    public void ShowMessage(string title, string message, Brush color, UIElement icon, TimeSpan timeout)
+    /// <summary>Shows title/message right-aligned in the bar with the given icon glyph (a
+    /// Segoe Fluent Icons character -- see StatusBarService) and color, then auto-clears
+    /// after timeout.</summary>
+    public void ShowMessage(string title, string message, Brush color, string glyph, TimeSpan timeout)
     {
         _clearTimer.Stop();
 
-        IconHost.Content = icon;
+        IconGlyph.Text = glyph;
+        IconGlyph.Foreground = color;
         TitleRun.Text = string.IsNullOrWhiteSpace(title) ? string.Empty : title;
         TitleRun.Foreground = color;
         MessageRun.Text = string.IsNullOrWhiteSpace(title) ? message : $": {message}";
@@ -51,7 +51,7 @@ public partial class StatusBarPresenter : UserControl
     {
         _clearTimer.Stop();
         MessagePanel.Visibility = Visibility.Collapsed;
-        IconHost.Content = null;
+        IconGlyph.Text = string.Empty;
     }
 
     /// <summary>Shows/updates the left-aligned progress indicator -- a short label plus

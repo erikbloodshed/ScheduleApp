@@ -1,7 +1,6 @@
-﻿<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.EmployeeDialog"
+﻿<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.EmployeeDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
         Title="New Employee"
@@ -10,21 +9,12 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        utilities:WindowSizing.ConstrainToWorkArea="True"
-        ExtendsContentIntoTitleBar="True">
+        utilities:WindowSizing.ConstrainToWorkArea="True">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
-             one of these - WPF-UI removes the native title bar entirely otherwise. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMinimize="False"
-                ShowMaximize="False"
-                CanMaximize="False" />
 
     <!-- DockPanel instead of a bare Grid so OK/Cancel (docked Bottom) stay
          visible and reachable no matter how tall the form above them gets.
@@ -178,22 +168,22 @@
                         <StackPanel Orientation="Horizontal"
                                     Margin="0,0,0,12">
                             <StackPanel Margin="0,0,10,0">
-                                <TextBlock Text="In before (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBlock Text="In before (h)" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,4" />
                                 <TextBox x:Name="ClockInBufferBeforeHoursBox" Width="58" HorizontalAlignment="Left"
                                          ToolTip="Blank inherits the policy default." />
                             </StackPanel>
                             <StackPanel Margin="0,0,10,0">
-                                <TextBlock Text="In after (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBlock Text="In after (h)" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,4" />
                                 <TextBox x:Name="ClockInBufferAfterHoursBox" Width="58" HorizontalAlignment="Left"
                                          ToolTip="Blank inherits the policy default." />
                             </StackPanel>
                             <StackPanel Margin="0,0,10,0">
-                                <TextBlock Text="Out before (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBlock Text="Out before (h)" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,4" />
                                 <TextBox x:Name="ClockOutBufferBeforeHoursBox" Width="58" HorizontalAlignment="Left"
                                          ToolTip="Blank inherits the policy default." />
                             </StackPanel>
                             <StackPanel>
-                                <TextBlock Text="Out after (h)" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,4" />
+                                <TextBlock Text="Out after (h)" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,4" />
                                 <TextBox x:Name="ClockOutBufferAfterHoursBox" Width="58" HorizontalAlignment="Left"
                                          ToolTip="Blank inherits the policy default." />
                             </StackPanel>
@@ -356,4 +346,4 @@
         </TabControl>
     </DockPanel>
 </Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

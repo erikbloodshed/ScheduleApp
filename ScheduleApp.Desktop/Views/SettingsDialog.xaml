@@ -1,15 +1,13 @@
-<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.SettingsDialog"
+<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.SettingsDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         Title="Settings" Width="560" Height="660"
         MinWidth="480" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        utilities:WindowSizing.ConstrainToWorkArea="True"
-        ExtendsContentIntoTitleBar="True">
+        utilities:WindowSizing.ConstrainToWorkArea="True">
     <!-- Layout-only styles, kept local rather than pushed into Themes/AppStyles.xaml
          since nothing outside this dialog lays fields out this way (the same
          style-per-file precedent EmployeesPage/PayrollPage/PushListenerView set with
@@ -17,7 +15,7 @@
          SectionHeaderTextStyle / SectionCaptionTextStyle - do live in AppStyles, because
          a bold group header and a wrapped caption under it are repeated across most of
          this app's XAML rather than being anything specific to Settings. -->
-    <ui:FluentWindow.Resources>
+    <controls:AppWindow.Resources>
         <!-- One label:value field. DockPanel rather than a two-column Grid on purpose:
              a *shared* Grid brings back the Grid.Row="N" bookkeeping this dialog was
              rewritten to get rid of, and a per-row Grid needs its own four-line
@@ -46,7 +44,7 @@
 
              BasedOn is load-bearing, not decoration. Setting Style on a control REPLACES
              the implicit theme style for its type rather than extending it, so without
-             this every box here silently dropped WPF-UI's Fluent TextBox template and
+             this every box here silently dropped the theme's TextBox template and
              fell back to stock WPF chrome - a flat 1px rectangle sitting next to the
              properly-themed company name box, TimeInputs and checkboxes on the same
              screen. Same reason EmployeeDialog spells out Style="{StaticResource
@@ -57,20 +55,10 @@
             <Setter Property="DockPanel.Dock" Value="Right" />
             <Setter Property="Width" Value="120" />
         </Style>
-    </ui:FluentWindow.Resources>
+    </controls:AppWindow.Resources>
 
     <Grid RowDefinitions="Auto,*">
 
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
-             one of these - WPF-UI removes the native title bar entirely otherwise.
-             ShowMaximize stays off even though this window is now resizable (it wasn't
-             before): edge-dragging is what the Attendance tab needs to stop scrolling on
-             a tall monitor, a maximize button on a settings dialog isn't. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMinimize="False"
-                ShowMaximize="False"
-                CanMaximize="False" />
 
         <Grid Grid.Row="1" Margin="16" RowDefinitions="Auto,*,Auto">
 
@@ -413,7 +401,7 @@
                                        Text="The logo shown above the sign-in form and the first-run setup screen. Choose an image to replace the default; Reset to Default goes back to the built-in logo." />
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <Border BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" Width="120" Height="80">
+                                <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Width="120" Height="80">
                                     <Image x:Name="LogoPreviewImage" Source="/Assets/Tinapayan_Logo.png" Stretch="Uniform" Margin="4" />
                                 </Border>
                                 <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="12,0,0,0">
@@ -436,4 +424,4 @@
             </StackPanel>
         </Grid>
     </Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

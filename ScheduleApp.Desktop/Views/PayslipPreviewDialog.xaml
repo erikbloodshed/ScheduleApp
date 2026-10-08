@@ -1,34 +1,25 @@
-<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.PayslipPreviewDialog"
+<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PayslipPreviewDialog" ShowMinimizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
         Title="Payslip Preview" Width="520" Height="600"
         MinWidth="420" MinHeight="500"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        utilities:WindowSizing.ConstrainToWorkArea="True"
-        ExtendsContentIntoTitleBar="True">
+        utilities:WindowSizing.ConstrainToWorkArea="True">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
-             one of these - WPF-UI removes the native title bar entirely otherwise. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMinimize="False"
-                ShowMaximize="True"
-                CanMaximize="True" />
-
     <Grid Grid.Row="1" Margin="16" RowDefinitions="Auto,*,Auto,Auto,Auto">
 
         <TextBlock Grid.Row="0"
                    Text="Preview -- 4 payslips per Letter page, cut apart along the quarter-page lines. Nothing is printed or saved until you choose Save or Print below."
                    TextWrapping="Wrap"
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Foreground="{DynamicResource MutedForegroundBrush}"
                    Margin="0,0,0,12" />
 
         <!-- Page display - either the rendered page image, or a "Rendering…"
@@ -36,8 +27,8 @@
              thread (see the dialog's own Loaded handler). -->
         <Border Grid.Row="1"
                 BorderThickness="1"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
+                BorderBrush="{DynamicResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}">
             <Grid>
                 <Image x:Name="PageImage"
                        Stretch="Uniform"
@@ -52,7 +43,7 @@
                                  Margin="0,0,0,8" />
                     <TextBlock Text="Rendering…"
                                HorizontalAlignment="Center"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                               Foreground="{DynamicResource MutedForegroundBrush}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -85,8 +76,8 @@
         <TextBlock x:Name="OverflowNoticeText"
                    Grid.Row="3"
                    TextWrapping="Wrap"
-                   Foreground="{DynamicResource SystemFillColorCautionBrush}"
-                   Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                   Foreground="{DynamicResource WarningForegroundBrush}"
+                   Background="{DynamicResource WarningBackgroundBrush}"
                    Padding="8"
                    Margin="0,10,0,0"
                    Visibility="Collapsed" />
@@ -120,4 +111,4 @@
         </StackPanel>
     </Grid>
 </Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

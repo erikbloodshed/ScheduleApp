@@ -22,19 +22,19 @@
          out-of-range percent is simply clamped by ValueBox on commit, never left
          showing an invalid value to flag. -->
     <Style x:Key="PercentBorderStyle" TargetType="Border">
-      <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="Background" Value="{DynamicResource ControlFillBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="4" />
       <Setter Property="SnapsToDevicePixels" Value="True" />
       <Style.Triggers>
         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-          <Setter Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource AccentForegroundBrush}" />
           <Setter Property="BorderThickness" Value="2" />
         </Trigger>
         <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Background" Value="{DynamicResource ControlFillColorDisabledBrush}" />
-          <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
           <Setter Property="BorderThickness" Value="1" />
         </Trigger>
       </Style.Triggers>
@@ -51,9 +51,9 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
-      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-      <Setter Property="CaretBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
-      <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource AccentForegroundBrush}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
       <Setter Property="TextAlignment" Value="Right" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -70,7 +70,7 @@
       </Setter>
       <Style.Triggers>
         <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+          <Setter Property="Foreground" Value="{DynamicResource DisabledForegroundBrush}" />
         </Trigger>
       </Style.Triggers>
     </Style>
@@ -89,7 +89,7 @@
                  Text="%"
                  Margin="3,0,0,0"
                  VerticalAlignment="Center"
-                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                 Foreground="{DynamicResource MutedForegroundBrush}"
                  IsHitTestVisible="False" />
 
       <controls:NumericTextBox x:Name="ValueBox"

@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,13 +16,65 @@ using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
+using Syncfusion.Licensing;
+using Syncfusion.SfSkinManager;
+using Syncfusion.Themes.Windows11Light.WPF;
 
 namespace ScheduleApp.Desktop;
 
 public partial class App : Application
 {
+    private const string ThemeName = "Windows11Light";
+
     private ServiceProvider? _serviceProvider;
     private IServiceScope? _scope;
+
+    /// <summary>Syncfusion setup that has to happen before App.xaml loads -- see the
+    /// constructor, which runs it first.
+    ///
+    /// The license comes from the SYNCFUSION_LICENSE_KEY environment variable, the same
+    /// one TinapayanRMS reads. Without it Syncfusion still works, but shows its unlicensed
+    /// banner; that's preferred to refusing to start on a machine nobody has set the
+    /// variable up on yet.
+    ///
+    /// The theme's settings (the accent and the text sizes) are registered here rather
+    /// than in OnStartup because Themes/FrameworkFallbacks.xaml merges two of the theme's
+    /// own dictionaries at application level, and those read the registered settings when
+    /// they load. ApplyThemeAsDefaultStyle makes SfSkinManager theme the native WPF
+    /// controls (Button, TextBox, DataGrid, ...) along with the Syncfusion ones, while the
+    /// views are still being moved over to Syncfusion controls; ApplicationTheme, set in
+    /// OnStartup, then applies the theme to every window as it loads.
+    ///
+    /// Not a static constructor: registering the theme settings loads the theme's
+    /// resources through pack:// URIs, and WPF only registers that scheme once the
+    /// Application type itself is initialized, which a static constructor on App runs
+    /// ahead of.</summary>
+    private static void ConfigureSyncfusion()
+    {
+        if (Environment.GetEnvironmentVariable("SYNCFUSION_LICENSE_KEY") is { Length: > 0 } licenseKey)
+            SyncfusionLicenseProvider.RegisterLicense(licenseKey);
+
+        SfSkinManager.RegisterThemeSettings(ThemeName, ThemeSettings());
+        SfSkinManager.ApplyThemeAsDefaultStyle = true;
+    }
+
+    /// <summary>The app's Windows11Light settings. The accent is Catppuccin Latte's Sky,
+    /// with text on it in Sky's Ink (white on Sky is only 2.8:1) -- the same as
+    /// TinapayanRMS, and the AccentBrush/AccentInkBrush tokens in Themes/Tokens.xaml.
+    /// PrimaryBackground's setter derives the theme's darker and lighter accent shades, so
+    /// this one property is enough. The text sizes are each 2 above the theme's defaults,
+    /// which puts body text at the 14px WPF-UI used.</summary>
+    private static Windows11LightThemeSettings ThemeSettings() => new()
+    {
+        PrimaryBackground = new SolidColorBrush(Color.FromRgb(0x04, 0xA5, 0xE5)),
+        PrimaryForeground = new SolidColorBrush(Color.FromRgb(0x01, 0x32, 0x45)),
+        HeaderFontSize = 18,
+        SubHeaderFontSize = 16,
+        TitleFontSize = 16,
+        SubTitleFontSize = 14,
+        BodyFontSize = 14,
+        BodyAltFontSize = 12,
+    };
 
     /// <summary>Nothing in this app subscribed to any of WPF/.NET's unhandled-exception
     /// events before this constructor existed -- an exception that escaped every local
@@ -53,6 +106,9 @@ public partial class App : Application
     /// clear connection to anything currently on screen would just be confusing.</summary>
     public App()
     {
+        // The generated Main calls this constructor, then InitializeComponent (App.xaml).
+        ConfigureSyncfusion();
+
         DispatcherUnhandledException += (_, args) =>
         {
             MessageBox.Show(
@@ -80,6 +136,10 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Before the first window (DatabaseSetupDialog, below, or MainWindow): from here on
+        // SfSkinManager themes every window as it loads -- see the static constructor.
+        SfSkinManager.ApplicationTheme = new Theme(ThemeName);
 
         // ShutdownMode is left at its App.xaml default (OnLastWindowClose) -- MainWindow
         // is the only window this app ever creates and shows now that the sign-in gate
@@ -378,13 +438,12 @@ public partial class App : Application
 
         // Scoped, not Transient, for the nav pages and their ViewModels.
         //
-        // RootNavigationView.SetServiceProvider(...) (see MainWindow) makes
-        // NavigationView resolve TargetPageType straight from this container on
-        // *every* navigation -- Wpf.Ui's own page cache/NavigationCacheMode is
-        // only consulted when no IServiceProvider is set, so it never even runs
-        // here. That means the container's registration is the only thing
-        // controlling whether switching tabs gets back the same page or a fresh
-        // one. Transient handed back a brand-new SchedulePage/AttendancePage/
+        // MainWindow's navigation drawer resolves each page straight from this
+        // container on *every* navigation (see MainWindow.NavigateTo), so the
+        // container's registration is the only thing controlling whether switching
+        // pages gets back the same page or a fresh one. (That was equally true under
+        // WPF-UI's NavigationView, whose own page cache never ran once it had an
+        // IServiceProvider.) Transient handed back a brand-new SchedulePage/AttendancePage/
         // PushListenerPage (and therefore a brand-new ViewModel) on every single
         // switch, which is why leaving Schedule and coming back re-hit the
         // database, dropped whatever was in the punch-log search box, collapsed

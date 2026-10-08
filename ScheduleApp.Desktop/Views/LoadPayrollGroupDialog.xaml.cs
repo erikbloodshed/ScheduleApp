@@ -22,7 +22,7 @@ namespace ScheduleApp.Desktop.Views;
 /// convention every other dialog on this tab follows (see PayslipScopeDialog's own doc
 /// comment for why).
 /// </summary>
-public partial class LoadPayrollGroupDialog : Wpf.Ui.Controls.FluentWindow
+public partial class LoadPayrollGroupDialog : Controls.AppWindow
 {
     private readonly LoadPayrollGroupViewModel _viewModel;
 

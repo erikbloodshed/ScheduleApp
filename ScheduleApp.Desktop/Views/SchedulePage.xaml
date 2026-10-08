@@ -4,18 +4,10 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
       xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       ScrollViewer.CanContentScroll="False"
       Title="Schedule">
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-
-        <Style TargetType="{x:Type ui:Button}">
-            <Setter Property="Margin"
-                    Value="0,0,6,0" />
-            <Setter Property="Appearance"
-                    Value="Secondary" />
-        </Style>
 
         <Style x:Key="GroupLabel"
                TargetType="TextBlock">
@@ -24,7 +16,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                    Value="{DynamicResource MutedForegroundBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -65,7 +57,7 @@
             <Setter Property="Background"
                     Value="Transparent" />
             <Setter Property="Foreground"
-                    Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    Value="{DynamicResource AccentForegroundBrush}" />
             <Setter Property="BorderThickness"
                     Value="0" />
             <Setter Property="Cursor"
@@ -89,7 +81,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="{DynamicResource ControlFillColorDefaultBrush}"
+                                        Value="{DynamicResource ControlFillBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -158,11 +150,11 @@
                             Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="{Binding SelectedEmployeeCount, StringFormat='{}{0} employee(s) checked'}"
                                FontSize="11"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                Margin="0,0,0,4" />
                     <TextBlock Text="Select days on the calendar, then use &quot;Set Schedule for Selected Days&quot; on the right."
                                FontSize="11"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                TextWrapping="Wrap"
                                Margin="0,0,0,4" />
                     <Button Content="Clear Employee Checkboxes"
@@ -180,7 +172,7 @@
                           ItemsSource="{Binding Departments}"
                           SelectedItemChanged="EmployeeTree_OnSelectedItemChanged"
                           BorderThickness="1"
-                          BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                          BorderBrush="{DynamicResource CardBorderBrush}"
                           ItemContainerStyle="{StaticResource DepartmentItemStyle}">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
@@ -298,7 +290,7 @@
                            LastChildFill="False">
                     <TextBlock DockPanel.Dock="Left"
                                VerticalAlignment="Center"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                FontSize="11"
                                Text="Click a day, Shift+click or drag for a range, Ctrl+click to pick several days" />
                     <Button DockPanel.Dock="Right"

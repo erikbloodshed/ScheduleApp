@@ -52,7 +52,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        Value="{DynamicResource CardBorderBrush}"
                                         TargetName="Bg"/>
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -169,7 +169,7 @@
 
         <TextBlock Grid.Row="1"
                    Margin="0,0,0,6"
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Foreground="{DynamicResource MutedForegroundBrush}"
                    Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource BoolToVisibility}}">
             <Run Text="{Binding ManualEntriesCount, Mode=OneWay}"
                  FontWeight="Bold"/>
@@ -239,7 +239,7 @@
 
         <TextBlock Grid.Row="2"
                    Text="No manual entries in range -- use Add Manual Entry… above, or on Punch Records' Punches toolbar, or widen the date range."
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Foreground="{DynamicResource MutedForegroundBrush}"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource InverseBoolToVisibility}}"/>

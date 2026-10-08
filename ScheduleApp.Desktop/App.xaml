@@ -1,16 +1,15 @@
 <Application x:Class="ScheduleApp.Desktop.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- Fixed to Syncfusion's Windows11Light theme, applied to every window by
+                 SfSkinManager.ApplicationTheme in App.xaml.cs - no in-app theme switcher.
+                 These are the app's own resources around it: the Latte colour scale, the
+                 design tokens named from it, and the shared styles that use them. -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- Fixed to Light - no in-app theme switcher (there used to be one; see
-                     git history if that's ever revisited, but a runtime Light/Dark toggle
-                     turned out to have real WPF-UI/DWM chrome-repaint quirks that weren't
-                     worth chasing further). -->
-                <ui:ThemesDictionary Theme="Light" />
-                <ui:ControlsDictionary />
+                <ResourceDictionary Source="Themes/FrameworkFallbacks.xaml" />
+                <ResourceDictionary Source="Themes/Tokens.xaml" />
                 <ResourceDictionary Source="Themes/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

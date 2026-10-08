@@ -1,0 +1,91 @@
+<ResourceDictionary
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Merged here rather than beside this file in App.xaml: a StaticResource can't see a
+         sibling merged dictionary while this one loads. -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Palette.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        Design tokens for the app's own surfaces, text and status colours, named after their role
+        and coloured from Themes/Palette.xaml (Catppuccin Latte), the same tokens and colours as
+        TinapayanRMS. Views use these, never the palette directly and never a hex code.
+
+        These are plain app resources, not Syncfusion theme resources: Syncfusion controls are only
+        ever recoloured through Windows11LightThemeSettings (App.xaml.cs), so their templates stay
+        intact.
+
+        They replaced WPF-UI's theme brushes when the app moved to Syncfusion:
+          ApplicationBackgroundBrush           -> SurfaceBackgroundBrush (popups, fields) or PageBackgroundBrush (the window)
+          CardBackgroundFillColorDefaultBrush  -> CardBackgroundBrush
+          CardStrokeColorDefaultBrush          -> CardBorderBrush
+          DividerStrokeColorDefaultBrush       -> CardBorderBrush
+          TextFillColorPrimaryBrush            -> TextForegroundBrush
+          TextFillColorSecondaryBrush          -> MutedForegroundBrush
+          TextFillColorTertiaryBrush           -> TertiaryForegroundBrush
+          TextFillColorDisabledBrush           -> DisabledForegroundBrush
+          ControlFillColorDefaultBrush         -> ControlFillBrush
+          ControlFillColorSecondaryBrush       -> ControlFillSecondaryBrush
+          ControlFillColorDisabledBrush        -> ControlFillDisabledBrush
+          ControlStrokeColorDefaultBrush       -> ControlBorderBrush
+          SubtleFillColorSecondaryBrush        -> SubtleFillBrush
+          AccentFillColorDefaultBrush          -> AccentBrush
+          SystemAccentColorPrimaryBrush        -> AccentBrush
+          AccentFillColorSecondaryBrush        -> AccentSoftBrush
+          AccentTextFillColorPrimaryBrush      -> AccentForegroundBrush
+          TextOnAccentFillColorPrimaryBrush    -> AccentInkBrush
+          SystemFillColorCriticalBrush         -> ErrorForegroundBrush
+          SystemFillColorCautionBrush          -> WarningForegroundBrush
+          SystemFillColorCautionBackgroundBrush -> WarningBackgroundBrush
+
+        Status colours for attendance and payroll (Complete/Partial/Absent/Leave/Official Business/
+        Rest Day) are deliberately not here - see PunchStatusToBrushConverter and its siblings in
+        Converters/, which own that one centralized set of hues.
+    -->
+
+    <!-- Surfaces: Mantle for the window, Base for the cards on it, and white for the inside of a
+         field, a list or a popup, matching the Windows11Light theme's own ContentBackground. -->
+    <SolidColorBrush x:Key="PageBackgroundBrush" Color="{StaticResource LatteMantleColor}" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource LatteBaseColor}" />
+    <SolidColorBrush x:Key="CardBorderBrush" Color="{StaticResource LatteCrustColor}" />
+    <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#FFFFFFFF" />
+
+    <!-- Type: Text for body text and headings, Subtext for muted text, Overlay for the paler steps -->
+    <SolidColorBrush x:Key="TextForegroundBrush" Color="{StaticResource LatteTextColor}" />
+    <SolidColorBrush x:Key="HeadingForegroundBrush" Color="{StaticResource LatteTextColor}" />
+    <SolidColorBrush x:Key="MutedForegroundBrush" Color="{StaticResource LatteSubtext1Color}" />
+    <SolidColorBrush x:Key="TertiaryForegroundBrush" Color="{StaticResource LatteOverlay1Color}" />
+    <SolidColorBrush x:Key="DisabledForegroundBrush" Color="{StaticResource LatteOverlay0Color}" />
+
+    <!-- The app's own hand-templated inputs (TimeInput, PercentTextBox) and hover washes -->
+    <SolidColorBrush x:Key="ControlFillBrush" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="ControlFillSecondaryBrush" Color="{StaticResource LatteMantleColor}" />
+    <SolidColorBrush x:Key="ControlFillDisabledBrush" Color="{StaticResource LatteMantleColor}" />
+    <SolidColorBrush x:Key="ControlBorderBrush" Color="{StaticResource LatteSurface0Color}" />
+    <SolidColorBrush x:Key="SubtleFillBrush" Color="#14000000" />
+
+    <!--
+        The accent is Sky, matching the theme's PrimaryBackground (App.xaml.cs), for fills, lines and
+        borders. Sky is too pale for text (2.5:1 on Base), so accent text uses its Deep shade, and text
+        on an accent fill its Ink.
+    -->
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource LatteSkyColor}" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="{StaticResource LatteSkyDeepColor}" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource LatteSkyTintColor}" />
+    <SolidColorBrush x:Key="AccentInkBrush" Color="{StaticResource LatteSkyInkColor}" />
+
+    <!-- Banners and status text: each hue's Tint behind, its Deep shade in front -->
+    <SolidColorBrush x:Key="InfoBackgroundBrush" Color="{StaticResource LatteMauveTintColor}" />
+    <SolidColorBrush x:Key="InfoForegroundBrush" Color="{StaticResource LatteMauveDeepColor}" />
+    <SolidColorBrush x:Key="LinkBackgroundBrush" Color="{StaticResource LatteBlueTintColor}" />
+    <SolidColorBrush x:Key="LinkForegroundBrush" Color="{StaticResource LatteBlueDeepColor}" />
+    <SolidColorBrush x:Key="SuccessBackgroundBrush" Color="{StaticResource LatteGreenTintColor}" />
+    <SolidColorBrush x:Key="SuccessForegroundBrush" Color="{StaticResource LatteGreenDeepColor}" />
+    <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="{StaticResource LatteRedTintColor}" />
+    <SolidColorBrush x:Key="ErrorForegroundBrush" Color="{StaticResource LatteRedDeepColor}" />
+    <SolidColorBrush x:Key="WarningBackgroundBrush" Color="{StaticResource LatteYellowTintColor}" />
+    <SolidColorBrush x:Key="WarningForegroundBrush" Color="{StaticResource LatteYellowDeepColor}" />
+
+</ResourceDictionary>

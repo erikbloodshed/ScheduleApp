@@ -23,7 +23,7 @@
              reached via the editor UserControl. -->
         <Style x:Key="MissingPunchPlaceholderStyle" TargetType="TextBlock">
             <Setter Property="Text" Value="missing punch" />
-            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TertiaryForegroundBrush}" />
             <Setter Property="FontStyle" Value="Italic" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="HorizontalAlignment" Value="Center" />
@@ -42,8 +42,8 @@
         <DataTemplate x:Key="PunchCellTemplate" DataType="{x:Type vm:DayPunchPairingCellViewModel}">
             <Border x:Name="Card"
                     CornerRadius="6"
-                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
                     BorderThickness="1"
                     Padding="8,4"
                     ToolTip="{Binding ReasonText}"
@@ -62,19 +62,19 @@
                          hand-typed time is never mistaken for a recorded one. -->
                     <Border x:Name="SourceBadge"
                             CornerRadius="3"
-                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            Background="{DynamicResource ControlFillBrush}"
                             Padding="5,1"
                             VerticalAlignment="Center"
                             Margin="8,0,0,0">
                         <TextBlock Text="{Binding SourceText}"
                                    FontSize="10"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                   Foreground="{DynamicResource MutedForegroundBrush}" />
                     </Border>
                     <TextBlock x:Name="UnpairedBadge"
                                Text="unpaired"
                                FontSize="10"
                                FontWeight="SemiBold"
-                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                               Foreground="{DynamicResource WarningForegroundBrush}"
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"
                                Visibility="Collapsed" />
@@ -90,7 +90,7 @@
                                Text="not counted"
                                FontSize="10"
                                FontStyle="Italic"
-                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Foreground="{DynamicResource TertiaryForegroundBrush}"
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"
                                Visibility="Collapsed" />
@@ -98,7 +98,7 @@
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsManual}" Value="True">
-                    <Setter TargetName="SourceBadge" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                    <Setter TargetName="SourceBadge" Property="Background" Value="{DynamicResource ControlFillSecondaryBrush}" />
                 </DataTrigger>
                 <!-- Before the IsUnpaired/IsBeingDragged triggers below on purpose:
                      where they set the same property, the later trigger wins, so an
@@ -109,18 +109,18 @@
                      the one that most needs to say why it is greyed. -->
                 <DataTrigger Binding="{Binding IsOutsideScheduleWindow}" Value="True">
                     <Setter TargetName="Card" Property="Opacity" Value="0.55" />
-                    <Setter TargetName="Card" Property="Background" Value="{DynamicResource ControlFillColorDisabledBrush}" />
+                    <Setter TargetName="Card" Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
                     <Setter TargetName="Card" Property="ToolTipService.IsEnabled" Value="True" />
                     <Setter TargetName="OutsideWindowBadge" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsUnpaired}" Value="True">
-                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource WarningForegroundBrush}" />
                     <Setter TargetName="Card" Property="BorderThickness" Value="1.5" />
                     <Setter TargetName="UnpairedBadge" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsBeingDragged}" Value="True">
                     <Setter TargetName="Card" Property="Opacity" Value="0.35" />
-                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource SystemAccentColorPrimaryBrush}" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -138,7 +138,7 @@
                         MinHeight="40"
                         CornerRadius="8"
                         Background="Transparent"
-                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
                         BorderThickness="1.5"
                         Padding="4"
                         AllowDrop="True"
@@ -171,7 +171,7 @@
                         MinHeight="40"
                         CornerRadius="8"
                         Background="Transparent"
-                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
                         BorderThickness="1.5"
                         Padding="4"
                         AllowDrop="True"
@@ -237,30 +237,30 @@
              calculated by, so they'd quietly disagree with the Summary grid; those
              days get the punch count and a line saying why there's no verdict here
              instead. -->
-        <Border Grid.Row="4" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+        <Border Grid.Row="4" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1"
                 CornerRadius="6" Padding="12,9" Margin="0,10,0,0">
           <Grid>
             <StackPanel Visibility="{Binding PairingAffectsResult, Converter={StaticResource InverseBoolToVisible}}">
                 <TextBlock Text="{Binding PunchCountText}" FontWeight="SemiBold" FontSize="14" />
                 <TextBlock Text="{Binding PairingNote}"
                            FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                           Foreground="{DynamicResource MutedForegroundBrush}" />
             </StackPanel>
 
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto"
                   Visibility="{Binding PairingAffectsResult, Converter={StaticResource BoolToVisible}}">
                 <StackPanel Grid.Column="0" Margin="0,0,22,0">
-                    <TextBlock Text="Worked" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Worked" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
                     <TextBlock Text="{Binding WorkedText}" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="0,0,22,0">
-                    <TextBlock Text="Required" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Required" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
                     <TextBlock Text="{Binding RequiredText}" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock Text="{Binding RemainderLabel}" FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{Binding RemainderLabel}" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
                     <TextBlock Text="{Binding RemainderText}" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
@@ -274,7 +274,7 @@
                                    Foreground="{Binding PreviewStatus, Converter={StaticResource StatusBrush}}" />
                     </StackPanel>
                     <TextBlock Text="{Binding UnpairedCount, StringFormat={}{0} punch still unpaired}"
-                               FontSize="11" Foreground="{DynamicResource SystemFillColorCautionBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"
+                               FontSize="11" Foreground="{DynamicResource WarningForegroundBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"
                                Visibility="{Binding HasUnpairedPunches, Converter={StaticResource BoolToVisible}}" />
                 </StackPanel>
             </Grid>

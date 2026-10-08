@@ -4,49 +4,30 @@
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls">
 
     <!--
-      Shared, theme-aware resources for ScheduleApp.Desktop's own views/dialogs/controls -
-      merged into Application.Resources by App.xaml, after WPF-UI's own ThemesDictionary/
-      ControlsDictionary so everything below can build on their DynamicResource brush keys
-      (see comments there for the brush names this app itself pulls in most: Application/
-      Card/Control background+stroke, TextFillColor Primary/Secondary/Tertiary, the four
-      SystemFillColor* semantic brushes).
+      Shared resources for ScheduleApp.Desktop's own views/dialogs/controls - merged into
+      Application.Resources by App.xaml, after Themes/Palette.xaml (the Catppuccin Latte colour
+      scale) and Themes/Tokens.xaml (the design tokens named from it), so everything below can
+      use the token brushes.
 
-      Recurring hardcoded-hex -> WPF-UI brush mapping used across this app's own XAML
-      (this was the single most common find across MainWindow.xaml and every page/dialog
-      that predates this file - keep new markup on these DynamicResource keys instead of
-      a literal hex value, so both Light and Dark actually work):
-
-        #FFFFFF / White (page background)         -> ApplicationBackgroundBrush
-        #F8FAFC / #F1F5F9 (muted panel/card fill)  -> CardBackgroundFillColorDefaultBrush
-        #F9FAFB (very light row/hover fill)        -> ControlFillColorDefaultBrush
-        #E2E8F0 / #CBD5E1 (subtle border/divider)  -> CardStrokeColorDefaultBrush
-                                                       (or DividerStrokeColorDefaultBrush
-                                                       for a plain separator line)
-        #64748B / #94A3B8 (muted/caption text)     -> TextFillColorSecondaryBrush
-        #0F172A / #1E293B / #334155 (body text)    -> TextFillColorPrimaryBrush
-        #94A3B8 as a disabled/tertiary tone        -> TextFillColorTertiaryBrush
-
-      Status/semantic colors (Complete/Partial/Absent/Leave/Official Business/Rest Day,
-      etc.) are deliberately NOT redefined here - see PunchStatusToBrushConverter.cs and
-      its siblings (PunchStatusToRowBackgroundBrushConverter, SummaryRowBackgroundConverter)
-      in Converters/: those six statuses already have one centralized, hardcoded-on-purpose
-      set of hues shared by the Attendance Summary grid, the Results panel counts, and the
-      Schedule calendar's completion markers alike. That's a deliberate, already-correct
-      "one place to change" design of its own (six distinct categories that don't map onto
-      WPF-UI's generic four-color Success/Caution/Critical/Neutral system anyway) - leave
-      it as-is; it isn't the kind of theme-vs-hardcoded duplication this dictionary exists
-      to fix.
+      Syncfusion controls are never styled here: they get the Windows11Light theme and the
+      app's accent from SfSkinManager (see App.xaml.cs), and a Style on one would replace the
+      theme's.
     -->
+
+    <FontFamily x:Key="IconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <!-- A Segoe Fluent Icons glyph in a TextBlock - the replacement for WPF-UI's SymbolIcon. -->
+    <Style x:Key="IconGlyphStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource IconFontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+    </Style>
 
     <!-- Generic card-like grouping container - the shared replacement for the plain
          <Border Background="#F..." BorderBrush="#E../#C.."> pattern repeated across most
-         pages/dialogs before this file existed. Prefer ui:CardControl/ui:CardExpander
-         directly for a new card; use this style on a plain Border only where a control
-         template genuinely needs to stay a bare Border (e.g. one substituted inside an
-         existing DataTemplate/ControlTemplate). -->
+         pages/dialogs before this file existed. -->
     <Style x:Key="CardBorderStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Padding" Value="16" />
@@ -54,11 +35,9 @@
 
     <!-- Muted/caption text - the shared replacement for a one-off
          Foreground="#64748B"/"#94A3B8" TextBlock (section labels, helper text, secondary
-         column values). Prefer ui:TextBlock with FontTypography="Caption" for new markup;
-         this style is for a plain TextBlock that needs to stay a TextBlock (e.g. inside a
-         DataGrid cell template). -->
+         column values). -->
     <Style x:Key="CaptionTextStyle" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
         <Setter Property="FontSize" Value="12" />
     </Style>
 
@@ -82,64 +61,22 @@
         <Setter Property="Margin" Value="0,0,0,10" />
     </Style>
 
-    <!-- IconButton's own default look (see Controls/IconButton.cs's doc comment for why
-         it's a Button subclass rather than a UserControl), based on the app's own implicit
-         Button style (WPF-UI's, merged by App.xaml before this file) rather than a
-         from-scratch Template, so an IconButton keeps exactly the same chrome (colors,
-         rounded corners, hover/pressed/disabled states) as every plain Button sitting next
-         to it, and picks up any future change to that shared style automatically. Content
-         rendering is the only thing overridden: ContentTemplate's DataTemplate reaches
-         back up to the templated IconButton itself for Icon (an ordinary Binding with
-         RelativeSource, not TemplateBinding, since ContentTemplate's DataContext is
-         Content, not the control), and renders it in its own TextBlock ahead of a second
-         TextBlock showing Content itself. An IconButton with no Icon set still renders
+    <!-- IconButton's content: its Icon glyph, then Content. Applied by IconButton's own
+         constructor (see Controls/IconButton.cs for why it isn't an implicit Style here).
+         The DataTemplate reaches back up to the templated IconButton for Icon (an ordinary
+         Binding with RelativeSource, not TemplateBinding, since ContentTemplate's DataContext
+         is Content, not the control). An IconButton with no Icon set still renders
          correctly: Text="" on the icon TextBlock takes up no visible space, so it degrades
          to an ordinary label-only button rather than leaving a gap. -->
-    <Style TargetType="{x:Type controls:IconButton}"
-           BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="ContentTemplate">
-            <Setter.Value>
-                <DataTemplate>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType={x:Type controls:IconButton}}, Path=Icon}"
-                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                   FontSize="14"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding}"
-                                   Margin="6,0,0,0"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </DataTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!-- One row of a compact flyout menu (MainWindow's own AttendanceFlyout is the first
-         tenant) - plain-Button chrome stripped down to a left-aligned, full-width menu
-         row that highlights on hover, using the theme's own control-fill brush instead of
-         a hardcoded hex hover color so it still reads correctly in Dark. -->
-    <Style x:Key="FlyoutMenuItemStyle" TargetType="Button">
-        <Setter Property="HorizontalContentAlignment" Value="Left" />
-        <Setter Property="Padding" Value="10,7" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="4">
-                        <ContentPresenter Margin="{TemplateBinding Padding}"
-                                HorizontalAlignment="Left" VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" TargetName="Bg" Value="{DynamicResource ControlFillColorDefaultBrush}" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <DataTemplate x:Key="IconButtonContentTemplate">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType={x:Type controls:IconButton}}, Path=Icon}"
+                       Style="{StaticResource IconGlyphStyle}"
+                       VerticalAlignment="Center" />
+            <TextBlock Text="{Binding}"
+                       Margin="6,0,0,0"
+                       VerticalAlignment="Center" />
+        </StackPanel>
+    </DataTemplate>
 
 </ResourceDictionary>

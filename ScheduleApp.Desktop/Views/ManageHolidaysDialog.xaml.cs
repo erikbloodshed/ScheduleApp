@@ -36,7 +36,7 @@ namespace ScheduleApp.Desktop.Views;
 /// handlers below only keep the selection pinned to the row being edited and route
 /// Enter/Escape to the validated Save/Cancel paths.
 /// </summary>
-public partial class ManageHolidaysDialog : Wpf.Ui.Controls.FluentWindow
+public partial class ManageHolidaysDialog : Controls.AppWindow
 {
     private readonly IHolidayRepository _holidayRepository;
 

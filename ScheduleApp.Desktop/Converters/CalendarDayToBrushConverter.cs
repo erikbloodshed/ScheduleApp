@@ -24,19 +24,17 @@ public class CalendarDayToBrushConverter : IValueConverter
     // reasoning as PunchStatusToBrushConverter), a day with no schedule entry -- the
     // common case for most of an empty calendar -- has no status to tint, so its "fill"
     // should just be the theme's own base/muted panel color rather than a hardcoded
-    // light-only white/gray that would sit wrong on a Dark calendar. Resolved fresh on
-    // every Convert() call (not cached in a static field like the tints above) since
-    // ApplicationThemeManager.Apply swaps the whole resource dictionary rather than
-    // mutating a brush in place -- a cached reference would go stale after a theme
-    // change. TryFindResource falling through to the literal fallback only matters if
+    // light-only white/gray. Resolved fresh on every Convert() call (not cached in a
+    // static field like the tints above) so it always follows the tokens in
+    // Themes/Tokens.xaml. TryFindResource falling through to the literal fallback only matters if
     // this ever runs before App.xaml's resources are merged (shouldn't happen in
     // practice, but cheaper than risking a null Background).
     private static SolidColorBrush OutOfMonthBrush =>
-        Application.Current?.TryFindResource("ControlFillColorSecondaryBrush") as SolidColorBrush
+        Application.Current?.TryFindResource("ControlFillSecondaryBrush") as SolidColorBrush
         ?? new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF5));
 
     private static SolidColorBrush EmptyBrush =>
-        Application.Current?.TryFindResource("ApplicationBackgroundBrush") as SolidColorBrush
+        Application.Current?.TryFindResource("SurfaceBackgroundBrush") as SolidColorBrush
         ?? Brushes.White;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)

@@ -53,7 +53,7 @@ namespace ScheduleApp.Desktop.Views;
 /// no help when the field it's complaining about is two tabs away. Cancelling leaves the
 /// shared file untouched.
 /// </summary>
-public partial class SettingsDialog : Wpf.Ui.Controls.FluentWindow
+public partial class SettingsDialog : Controls.AppWindow
 {
     private readonly DatabaseProvisioningService _provisioningService;
     private readonly string _originalConnectionString;

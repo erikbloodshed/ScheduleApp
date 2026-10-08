@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
              xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -14,8 +13,8 @@
         <!-- Same "card" look AttendanceView.xaml uses for its toolbar strip, so this tab
              reads as part of the same app rather than a bolted-on utility. -->
         <Style x:Key="CardBorder" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Padding" Value="10,8" />
@@ -25,7 +24,7 @@
         <Style x:Key="GroupLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
     </UserControl.Resources>
@@ -60,8 +59,8 @@
                         </Ellipse.Style>
                     </Ellipse>
                     <TextBlock Text="{Binding Health.Status}" Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding UptimeDisplay, StringFormat='uptime {0}'}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                    <TextBlock Text="{Binding UptimeDisplay, StringFormat='uptime {0}'}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedForegroundBrush}" />
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedForegroundBrush}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value="DB reachable" />

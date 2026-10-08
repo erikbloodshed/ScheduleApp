@@ -1,7 +1,7 @@
-<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.PayrollWizardDialog"
+<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PayrollWizardDialog" ShowMinimizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
         xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
@@ -10,8 +10,7 @@
         MinWidth="620" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        utilities:WindowSizing.ConstrainToWorkArea="True"
-        ExtendsContentIntoTitleBar="True">
+        utilities:WindowSizing.ConstrainToWorkArea="True">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
@@ -61,12 +60,12 @@
         <Style x:Key="Step1LabelStyle"
                TargetType="TextBlock">
             <Setter Property="Foreground"
-                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                    Value="{DynamicResource MutedForegroundBrush}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsStep1Active}"
                              Value="True">
                     <Setter Property="Foreground"
-                            Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                            Value="{DynamicResource TextForegroundBrush}" />
                     <Setter Property="FontWeight"
                             Value="Bold" />
                 </DataTrigger>
@@ -79,7 +78,7 @@
                 <DataTrigger Binding="{Binding IsStep2Active}"
                              Value="True">
                     <Setter Property="Foreground"
-                            Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                            Value="{DynamicResource TextForegroundBrush}" />
                     <Setter Property="FontWeight"
                             Value="Bold" />
                 </DataTrigger>
@@ -92,7 +91,7 @@
                 <DataTrigger Binding="{Binding IsStep3Active}"
                              Value="True">
                     <Setter Property="Foreground"
-                            Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                            Value="{DynamicResource TextForegroundBrush}" />
                     <Setter Property="FontWeight"
                             Value="Bold" />
                 </DataTrigger>
@@ -123,14 +122,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
-             one of these - WPF-UI removes the native title bar entirely otherwise. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMinimize="False"
-                ShowMaximize="True"
-                CanMaximize="True" />
-
     <Grid Grid.Row="1" Margin="16"
           RowDefinitions="Auto,Auto,*,Auto">
 
@@ -142,11 +133,11 @@
             <TextBlock Text="1. Period &amp; Label"
                        Style="{StaticResource Step1LabelStyle}" />
             <TextBlock Text="  —  "
-                       Foreground="{DynamicResource CardStrokeColorDefaultBrush}" />
+                       Foreground="{DynamicResource CardBorderBrush}" />
             <TextBlock Text="2. Employees"
                        Style="{StaticResource Step2LabelStyle}" />
             <TextBlock Text="  —  "
-                       Foreground="{DynamicResource CardStrokeColorDefaultBrush}" />
+                       Foreground="{DynamicResource CardBorderBrush}" />
             <TextBlock Text="3. Calculate &amp; Review"
                        Style="{StaticResource Step3LabelStyle}" />
         </StackPanel>
@@ -206,7 +197,7 @@
                             Margin="0,0,0,8">
                     <TextBlock Text="Search"
                                FontSize="11"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                Margin="0,0,0,4" />
                     <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
@@ -215,7 +206,7 @@
                 <TreeView Grid.Row="1"
                           ItemsSource="{Binding Departments}"
                           BorderThickness="1"
-                          BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                          BorderBrush="{DynamicResource CardBorderBrush}"
                           ItemContainerStyle="{StaticResource WizardEmployeeDepartmentItemStyle}">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
@@ -243,7 +234,7 @@
                                                         <DataTrigger Binding="{Binding HasPin}"
                                                                      Value="False">
                                                             <Setter Property="Foreground"
-                                                                    Value="{DynamicResource TextFillColorTertiaryBrush}" />
+                                                                    Value="{DynamicResource TertiaryForegroundBrush}" />
                                                             <Setter Property="ToolTip"
                                                                     Value="No Employee ID (Pin) set for this person -- payroll can't be computed until one is. Set it in the Add/Edit Employee dialog on the Schedule tab." />
                                                         </DataTrigger>
@@ -253,8 +244,8 @@
                                         </TextBlock>
                                         <!-- Optional per the Phase 4 plan (row 9) - same Monthly
                                              badge as AddToPayrollGroupDialog's tree, same reasoning. -->
-                                        <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource CardBorderBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="4"
                                                 Padding="4,1"
@@ -264,7 +255,7 @@
                                             <TextBlock Text="Monthly"
                                                        FontSize="10"
                                                        FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                       Foreground="{DynamicResource MutedForegroundBrush}" />
                                         </Border>
                                     </StackPanel>
                                 </DataTemplate>
@@ -277,7 +268,7 @@
                             Margin="0,8,0,0">
                     <TextBlock Text="{Binding SelectionScopeText}"
                                FontSize="11"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                TextWrapping="Wrap"
                                Margin="0,0,0,8" />
                     <StackPanel Orientation="Horizontal">
@@ -318,7 +309,7 @@
                 <Grid Grid.Row="1">
                     <TextBlock Text="Calculating payroll for the checked employees…"
                                Visibility="{Binding IsCalculating, Converter={StaticResource BoolToVisibility}}"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
 
@@ -336,8 +327,8 @@
                              under the matching Gross Pay/Deductions/Net Pay cells so the
                              column totals line up under what they're summing. -->
                         <Border DockPanel.Dock="Bottom"
-                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1,0,1,1"
                                 Padding="8,6">
                             <DockPanel LastChildFill="False">
@@ -376,7 +367,7 @@
                                   GridLinesVisibility="Horizontal"
                                   HeadersVisibility="Column"
                                   BorderThickness="1"
-                                  BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                                  BorderBrush="{DynamicResource CardBorderBrush}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Employee"
                                                     Binding="{Binding EmployeeName}"
@@ -412,7 +403,7 @@
 
                     <TextBlock Text="Saving…"
                                Visibility="{Binding IsSaving, Converter={StaticResource BoolToVisibility}}"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                HorizontalAlignment="Center"
                                Margin="0,10,0,0" />
 
@@ -434,7 +425,7 @@
 
                     <TextBlock Text="Changes to the employee list on Step 2 from here on won't be included in this saved run -- click Finish to close, or Cancel and start a new run to save a different selection."
                                Visibility="{Binding SavedRunSummary, Converter={StaticResource NotNullToVisibility}}"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                FontSize="11"
                                TextWrapping="Wrap"
                                MaxWidth="380"
@@ -465,4 +456,4 @@
         </StackPanel>
     </Grid>
 </Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

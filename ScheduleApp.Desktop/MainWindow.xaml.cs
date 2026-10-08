@@ -1,21 +1,17 @@
 ﻿using System.Diagnostics;
 using System.Windows;
-using System.Windows.Input;
-using System.Windows.Threading;
+using System.Windows.Controls;
+using System.Windows.Navigation;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using ScheduleApp.Core.Configuration;
 using ScheduleApp.Core.Users;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
-
-// Aliased rather than `using Wpf.Ui.Controls;` -- that namespace also has a MessageBox
-// type, which would make the several MessageBox.Show(...) calls below ambiguous.
-using NavigatedEventArgs = Wpf.Ui.Controls.NavigatedEventArgs;
-using NavigationView = Wpf.Ui.Controls.NavigationView;
-using SymbolIcon = Wpf.Ui.Controls.SymbolIcon;
-using SymbolRegular = Wpf.Ui.Controls.SymbolRegular;
+using Syncfusion.SfSkinManager;
+using Syncfusion.UI.Xaml.NavigationDrawer;
 
 namespace ScheduleApp.Desktop;
 
@@ -29,15 +25,16 @@ namespace ScheduleApp.Desktop;
 /// ran after a successful sign-in) into this class instead:
 ///   - ShowSignInOverlay(hasAccounts), called by App.OnStartup right after resolving
 ///     this window and before Show(), decides which panel to display.
-///   - Title and the first RootNavigationView.Navigate both used to happen unconditionally
+///   - Title and the first NavigateTo both used to happen unconditionally
 ///     (construction always meant "already signed in"); now they wait for
 ///     OnAuthSucceeded, since construction no longer implies that.
 ///   - CurrentUserContext.Set(...) used to be called by App.OnStartup right after
 ///     LoginWindow/SetupAdminWindow's ShowDialog() returned true; it's called from
 ///     OnAuthSucceeded here instead, for the same reason as Title/Navigate above.
 /// </summary>
-public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
+public partial class MainWindow : Controls.AppWindow
 {
+    private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private readonly AttendanceSettings _attendanceSettings;
     private readonly PayrollSettings _payrollSettings;
@@ -53,27 +50,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private readonly NavigationDrawerStateStore _navDrawerStateStore;
 
     /// <summary>Whether the navigation drawer is pinned open. Loaded from
-    /// <see cref="_navDrawerStateStore"/> in the constructor and applied to the pane in
+    /// <see cref="_navDrawerStateStore"/> in the constructor and applied to the drawer in
     /// <see cref="OnAuthSucceeded"/> (same "wait for sign-in" timing as the first
-    /// Navigate/Title); toggled by <see cref="PinPaneButton_Click"/>. When false the pane
-    /// sits compact and hover-expands from the hamburger (see
-    /// <see cref="PaneToggleButton_MouseEnter"/>).</summary>
+    /// NavigateTo/Title); toggled by <see cref="PinPaneButton_Click"/>. See
+    /// <see cref="ApplyNavDrawerPinned"/> for what pinned and unpinned look like.</summary>
     private bool _navDrawerPinned;
 
-    /// <summary>Grace period before an unpinned, hover-expanded drawer collapses once the
-    /// pointer is off the pane -- so brushing past its edge doesn't flicker it shut.
-    /// Started from RootNavigationView_MouseMove (pointer moved onto the page content) or
-    /// RootNavigationView_MouseLeave (pointer left the control entirely), and cancelled
-    /// the moment MouseMove sees it back over the pane. Never runs while pinned. (Picking
-    /// a nav item collapses on its own -- see RootNavigationView_Navigated.)</summary>
-    private readonly DispatcherTimer _paneHoverCloseTimer;
-
-    /// <summary>The pane's hamburger toggle (PART_ToggleButton), resolved from the
-    /// NavigationView template on load so the drawer can hover-expand from *that button
-    /// specifically* rather than anywhere on the compact rail -- see
-    /// PaneToggleButton_MouseEnter. Null only if the template ever changes that part
-    /// name.</summary>
-    private FrameworkElement? _paneToggleButton;
+    /// <summary>The page on screen, told when it's left -- see <see cref="NavigateTo"/>.</summary>
+    private INavigationAware? _currentPage;
 
     public MainWindow(
         IServiceProvider serviceProvider,
@@ -113,17 +97,13 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         // rest of the deferred startup.
         _navDrawerPinned = navigationDrawerStateStore.LoadPinned();
 
-        _paneHoverCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _paneHoverCloseTimer.Tick += PaneHoverCloseTimer_Tick;
-
         // Generic until OnAuthSucceeded fills in who's signed in -- see this class's own
         // doc comment for why that can no longer happen right here in the constructor.
         Title = "Schedule Manager";
 
-        // Lets the NavigationView resolve SchedulePage/AttendancePage (and the
-        // ViewModels their constructors ask for) through DI instead of calling
-        // Activator.CreateInstance on a bare parameterless constructor.
-        RootNavigationView.SetServiceProvider(serviceProvider);
+        // NavigateTo resolves SchedulePage/AttendanceSummaryPage/... (and the ViewModels
+        // their constructors ask for) through DI rather than constructing them itself.
+        _serviceProvider = serviceProvider;
 
         statusBarService.SetStatusBarPresenter(RootStatusBarPresenter);
 
@@ -159,6 +139,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         AuthOverlay.Visibility = Visibility.Visible;
 
+        // The overlay covers the window's content but not its title bar, where the pin sits;
+        // nothing is there to pin until someone has signed in.
+        PinPaneButton.Visibility = Visibility.Collapsed;
+
         if (hasExistingAccounts)
         {
             SignInPanelControl.Visibility = Visibility.Visible;
@@ -180,202 +164,121 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         _currentUser.Set(e.UserId, e.Username);
         Title = $"Schedule Manager -- Signed in as {_currentUser.Username}";
         AuthOverlay.Visibility = Visibility.Collapsed;
-        RootNavigationView.Navigate(typeof(SchedulePage));
-
-        // Forces the pane to its intended startup state -- not just left to XAML's
-        // IsPaneOpen="False": WPF-UI's NavigationView.IsPaneOpenProperty actually
-        // defaults to true (open), and its own OnLoaded handler doesn't reliably re-sync
-        // the visual state to a same-or-different XAML-time value either -- the pane was
-        // still showing fully open on launch despite IsPaneOpen="False" sitting right
-        // there in XAML. Assigning the opposite first, then the wanted value, guarantees
-        // a real value *change*, so WPF-UI's OnIsPaneOpenChanged callback (the thing that
-        // drives the PaneOpen/PaneCompact visual state via VisualStateManager.GoToState)
-        // is guaranteed to fire and land where we want, once the window has loaded and
-        // the first navigation above has run. Wanted state is compact by default, or open
-        // if the drawer was left pinned last run (see PinPaneButton_Click /
-        // NavigationDrawerStateStore).
-        RootNavigationView.IsPaneOpen = !_navDrawerPinned;
-        RootNavigationView.IsPaneOpen = _navDrawerPinned;
-        ApplyNavDrawerPinnedVisual();
+        PinPaneButton.Visibility = Visibility.Visible;
+        ApplyNavDrawerPinned();
+        NavigateTo(ScheduleNavItem);
     }
 
     /// <summary>Toggles the navigation drawer's pinned-open state and remembers it for
-    /// next launch. Pinned: the pane stays expanded and its own toggle (hamburger) is
-    /// hidden -- the pin owns that job now, with RootNavigationView_PaneClosed guarding
-    /// against anything else collapsing it. Unpinned: the pane drops straight back to its
-    /// compact rail and from then on hover-expands from the hamburger (see
-    /// PaneToggleButton_MouseEnter).</summary>
+    /// next launch.</summary>
     private void PinPaneButton_Click(object sender, RoutedEventArgs e)
     {
         _navDrawerPinned = !_navDrawerPinned;
         _navDrawerStateStore.SavePinned(_navDrawerPinned);
-        ApplyNavDrawerPinnedVisual();
-
-        if (_navDrawerPinned)
-        {
-            _paneHoverCloseTimer.Stop();
-            RootNavigationView.IsPaneOpen = true;
-        }
-        // Unpinned: the pointer is still on the pane (the pin lives in it), so don't
-        // slam it shut here -- that would just hover-reopen on the next MouseMove and
-        // flicker. The hover handlers collapse it the moment the pointer leaves.
+        ApplyNavDrawerPinned();
     }
 
-    /// <summary>Syncs the pin button's icon/tooltip and the pane toggle's visibility to
-    /// <see cref="_navDrawerPinned"/>. Called from PinPaneButton_Click and once from
-    /// OnAuthSucceeded after the stored value is applied.</summary>
-    private void ApplyNavDrawerPinnedVisual()
+    /// <summary>Pinned: the drawer is Expanded, the full labelled menu always open beside the
+    /// page, and its own toggle is hidden since the pin owns that job. Unpinned: it's Compact,
+    /// an icon rail whose toggle expands the menu over the page until a page is picked (see
+    /// <see cref="NavigationDrawer_ItemClicked"/>), with Attendance's three pages in a popup
+    /// off the rail. The pin glyph is filled while pinned, and its tooltip says what a click
+    /// will do.</summary>
+    private void ApplyNavDrawerPinned()
     {
-        PinPaneButton.Icon = new SymbolIcon { Symbol = SymbolRegular.Pin24, Filled = _navDrawerPinned };
+        NavigationDrawer.DisplayMode = _navDrawerPinned ? DisplayMode.Expanded : DisplayMode.Compact;
+        NavigationDrawer.IsToggleButtonVisible = !_navDrawerPinned;
+        NavigationDrawer.IsOpen = _navDrawerPinned;
+
+        PinPaneGlyph.Text = _navDrawerPinned ? "" : ""; // PinFill : Pin
         PinPaneButton.ToolTip = _navDrawerPinned
-            ? "Unpin the navigation pane (let it collapse and hover-expand again)"
+            ? "Unpin the navigation pane (fold it back to icons)"
             : "Pin the navigation pane open";
-
-        // While pinned the hamburger would only ever collapse a pane we immediately
-        // re-open (see RootNavigationView_PaneClosed), so hide it -- the pin is the
-        // control now. Restored when unpinned, where hovering it expands the pane
-        // (PaneToggleButton_MouseEnter).
-        RootNavigationView.IsPaneToggleVisible = !_navDrawerPinned;
     }
 
-    /// <summary>Resolves the hamburger toggle (PART_ToggleButton) out of the applied
-    /// NavigationView template and hooks its MouseEnter, so the unpinned drawer
-    /// hover-expands from that button alone -- not from anywhere on the compact rail.
-    /// Guarded so a second Loaded (theme change, re-parent) doesn't double-subscribe.</summary>
-    private void RootNavigationView_Loaded(object sender, RoutedEventArgs e)
+    /// <summary>A page item opens its page (its Tag is the page's type); a footer item opens
+    /// its dialog (its Tag names it). Attendance itself has no Tag -- the drawer expands its
+    /// sub-items, or pops them up off the compact rail, on its own. Unpinned, picking a page
+    /// folds the expanded menu back to the rail, so it's out of the way of the page.</summary>
+    private void NavigationDrawer_ItemClicked(object? sender, NavigationItemClickedEventArgs e)
     {
-        if (_paneToggleButton is not null)
-            return;
-
-        _paneToggleButton = RootNavigationView.Template?.FindName("PART_ToggleButton", RootNavigationView) as FrameworkElement;
-        if (_paneToggleButton is not null)
-            _paneToggleButton.MouseEnter += PaneToggleButton_MouseEnter;
-    }
-
-    /// <summary>Unpinned: hovering the hamburger expands the drawer. Also dismisses the
-    /// compact Attendance flyout if it's up -- the flyout and an expanded pane are two
-    /// ways to show the same thing and should never be on screen together. (Pinned, the
-    /// pane is already open and this button is hidden anyway.)</summary>
-    private void PaneToggleButton_MouseEnter(object sender, MouseEventArgs e)
-    {
-        if (_navDrawerPinned)
-            return;
-
-        _paneHoverCloseTimer.Stop();
-        AttendanceFlyout.IsOpen = false;
-        RootNavigationView.IsPaneOpen = true;
-    }
-
-    /// <summary>Unpinned: navigating to a page is the cue to get out of the way, so
-    /// collapse the drawer back to its rail. Fires for every real page (top menu items,
-    /// Attendance's three leaf pages inline or via the compact flyout), never for the
-    /// Attendance parent (no navigation) or the footer dialog items (no TargetPageType --
-    /// see MainWindow.xaml).
-    ///
-    /// The collapse is deferred to the next dispatcher turn rather than done inline: when
-    /// an *inline* sub-item is clicked, WPF-UI's NavigationViewItem.OnClick raises this
-    /// Navigated event *before* it finishes raising the item's own Click, which then
-    /// bubbles up to AttendanceMenuItem_Click. Collapsing inline here would leave
-    /// IsPaneOpen false by the time that bubble runs, and its `!IsPaneOpen` compact-flyout
-    /// check would misfire -- popping the Attendance flyout onto the page just navigated
-    /// to. Deferring lets the whole synchronous click finish with the pane still open.</summary>
-    private void RootNavigationView_Navigated(NavigationView sender, NavigatedEventArgs e)
-    {
-        if (_navDrawerPinned)
-            return;
-
-        _paneHoverCloseTimer.Stop();
-        Dispatcher.BeginInvoke(() =>
+        switch (e.Item?.Tag)
         {
-            if (_navDrawerPinned)
-                return;
-
-            RootNavigationView.IsPaneOpen = false;
-            AttendanceFlyout.IsOpen = false; // insurance: never leave it stranded on the new page
-        });
+            case Type:
+                NavigateTo(e.Item);
+                if (!_navDrawerPinned)
+                    NavigationDrawer.IsOpen = false;
+                break;
+            case string dialog:
+                OpenDialog(dialog);
+                break;
+        }
     }
 
-    /// <summary>Unpinned and hover-expanded: collapse once the pointer is off the pane.
-    /// Position-based rather than a plain MouseLeave, because RootNavigationView spans the
-    /// page content too -- moving from the pane into the content never leaves the control,
-    /// so MouseLeave alone left the drawer stuck open. The pane occupies x in
-    /// [0, OpenPaneLength] of the control, so anything past that edge is "off the pane"
-    /// and starts the grace timer; coming back within it cancels the timer again.</summary>
-    private void RootNavigationView_MouseMove(object sender, MouseEventArgs e)
+    /// <summary>Shows <paramref name="item"/>'s page (its Tag) and marks the item selected,
+    /// which the drawer doesn't do on its own for a navigation that didn't come from a
+    /// click (the first page after sign-in). The page comes from DI each time -- see
+    /// App.xaml.cs's page registrations for why that hands back the same instance -- and the
+    /// page being left, then the new one, are told (<see cref="INavigationAware"/>) once the
+    /// Frame has switched (<see cref="ContentFrame_Navigated"/>).</summary>
+    private void NavigateTo(NavigationItem item)
     {
-        if (_navDrawerPinned || !RootNavigationView.IsPaneOpen)
+        if (item.Tag is not Type pageType)
             return;
 
-        // A few px of slack so the pane's own right edge doesn't read as "outside".
-        double x = e.GetPosition(RootNavigationView).X;
-        if (x <= RootNavigationView.OpenPaneLength + 8)
-            _paneHoverCloseTimer.Stop();
-        else if (!_paneHoverCloseTimer.IsEnabled)
-            _paneHoverCloseTimer.Start();
+        var page = (Page)_serviceProvider.GetRequiredService(pageType);
+        NavigationDrawer.SelectedItem = item;
+
+        // A Frame doesn't pass inherited properties on to its Page, and the theme reaches a
+        // control through one (SfSkinManager.Theme; see App.xaml.cs), so the page is themed
+        // directly or everything on it keeps WPF's own look.
+        if (SfSkinManager.GetTheme(page) is null)
+            SfSkinManager.SetTheme(page, SfSkinManager.ApplicationTheme);
+
+        if (ReferenceEquals(ContentFrame.Content, page))
+            return;
+
+        ContentFrame.Navigate(page);
     }
 
-    /// <summary>Pointer left the NavigationView entirely (out of the window, onto the
-    /// title bar, onto a popup) -- same grace-period collapse as moving onto the page
-    /// content above. No matching MouseEnter cancel: re-entering over the *content* isn't
-    /// a reason to keep the drawer open, and MouseMove above already cancels the moment
-    /// the pointer is back over the pane itself.</summary>
-    private void RootNavigationView_MouseLeave(object sender, MouseEventArgs e)
+    /// <summary>Clears the journal the Frame just added to -- the app has no back/forward --
+    /// so it doesn't hold on to the pages it showed, then runs the page lifecycle calls
+    /// <see cref="NavigateTo"/> deferred to here. async void, so an exception from a page's
+    /// OnNavigatedToAsync reaches App's DispatcherUnhandledException handler, as it did when
+    /// WPF-UI's NavigationView made these calls.</summary>
+    private async void ContentFrame_Navigated(object sender, NavigationEventArgs e)
     {
-        if (!_navDrawerPinned && RootNavigationView.IsPaneOpen && !_paneHoverCloseTimer.IsEnabled)
-            _paneHoverCloseTimer.Start();
+        while (ContentFrame.CanGoBack)
+            ContentFrame.RemoveBackEntry();
+
+        var previous = _currentPage;
+        _currentPage = e.Content as INavigationAware;
+
+        if (previous is not null && !ReferenceEquals(previous, _currentPage))
+            await previous.OnNavigatedFromAsync();
+        if (_currentPage is not null)
+            await _currentPage.OnNavigatedToAsync();
     }
 
-    private void PaneHoverCloseTimer_Tick(object? sender, EventArgs e)
+    /// <summary>The footer items' dialogs, by the name in each one's Tag
+    /// (MainWindow.xaml).</summary>
+    private void OpenDialog(string dialog)
     {
-        _paneHoverCloseTimer.Stop();
-        if (!_navDrawerPinned)
-            RootNavigationView.IsPaneOpen = false;
-    }
-
-    /// <summary>Keeps a pinned drawer from actually staying collapsed. Nothing closes the
-    /// pane while pinned today (the toggle is hidden -- see ApplyNavDrawerPinnedVisual),
-    /// but WPF-UI internals or future code might; re-open it on the next dispatcher turn
-    /// rather than fighting the close mid-transition.</summary>
-    private void RootNavigationView_PaneClosed(NavigationView sender, RoutedEventArgs e)
-    {
-        if (_navDrawerPinned)
-            Dispatcher.BeginInvoke(() => RootNavigationView.IsPaneOpen = true);
-    }
-
-    /// <summary>Opens AttendanceFlyout when the pane is compact -- see AttendanceMenuItem's
-    /// own doc comment in MainWindow.xaml for why a plain click on this item is otherwise
-    /// a dead end while compact (WPF-UI's own OnClick only expands MenuItems inline while
-    /// the pane is open, and this item has no TargetPageType of its own to navigate to
-    /// either way). Left alone while the pane IS open -- that inline-expand already covers
-    /// it, and re-opening AttendanceFlyout on top of an already-expanding pane would just
-    /// be a redundant second way to reach the same three pages.</summary>
-    private void AttendanceMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (!RootNavigationView.IsPaneOpen)
-            AttendanceFlyout.IsOpen = true;
-    }
-
-    /// <summary>The three AttendanceFlyout rows (see MainWindow.xaml) -- each navigates
-    /// the same way clicking the equivalent expanded-pane MenuItem would (Navigate is the
-    /// same method WPF-UI's own NavigationViewItem.OnClick calls internally), then closes
-    /// the flyout, since picking one is the end of this interaction, not the start of
-    /// another.</summary>
-    private void AttendanceFlyoutSummary_Click(object sender, RoutedEventArgs e)
-    {
-        AttendanceFlyout.IsOpen = false;
-        RootNavigationView.Navigate(typeof(AttendanceSummaryPage));
-    }
-
-    private void AttendanceFlyoutPunchRecords_Click(object sender, RoutedEventArgs e)
-    {
-        AttendanceFlyout.IsOpen = false;
-        RootNavigationView.Navigate(typeof(PunchRecordsPage));
-    }
-
-    private void AttendanceFlyoutManualEntries_Click(object sender, RoutedEventArgs e)
-    {
-        AttendanceFlyout.IsOpen = false;
-        RootNavigationView.Navigate(typeof(ManualEntriesPage));
+        switch (dialog)
+        {
+            case "Holidays":
+                OpenManageHolidays();
+                break;
+            case "Users":
+                OpenManageUsers();
+                break;
+            case "Backup":
+                OpenBackupRestore();
+                break;
+            case "Settings":
+                OpenSettings();
+                break;
+        }
     }
 
     /// <summary>Opens SettingsDialog pre-filled with whatever's currently effective --
@@ -391,7 +294,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     /// Policy, PayrollSettings.Policy/CompanyName, and
     /// ConnectionProfilesSettings.Profiles are already the shapes SettingsDialog/
     /// SharedConfigWriter expect.</summary>
-    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    private void OpenSettings()
     {
         var dialog = new SettingsDialog(
             _provisioningService,
@@ -481,10 +384,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     }
 
     /// <summary>Opens BackupRestoreDialog against whatever connection string is
-    /// currently effective -- same source SettingsButton_Click reads (_configuration,
+    /// currently effective -- same source OpenSettings reads (_configuration,
     /// already merged from appsettings.json and the shared config file by the time
     /// MainWindow exists -- see App.OnStartup).</summary>
-    private void BackupRestoreButton_Click(object sender, RoutedEventArgs e)
+    private void OpenBackupRestore()
     {
         var connectionString = _configuration.GetConnectionString("ScheduleDb");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -502,7 +405,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     /// <summary>Opens ManageUsersDialog -- see its own doc comment for what it covers
     /// and the two guard rails it enforces so this can't lock the app out of
     /// itself.</summary>
-    private void ManageUsersButton_Click(object sender, RoutedEventArgs e)
+    private void OpenManageUsers()
     {
         var dialog = new ManageUsersDialog(_userAccountRepository, _currentUser) { Owner = this };
         dialog.ShowDialog();
@@ -510,7 +413,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     /// <summary>Opens ManageHolidaysDialog -- see its own doc comment for what it
     /// covers.</summary>
-    private void ManageHolidaysButton_Click(object sender, RoutedEventArgs e)
+    private void OpenManageHolidays()
     {
         var dialog = new ManageHolidaysDialog(_holidayRepository, _dataVersion) { Owner = this };
         dialog.ShowDialog();

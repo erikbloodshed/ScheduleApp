@@ -4,20 +4,12 @@
       xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
       xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
       xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       ScrollViewer.CanContentScroll="False"
       Title="Employees">
         <Page.Resources>
                 <converters:NullToVisibilityConverter x:Key="NullToVisibility"/>
                 <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility"/>
                 <converters:NumberConverter x:Key="Number"/>
-
-                <Style TargetType="{x:Type ui:Button}">
-                        <Setter Property="Margin"
-                                Value="0,0,6,0"/>
-                        <Setter Property="Appearance"
-                                Value="Secondary"/>
-                </Style>
 
                 <Style x:Key="GroupLabel"
                        TargetType="TextBlock">
@@ -26,7 +18,7 @@
                         <Setter Property="Margin"
                                 Value="0,0,8,0"/>
                         <Setter Property="Foreground"
-                                Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                Value="{DynamicResource MutedForegroundBrush}"/>
                         <Setter Property="FontWeight"
                                 Value="SemiBold"/>
                 </Style>
@@ -142,8 +134,8 @@
                                                        Width="{Binding ActualWidth, ElementName=EmployeeSearchBox}"
                                                        StaysOpen="False"
                                                        AllowsTransparency="True">
-                                                        <Border Background="{DynamicResource ApplicationBackgroundBrush}"
-                                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                                        <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                                                                BorderBrush="{DynamicResource CardBorderBrush}"
                                                                 BorderThickness="1"
                                                                 CornerRadius="4"
                                                                 Padding="2"
@@ -180,7 +172,7 @@
                                                                 <TextBlock Text="{Binding Name}"
                                                                            FontWeight="Bold"/>
                                                                 <TextBlock Text="{Binding Employees.Count, StringFormat=' ({0})'}"
-                                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                                           Foreground="{DynamicResource MutedForegroundBrush}"/>
                                                         </StackPanel>
                                                 </DataTemplate>
                                         </TreeView.ItemTemplate>
@@ -239,7 +231,7 @@
 
                                         <TextBlock VerticalAlignment="Center"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Foreground="{DynamicResource MutedForegroundBrush}"
                                                    Text="Select a department on the left to view its employees."
                                                    Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NullToVisibility}}"/>
 
@@ -248,7 +240,7 @@
                                                     Visibility="{Binding SelectedItem, ElementName=DepartmentTree, Converter={StaticResource NotNullToVisibility}}">
                                                 <TextBlock FontWeight="SemiBold"
                                                            Text="{Binding SelectedItem.Name, ElementName=DepartmentTree}"/>
-                                                <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                <TextBlock Foreground="{DynamicResource MutedForegroundBrush}"
                                                            Margin="6,0,0,0">
                                 <Run Text="{Binding SelectedItem.Employees.Count, ElementName=DepartmentTree, Mode=OneWay}"/>
                                 <Run Text=" employee(s)"/>
@@ -277,9 +269,10 @@
                          Employee.IsBlacklisted's own doc comment). BasedOn the theme's row
                          style so row-selection highlighting isn't lost - see
                          PayrollPage.xaml's PayrollGroupGrid/AvailableEmployeeGrid RowStyle
-                         doc comment for why {StaticResource DefaultDataGridRowStyle} (WPF-UI's
-                         named style) has to be the BasedOn target instead of the more usual
-                         implicit {x:Type DataGridRow} key. -->
+                         doc comment for why {StaticResource DefaultDataGridRowStyle} (the
+                         theme's row style, see Themes/FrameworkFallbacks.xaml) has to be the
+                         BasedOn target instead of the more usual implicit {x:Type DataGridRow}
+                         key. -->
                                         <DataGrid.RowStyle>
                                                 <Style TargetType="DataGridRow"
                                                        BasedOn="{StaticResource DefaultDataGridRowStyle}">
@@ -287,7 +280,7 @@
                                                                 <DataTrigger Binding="{Binding Employee.IsBlacklisted}"
                                                                              Value="True">
                                                                         <Setter Property="Foreground"
-                                                                                Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                                                                Value="{DynamicResource MutedForegroundBrush}"/>
                                                                         <Setter Property="FontStyle"
                                                                                 Value="Italic"/>
                                                                 </DataTrigger>

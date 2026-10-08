@@ -36,15 +36,11 @@
 
         <!-- Matching header alignment for the same columns, so the column
              titles sit over the right-aligned values below them instead of
-             staying left-aligned above right-aligned numbers. WPF-UI's
-             ui:ControlsDictionary (see App.xaml) has no *implicit*
-             {x:Type DataGridColumnHeader} style to base this on - it styles
-             headers by pointing DataGrid.ColumnHeaderStyle at a *named*
-             resource, DefaultDataGridColumnHeaderStyle, which is what the
-             first five/Status columns pick up simply by leaving HeaderStyle
-             unset. BasedOn has to name that same key explicitly, or this
-             style falls back to WPF's bare default header template instead
-             of Fluent's. -->
+             staying left-aligned above right-aligned numbers. BasedOn the
+             theme's header style through DefaultDataGridColumnHeaderStyle
+             (Themes/FrameworkFallbacks.xaml, which explains why a BasedOn
+             can't name the theme's implicit style directly), or this style
+             falls back to WPF's bare default header template. -->
         <Style x:Key="RightAlignedHeader"
                TargetType="DataGridColumnHeader"
                BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
@@ -61,9 +57,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+                    Value="{DynamicResource CardBackgroundBrush}" />
             <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+                    Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -81,7 +77,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                    Value="{DynamicResource MutedForegroundBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -169,7 +165,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        Value="{DynamicResource CardBorderBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -263,7 +259,7 @@
 
                 <TreeView ItemsSource="{Binding Departments}"
                           BorderThickness="1"
-                          BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                          BorderBrush="{DynamicResource CardBorderBrush}"
                           ItemContainerStyle="{StaticResource ReportScopeDepartmentItemStyle}">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
@@ -291,7 +287,7 @@
                                                         <DataTrigger Binding="{Binding HasPin}"
                                                                      Value="False">
                                                             <Setter Property="Foreground"
-                                                                    Value="{DynamicResource TextFillColorTertiaryBrush}" />
+                                                                    Value="{DynamicResource TertiaryForegroundBrush}" />
                                                             <Setter Property="ToolTip"
                                                                     Value="No Employee ID set for this person -- they won't match any punch log. Set it in the Add/Edit Employee dialog on the Schedule tab." />
                                                         </DataTrigger>
@@ -447,7 +443,7 @@
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
                             <TextBlock Text="Total punches"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                       Foreground="{DynamicResource MutedForegroundBrush}" />
                             <TextBlock Text="{Binding TotalLogs}"
                                        FontWeight="Bold"
                                        Margin="4,0,20,0" />
@@ -755,7 +751,7 @@
                     </DataGrid>
 
                     <TextBlock Text="Generate a report to see attendance summary results here."
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Visibility="{Binding HasSummaryRows, Converter={StaticResource InverseBoolToVisibility}}" />

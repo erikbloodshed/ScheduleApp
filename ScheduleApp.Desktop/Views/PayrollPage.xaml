@@ -15,9 +15,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+                    Value="{DynamicResource CardBackgroundBrush}" />
             <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+                    Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -35,7 +35,7 @@
             <Setter Property="Margin"
                     Value="0,0,8,0" />
             <Setter Property="Foreground"
-                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                    Value="{DynamicResource MutedForegroundBrush}" />
             <Setter Property="FontWeight"
                     Value="SemiBold" />
         </Style>
@@ -332,19 +332,12 @@
                                          bound to IsSelected via a converter) rather than relying on
                                          BasedOn. Either approach works, this one just needs one
                                          of them and had neither.
-                                         NOTE: WPF-UI (see App.xaml's ui:ControlsDictionary) does
-                                         not register its row look as an implicit {x:Type
-                                         DataGridRow} resource - it keys it explicitly as
-                                         DefaultDataGridRowStyle and assigns it via a Setter inside
-                                         its own DataGrid style. {StaticResource {x:Type
-                                         DataGridRow}} therefore resolves to nothing and fails at
-                                         load time instead of restoring the highlight.
-                                         EmployeesPage.xaml's RightAlignedHeader/CenteredCheckBox
-                                         Header styles show this same pattern already used
-                                         correctly elsewhere in this app, basing on WPF-UI's named
-                                         DefaultDataGridColumnHeaderStyle rather than an implicit
-                                         type key - DefaultDataGridRowStyle is that same
-                                         convention's equivalent for rows. -->
+                                         NOTE: {StaticResource {x:Type DataGridRow}} would
+                                         resolve to nothing: the theme's implicit row style only
+                                         reaches a window when it loads, after this BasedOn has
+                                         been resolved. DefaultDataGridRowStyle is the theme's row
+                                         style made available at application level for exactly
+                                         this - see Themes/FrameworkFallbacks.xaml. -->
                                     <Style TargetType="DataGridRow"
                                            BasedOn="{StaticResource DefaultDataGridRowStyle}" />
                                 </DataGrid.RowStyle>
@@ -501,7 +494,7 @@
                               Height="6"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Center"
-                              Background="{DynamicResource DividerStrokeColorDefaultBrush}"
+                              Background="{DynamicResource CardBorderBrush}"
                               ResizeDirection="Rows" />
 
                 <views:EmployeeAttendancePanel x:Name="AttendancePanelControl"
@@ -536,7 +529,7 @@
         <Border x:Name="EmptyStateOverlay"
                 Grid.Row="0"
                 Grid.RowSpan="2"
-                Background="{DynamicResource ApplicationBackgroundBrush}"
+                Background="{DynamicResource SurfaceBackgroundBrush}"
                 Visibility="{Binding HasBatchScope,
                     Converter={StaticResource InverseBoolToVisibility}}">
             <!-- Same Width="380" fixed-width-card-on-a-solid-background shape as
@@ -553,7 +546,7 @@
                            Margin="0,0,0,8" />
                 <TextBlock Text="Start a new payroll run or reopen one you saved earlier to get going."
                            FontSize="14"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Foreground="{DynamicResource MutedForegroundBrush}"
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            Margin="0,0,0,24" />

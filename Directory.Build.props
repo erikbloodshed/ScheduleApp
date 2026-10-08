@@ -1,6 +1,9 @@
 <Project>
 
   <PropertyGroup>
+    <!-- For ScheduleApp.Desktop. ReactiveUI.WPF needs Windows SDK 10.0.19041 or later,
+         and the bare net10.0-windows moniker resolves to windows7.0. -->
+    <WindowsTargetFramework>net10.0-windows10.0.19041.0</WindowsTargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>

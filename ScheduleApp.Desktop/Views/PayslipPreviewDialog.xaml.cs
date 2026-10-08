@@ -36,7 +36,7 @@ namespace ScheduleApp.Desktop.Views;
 /// own PrintDialog (or shelling out to whatever's registered as the default
 /// PDF handler, which is what an even earlier version of this method did).
 /// </summary>
-public partial class PayslipPreviewDialog : Wpf.Ui.Controls.FluentWindow
+public partial class PayslipPreviewDialog : Controls.AppWindow
 {
     private readonly IReadOnlyList<PayrollResult> _payrolls;
 

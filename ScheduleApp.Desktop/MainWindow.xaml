@@ -1,8 +1,11 @@
-﻿<ui:FluentWindow x:Class="ScheduleApp.Desktop.MainWindow"
+<controls:AppWindow x:Class="ScheduleApp.Desktop.MainWindow"
         x:Name="RootWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
+        xmlns:skinManager="clr-namespace:Syncfusion.SfSkinManager;assembly=Syncfusion.SfSkinManager.WPF"
+        xmlns:sfTheme="clr-namespace:Syncfusion.Themes.Windows11Light.WPF;assembly=Syncfusion.Themes.Windows11Light.WPF"
+        xmlns:collections="clr-namespace:System.Collections;assembly=System.Runtime"
         xmlns:views="clr-namespace:ScheduleApp.Desktop.Views"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
@@ -10,213 +13,163 @@
         MinHeight="600" MinWidth="1024"
         WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True"
-        utilities:WindowSizing.ConstrainToWorkArea="True"
-        ExtendsContentIntoTitleBar="True">
-    <Grid>
+        TitleBarHeight="32"
+        TitleBarBackground="{StaticResource CardBackgroundBrush}"
+        TitleBarForeground="{StaticResource HeadingForegroundBrush}"
+        utilities:WindowSizing.ConstrainToWorkArea="True">
+    <controls:AppWindow.Resources>
+        <!-- A drawer item's glyph -->
+        <Style x:Key="NavIconStyle" TargetType="TextBlock" BasedOn="{StaticResource IconGlyphStyle}">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </controls:AppWindow.Resources>
+
+    <!--
+        The pin for the navigation drawer, on the title bar's left, just above the drawer's own
+        toggle. Unpinned (the default), the drawer is Compact: an icon rail that the toggle expands
+        over the page, and that folds back once a page is picked. Pinned, it's Expanded: the full,
+        labelled menu, always open beside the page. MainWindow.xaml.cs switches DisplayMode and
+        remembers the choice (NavigationDrawerStateStore).
+
+        Styled like the title bar's own Minimize and Maximize: the theme's WPFGlyphButtonStyle,
+        fetched by ThemeKey as a DynamicResource (the theme only reaches this window when it loads).
+        Unlike TinapayanRMS, without their square WPFGlyphWindowButtonTemplate: that template is only
+        a plain key in the theme's window dictionary, which SfSkinManager doesn't merge into a window
+        when it themes the whole application (App.xaml.cs), so the lookup finds nothing and the
+        button draws nothing at all. IsHitTestVisibleInChrome, as the caption buttons set: without it
+        the caption area takes the mouse.
+    -->
+    <controls:AppWindow.LeftHeaderItemsSource>
+        <collections:ArrayList>
+            <Button x:Name="PinPaneButton"
+                    Width="40"
+                    Height="32"
+                    WindowChrome.IsHitTestVisibleInChrome="True"
+                    Style="{DynamicResource {skinManager:ThemeKey Key=WPFGlyphButtonStyle, Theme={x:Type sfTheme:Windows11LightSkinHelper}}}"
+                    ToolTip="Pin the navigation pane open"
+                    AutomationProperties.Name="Pin navigation pane"
+                    Click="PinPaneButton_Click">
+                <TextBlock x:Name="PinPaneGlyph" Text="&#xE718;" Style="{StaticResource IconGlyphStyle}" />
+            </Button>
+        </collections:ArrayList>
+    </controls:AppWindow.LeftHeaderItemsSource>
+
+    <Grid Background="{StaticResource PageBackgroundBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- WPF-UI's FluentWindow removes the native title bar entirely (no
-             minimize/maximize/close, regardless of ExtendsContentIntoTitleBar) - this
-             is what restores them, styled to match the rest of the app instead of the
-             native chrome it replaces. Title is bound rather than static since
-             MainWindow.xaml.cs's OnAuthSucceeded changes Window.Title after sign-in
-             (see its own comment) and this should track that. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMaximize="True"
-                CanMaximize="True" />
+        <!--
+            A page item's Tag is the page it opens, resolved from DI by MainWindow.NavigateTo
+            (the same Scoped instances App.xaml.cs registers, so a page keeps what it loaded).
+            Attendance has no page of its own: its three pages are its sub-items, which the drawer
+            shows inline when expanded and as a popup off the rail when compact - what the old
+            hand-rolled AttendanceFlyout did under WPF-UI.
 
-        <Grid Grid.Row="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+            Every item names itself for UI Automation: its icon is a glyph TextBlock, so without
+            AutomationProperties.Name a sub-item (which has no icon) can't be found at all.
 
-        <!-- Left-side navigation drawer (was PaneDisplayMode="Top", a horizontal tab bar).
-             "Left" is WPF-UI's collapsible-sidebar mode: the hamburger button (top-left of
-             the pane) toggles IsPaneOpen between the full labeled pane and a compact,
-             icon-only rail - the standard "navigation drawer" pattern (same idea as the
-             Windows Settings app / VS Code's sidebar). IsPaneOpen="False" here is
-             deliberate, not the default (WPF-UI's own NavigationView.IsPaneOpenProperty
-             actually defaults to true/open) - compact is the preferred starting state, so
-             the pane takes as little width as possible: a parent item with children
-             (Attendance below) shows its submenu as a flyout popup while compact, which is
-             the intended way to reach Summary/Punch Records/Manual Entries without opening
-             the full pane first, not a fallback for when it happens to be compact. Like
-             IsExpanded elsewhere in this file, WPF-UI doesn't reliably honor this as an
-             initial XAML value on its own - see MainWindow.xaml.cs's OnAuthSucceeded for
-             what actually forces it once the window has loaded. IsBackButtonVisible is
-             explicitly turned off since Left mode reserves layout space for a back button
-             by default and this app has never had back/forward page history - only ever
-             direct MenuItem clicks - so showing one would be new, unused chrome. -->
-        <ui:NavigationView x:Name="RootNavigationView" Grid.Row="0"
-                PaneDisplayMode="Left"
-                OpenPaneLength="170"
-                CompactPaneLength="40"
-                IsPaneOpen="False"
-                IsBackButtonVisible="Collapsed"
-                Loaded="RootNavigationView_Loaded"
-                PaneClosed="RootNavigationView_PaneClosed"
-                Navigated="RootNavigationView_Navigated"
-                MouseMove="RootNavigationView_MouseMove"
-                MouseLeave="RootNavigationView_MouseLeave">
-            <!-- Pin toggle for the drawer. WPF-UI renders PaneHeader in the pane's top
-                 area just under the hamburger toggle (its Compact template stacks them,
-                 rows 1 and 2 - there's no built-in slot literally right of the toggle
-                 without retemplating the whole control). Shown in both the compact rail
-                 and the open pane, so the drawer can be pinned open with one click from
-                 either. Unpinned, the pane sits compact: hovering the hamburger (resolved
-                 from the template on Loaded) expands it, and it collapses again on
-                 Navigated (picking a page) or once the pointer moves off the pane
-                 (MouseMove/MouseLeave, after a short grace). Pinned, it stays open
-                 and the hamburger is hidden. Click handler, hover logic, the "stay open"
-                 guard (PaneClosed above), and startup application all live in
-                 MainWindow.xaml.cs; the pinned state persists via
-                 NavigationDrawerStateStore. -->
-            <ui:NavigationView.PaneHeader>
-                <ui:Button x:Name="PinPaneButton"
-                        Appearance="Transparent"
-                        Padding="8,6"
-                        Margin="4,0,0,0"
-                        HorizontalAlignment="Left"
-                        Icon="{ui:SymbolIcon Pin24}"
-                        ToolTip="Pin the navigation pane open"
-                        Click="PinPaneButton_Click" />
-            </ui:NavigationView.PaneHeader>
-            <ui:NavigationView.MenuItems>
-                <ui:NavigationViewItem Content="Employees" Icon="{ui:SymbolIcon People24}" TargetPageType="{x:Type views:EmployeesPage}" />
-                <ui:NavigationViewItem Content="Schedule" Icon="{ui:SymbolIcon CalendarLtr24}" TargetPageType="{x:Type views:SchedulePage}" />
-                <!-- Parent item with no TargetPageType of its own - WPF-UI's own
-                     NavigationViewItem.OnClick never navigates for it (see the Settings
-                     FooterMenuItem below for the same trick, used here for the opposite
-                     reason: this item DOES have MenuItems). While the pane is open, the
-                     same click expands Summary/Punch Records/Manual Entries inline instead
-                     (OnClick's HasMenuItems branch toggles IsExpanded, gated on
-                     navigationView.IsPaneOpen). That gate is exactly the gap
-                     AttendanceMenuItem_Click (below, and see MainWindow.xaml.cs) exists to
-                     close: while compact (the intended default - see the NavigationView
-                     comment above), that same OnClick branch does nothing at all - no
-                     TargetPageType to navigate to, and the IsExpanded toggle never runs
-                     since IsPaneOpen is false - so a plain click on this item would
-                     otherwise be a dead end. AttendanceMenuItem_Click runs alongside
-                     WPF-UI's own OnClick (both are just listeners on the same Click routed
-                     event, not one replacing the other) and opens AttendanceFlyout (below,
-                     outside this NavigationView) specifically for that compact case.
-                     Either way, Summary/Punch Records/Manual Entries are the same three
-                     actual pages - see AttendanceSummaryPage's own doc comment for why
-                     they're separate pages (sharing one AttendanceViewModel) rather than
-                     the TabControl this used to be. Import…/Fetch from Device, previously
-                     on a toolbar shared by all three, now live on Punch Records
-                     specifically - see PunchRecordsView.xaml. -->
-                <ui:NavigationViewItem x:Name="AttendanceMenuItem" Content="Attendance"
-                        Icon="{ui:SymbolIcon ClipboardTask24}" Click="AttendanceMenuItem_Click">
-                    <ui:NavigationViewItem.MenuItems>
-                        <ui:NavigationViewItem Content="Summary" TargetPageType="{x:Type views:AttendanceSummaryPage}" />
-                        <ui:NavigationViewItem Content="Punch Records" TargetPageType="{x:Type views:PunchRecordsPage}" />
-                        <ui:NavigationViewItem Content="Manual Entries" TargetPageType="{x:Type views:ManualEntriesPage}" />
-                    </ui:NavigationViewItem.MenuItems>
-                </ui:NavigationViewItem>
-                <ui:NavigationViewItem Content="Payroll" Icon="{ui:SymbolIcon Money24}" TargetPageType="{x:Type views:PayrollPage}" />
-                <ui:NavigationViewItem Content="Push Listener" Icon="{ui:SymbolIcon CloudArrowUp24}" TargetPageType="{x:Type views:PushListenerPage}" />
-            </ui:NavigationView.MenuItems>
+            The footer items open dialogs rather than pages, so they're ItemType="Button": they
+            never take the selection away from the page on screen. Their Tag names the dialog
+            (MainWindow.OpenDialog). Settings stays last, at the bottom of the drawer.
+        -->
+        <syncfusion:SfNavigationDrawer x:Name="NavigationDrawer"
+                                       DisplayMode="Compact"
+                                       CompactModeWidth="44"
+                                       ExpandedModeWidth="170"
+                                       DrawerBackground="{StaticResource CardBackgroundBrush}"
+                                       ItemClicked="NavigationDrawer_ItemClicked">
+            <syncfusion:NavigationItem x:Name="EmployeesNavItem" Header="Employees" AutomationProperties.Name="Employees" Tag="{x:Type views:EmployeesPage}">
+                <syncfusion:NavigationItem.Icon>
+                    <TextBlock Text="&#xE716;" Style="{StaticResource NavIconStyle}" />
+                </syncfusion:NavigationItem.Icon>
+            </syncfusion:NavigationItem>
+            <syncfusion:NavigationItem x:Name="ScheduleNavItem" Header="Schedule" AutomationProperties.Name="Schedule" Tag="{x:Type views:SchedulePage}">
+                <syncfusion:NavigationItem.Icon>
+                    <TextBlock Text="&#xE787;" Style="{StaticResource NavIconStyle}" />
+                </syncfusion:NavigationItem.Icon>
+            </syncfusion:NavigationItem>
+            <syncfusion:NavigationItem x:Name="AttendanceNavItem" Header="Attendance" AutomationProperties.Name="Attendance">
+                <syncfusion:NavigationItem.Icon>
+                    <TextBlock Text="&#xE9D5;" Style="{StaticResource NavIconStyle}" />
+                </syncfusion:NavigationItem.Icon>
+                <syncfusion:NavigationItem Header="Summary" AutomationProperties.Name="Summary" Tag="{x:Type views:AttendanceSummaryPage}" />
+                <syncfusion:NavigationItem Header="Punch Records" AutomationProperties.Name="Punch Records" Tag="{x:Type views:PunchRecordsPage}" />
+                <syncfusion:NavigationItem Header="Manual Entries" AutomationProperties.Name="Manual Entries" Tag="{x:Type views:ManualEntriesPage}" />
+            </syncfusion:NavigationItem>
+            <syncfusion:NavigationItem x:Name="PayrollNavItem" Header="Payroll" AutomationProperties.Name="Payroll" Tag="{x:Type views:PayrollPage}">
+                <syncfusion:NavigationItem.Icon>
+                    <TextBlock Text="&#xE8C7;" Style="{StaticResource NavIconStyle}" />
+                </syncfusion:NavigationItem.Icon>
+            </syncfusion:NavigationItem>
+            <syncfusion:NavigationItem x:Name="PushListenerNavItem" Header="Push Listener" AutomationProperties.Name="Push Listener" Tag="{x:Type views:PushListenerPage}">
+                <syncfusion:NavigationItem.Icon>
+                    <TextBlock Text="&#xE753;" Style="{StaticResource NavIconStyle}" />
+                </syncfusion:NavigationItem.Icon>
+            </syncfusion:NavigationItem>
 
-            <!-- Pinned to the bottom of the pane, below a separator, same as WinUI's
-                 "Settings" nav-item convention. None of these four has a TargetPageType -
-                 WPF-UI's own NavigationViewItem.OnClick only calls into the navigation
-                 machinery (select/navigate/replace content) when TargetPageType is set;
-                 left null, a click just raises the plain ButtonBase Click event and
-                 nothing else, so none of them can ever get "selected" in the pane or
-                 blank out whatever page is currently showing. That is what lets each one
-                 reuse its existing handler as-is: all four open a dialog rather than
-                 navigating, and (object, RoutedEventArgs) is the same signature they
-                 already had back when they were ui:Buttons overlaid on the top-right of
-                 the content area. Order is deliberate - the three dialogs sit on top of
-                 Settings, which stays last, the bottom-most item in the pane. -->
-            <ui:NavigationView.FooterMenuItems>
-                <!-- Opens ManageHolidaysDialog for maintaining the company holiday list
-                     that Premium Pay (see the Payroll page) computes against. -->
-                <ui:NavigationViewItem Content="Manage Holidays" Icon="{ui:SymbolIcon CalendarStar24}"
-                        ToolTip="Manage Holidays"
-                        Click="ManageHolidaysButton_Click" />
-                <!-- Opens ManageUsersDialog for adding/removing sign-in accounts (see
-                     SignInPanel/SetupAdminPanel below - this is the only place accounts
-                     are added after the very first one). -->
-                <ui:NavigationViewItem Content="Manage Users" Icon="{ui:SymbolIcon PersonAccounts24}"
-                        ToolTip="Manage Users"
-                        Click="ManageUsersButton_Click" />
-                <ui:NavigationViewItem Content="Backup / Restore" Icon="{ui:SymbolIcon Archive24}"
-                        ToolTip="Backup / Restore Database"
-                        Click="BackupRestoreButton_Click" />
-                <ui:NavigationViewItem Content="Settings" Icon="{ui:SymbolIcon Settings24}"
-                        ToolTip="Settings - shared connection string and attendance device defaults"
-                        Click="SettingsButton_Click" />
-            </ui:NavigationView.FooterMenuItems>
-        </ui:NavigationView>
+            <syncfusion:SfNavigationDrawer.FooterItems>
+                <!-- ManageHolidaysDialog: the company holiday list Premium Pay (see the Payroll page) computes against -->
+                <syncfusion:NavigationItem Header="Manage Holidays" AutomationProperties.Name="Manage Holidays" ItemType="Button" Tag="Holidays" ToolTip="Manage Holidays">
+                    <syncfusion:NavigationItem.Icon>
+                        <TextBlock Text="&#xE8BF;" Style="{StaticResource NavIconStyle}" />
+                    </syncfusion:NavigationItem.Icon>
+                </syncfusion:NavigationItem>
+                <!-- ManageUsersDialog: the only place sign-in accounts are added after the very first one -->
+                <syncfusion:NavigationItem Header="Manage Users" AutomationProperties.Name="Manage Users" ItemType="Button" Tag="Users" ToolTip="Manage Users">
+                    <syncfusion:NavigationItem.Icon>
+                        <TextBlock Text="&#xE779;" Style="{StaticResource NavIconStyle}" />
+                    </syncfusion:NavigationItem.Icon>
+                </syncfusion:NavigationItem>
+                <syncfusion:NavigationItem Header="Backup / Restore" AutomationProperties.Name="Backup / Restore" ItemType="Button" Tag="Backup" ToolTip="Backup / Restore Database">
+                    <syncfusion:NavigationItem.Icon>
+                        <TextBlock Text="&#xE7B8;" Style="{StaticResource NavIconStyle}" />
+                    </syncfusion:NavigationItem.Icon>
+                </syncfusion:NavigationItem>
+                <syncfusion:NavigationItem Header="Settings" AutomationProperties.Name="Settings" ItemType="Button" Tag="Settings"
+                                           ToolTip="Settings - shared connection string and attendance device defaults">
+                    <syncfusion:NavigationItem.Icon>
+                        <TextBlock Text="&#xE713;" Style="{StaticResource NavIconStyle}" />
+                    </syncfusion:NavigationItem.Icon>
+                </syncfusion:NavigationItem>
+            </syncfusion:SfNavigationDrawer.FooterItems>
 
-        <!-- Compact-mode-only flyout for Attendance's three pages - see
-             AttendanceMenuItem's own comment above for exactly when this opens
-             (AttendanceMenuItem_Click, only while RootNavigationView.IsPaneOpen is
-             false) and MainWindow.xaml.cs for the three item handlers. Placement="Right"
-             puts it just outside the compact rail, the same side a Fluent/WinUI compact
-             nav's own flyout would appear on. StaysOpen="False" closes it on any click
-             outside the popup (including back on AttendanceMenuItem itself, which then
-             reopens it fresh via the Click handler) or on losing focus, same behavior as
-             the Punch Records search-suggestions popup elsewhere in this app (see
-             PunchRecordsView.xaml) - no separate "click elsewhere to dismiss" handler
-             needed here for the same reason that one doesn't have one either. -->
-        <Popup x:Name="AttendanceFlyout"
-                PlacementTarget="{Binding ElementName=AttendanceMenuItem}"
-                Placement="Right"
-                StaysOpen="False"
-                AllowsTransparency="True">
-            <Border Background="{DynamicResource ApplicationBackgroundBrush}"
-                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Padding="4"
-                    MinWidth="170"
-                    Margin="6,0,0,0">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.25" />
-                </Border.Effect>
-                <StackPanel>
-                    <TextBlock Text="ATTENDANCE" FontWeight="SemiBold" FontSize="10"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="10,6,10,4" />
-                    <Button Content="Summary" Style="{StaticResource FlyoutMenuItemStyle}"
-                            Click="AttendanceFlyoutSummary_Click" />
-                    <Button Content="Punch Records" Style="{StaticResource FlyoutMenuItemStyle}"
-                            Click="AttendanceFlyoutPunchRecords_Click" />
-                    <Button Content="Manual Entries" Style="{StaticResource FlyoutMenuItemStyle}"
-                            Click="AttendanceFlyoutManualEntries_Click" />
-                </StackPanel>
-            </Border>
-        </Popup>
+            <syncfusion:SfNavigationDrawer.ContentView>
+                <!-- A Frame because a Page can only be hosted by a Window or a Frame. No
+                     back/forward: the app never had page history, so ContentFrame_Navigated
+                     clears the journal after each navigation. -->
+                <Frame x:Name="ContentFrame"
+                       NavigationUIVisibility="Hidden"
+                       JournalOwnership="OwnsJournal"
+                       Focusable="False"
+                       Navigated="ContentFrame_Navigated" />
+            </syncfusion:SfNavigationDrawer.ContentView>
+        </syncfusion:SfNavigationDrawer>
 
         <!-- Status bar along the bottom of the window, notification text
              right-aligned within it - set from MainWindow's constructor via
              IStatusBarService.SetStatusBarPresenter. Its own row (below the
-             NavigationView) rather than overlaid, so it never covers content. -->
+             drawer) rather than overlaid, so it never covers content. -->
         <controls:StatusBarPresenter x:Name="RootStatusBarPresenter" Grid.Row="1" />
 
         <!-- Sign-in gate, drawn last so it's on top of everything above - see
              MainWindow.xaml.cs's own doc comment and SignInPanel/SetupAdminPanel for why
              this replaced the old separate LoginWindow/SetupAdminWindow shown before
-             MainWindow existed. Grid.RowSpan="2" covers the status bar row too, not just
-             the NavigationView row, so it's a genuine full-window page rather than a
-             dialog-looking card floating over a dimmed scrim - solid Background of its
-             own is what makes that work, so nothing behind it shows through or needs
-             IsHitTestVisible="False" to stay unclickable while this is up. Visibility
-             starts Collapsed; MainWindow.ShowSignInOverlay sets it Visible together with
-             whichever of the two panels below applies, before Show() is ever called. -->
-        <Grid x:Name="AuthOverlay" Grid.Row="0" Grid.RowSpan="2" Background="{DynamicResource ApplicationBackgroundBrush}" Visibility="Collapsed">
+             MainWindow existed. Grid.RowSpan="2" covers the status bar row too, so it's a
+             genuine full-window page rather than a dialog-looking card floating over a
+             dimmed scrim - solid Background of its own is what makes that work, so nothing
+             behind it shows through or needs IsHitTestVisible="False" to stay unclickable
+             while this is up. Visibility starts Collapsed; MainWindow.ShowSignInOverlay sets
+             it Visible together with whichever of the two panels below applies, before Show()
+             is ever called. The pin is hidden with it (see ShowSignInOverlay). -->
+        <Grid x:Name="AuthOverlay" Grid.Row="0" Grid.RowSpan="2" Background="{StaticResource PageBackgroundBrush}" Visibility="Collapsed">
             <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
                 <views:SignInPanel x:Name="SignInPanelControl" Visibility="Collapsed" />
                 <views:SetupAdminPanel x:Name="SetupAdminPanelControl" Visibility="Collapsed" />
             </Grid>
         </Grid>
     </Grid>
-</Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

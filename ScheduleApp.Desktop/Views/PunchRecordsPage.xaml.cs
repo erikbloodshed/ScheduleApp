@@ -1,6 +1,5 @@
 using System.Windows.Controls;
 using ScheduleApp.Desktop.ViewModels;
-using Wpf.Ui.Abstractions.Controls;
 
 namespace ScheduleApp.Desktop.Views;
 

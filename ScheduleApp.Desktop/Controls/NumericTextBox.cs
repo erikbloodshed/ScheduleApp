@@ -39,7 +39,7 @@ namespace ScheduleApp.Desktop.Controls;
 ///     (null, the default, means no placeholder); see that property's own doc comment.
 ///
 /// Styling note: WPF looks up an implicit style by the element's exact type, so the app-wide
-/// implicit TextBox style (WPF-UI's, merged by App.xaml) does NOT reach a derived class on
+/// implicit TextBox style (the Windows11Light theme's) does NOT reach a derived class on
 /// its own. Every usage therefore names a style explicitly -- either one of the page's own
 /// TextBox styles (PayrollSummaryView's EditableAmountTextBox) or plain
 /// Style="{StaticResource {x:Type TextBox}}" -- which works because a Style whose TargetType

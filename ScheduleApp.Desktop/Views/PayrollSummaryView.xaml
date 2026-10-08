@@ -17,9 +17,9 @@
         <Style x:Key="CardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+                    Value="{DynamicResource CardBackgroundBrush}" />
             <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+                    Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -61,9 +61,9 @@
         <Style x:Key="LineCardBorder"
                TargetType="Border">
             <Setter Property="Background"
-                    Value="{DynamicResource ApplicationBackgroundBrush}" />
+                    Value="{DynamicResource SurfaceBackgroundBrush}" />
             <Setter Property="BorderBrush"
-                    Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+                    Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness"
                     Value="1" />
             <Setter Property="CornerRadius"
@@ -125,9 +125,9 @@
                 <DataTrigger Binding="{Binding Waived}"
                              Value="True">
                     <Setter Property="Background"
-                            Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+                            Value="{DynamicResource CardBackgroundBrush}" />
                     <Setter Property="Foreground"
-                            Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                            Value="{DynamicResource MutedForegroundBrush}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -147,7 +147,7 @@
             <Setter Property="IsReadOnlyCaretVisible"
                     Value="True" />
             <Setter Property="Background"
-                    Value="{DynamicResource ApplicationBackgroundBrush}" />
+                    Value="{DynamicResource SurfaceBackgroundBrush}" />
         </Style>
 
         <!-- Same boxed, directly-editable look as EditableAmountTextBox, but left-aligned and
@@ -173,7 +173,7 @@
             <Setter Property="VerticalAlignment"
                     Value="Center" />
             <Setter Property="Background"
-                    Value="{DynamicResource ApplicationBackgroundBrush}" />
+                    Value="{DynamicResource SurfaceBackgroundBrush}" />
         </Style>
 
         <!-- Small Edit/Delete/"+ Add" buttons sitting at the right of a row - same "compact,
@@ -293,7 +293,7 @@
                             <Trigger Property="IsMouseOver"
                                      Value="True">
                                 <Setter Property="Background"
-                                        Value="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        Value="{DynamicResource CardBorderBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -699,8 +699,8 @@
                  everything else in the "no employee selected" state rather than showing
                  next to the "Select an employee" placeholder HeaderText falls back to. -->
             <Border DockPanel.Dock="Left"
-                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="4"
                     Padding="6,2"

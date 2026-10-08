@@ -14,25 +14,25 @@
          those sizes land on this Border rather than on the TextBox inside it: the extra
          pixel eats into the field's own padding, so nothing around the control reflows. -->
     <Style x:Key="TimeFieldBorderStyle" TargetType="Border">
-      <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="Background" Value="{DynamicResource ControlFillBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="SnapsToDevicePixels" Value="True" />
       <Style.Triggers>
         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-          <Setter Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource AccentForegroundBrush}" />
           <Setter Property="BorderThickness" Value="2" />
         </Trigger>
         <!-- After the focus trigger so an out-of-range value still reads as an error
              while the field that holds it is the one being typed into. -->
         <Trigger Property="controls:TimeInput.HasError" Value="True">
-          <Setter Property="BorderBrush" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource ErrorForegroundBrush}" />
           <Setter Property="BorderThickness" Value="2" />
         </Trigger>
         <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Background" Value="{DynamicResource ControlFillColorDisabledBrush}" />
-          <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
           <Setter Property="BorderThickness" Value="1" />
         </Trigger>
       </Style.Triggers>
@@ -47,9 +47,9 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
-      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-      <Setter Property="CaretBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
-      <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource AccentForegroundBrush}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
       <Setter Property="TextAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -67,10 +67,10 @@
       </Setter>
       <Style.Triggers>
         <Trigger Property="IsKeyboardFocused" Value="True">
-          <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+          <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
         </Trigger>
         <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+          <Setter Property="Foreground" Value="{DynamicResource DisabledForegroundBrush}" />
         </Trigger>
       </Style.Triggers>
     </Style>
@@ -80,7 +80,7 @@
       <Setter Property="Text" Value=":" />
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
       <Setter Property="IsHitTestVisible" Value="False" />
     </Style>
 
@@ -93,13 +93,13 @@
     <!-- Outer shell of the AM/PM segmented button. -->
     <Style x:Key="PeriodContainerStyle" TargetType="Border">
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="SnapsToDevicePixels" Value="True" />
       <Style.Triggers>
         <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         </Trigger>
       </Style.Triggers>
     </Style>
@@ -109,7 +109,7 @@
          stacked the segments (Comfortable) or sat them side by side (Compact), and
          RadioButton has no CornerRadius property of its own to template-bind to. -->
     <Style x:Key="PeriodSegmentStyle" TargetType="RadioButton">
-      <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextForegroundBrush}" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -125,25 +125,25 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource SubtleFillBrush}" />
               </Trigger>
               <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource AccentBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource AccentInkBrush}" />
               </Trigger>
               <MultiTrigger>
                 <MultiTrigger.Conditions>
                   <Condition Property="IsChecked" Value="True" />
                   <Condition Property="IsMouseOver" Value="True" />
                 </MultiTrigger.Conditions>
-                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource AccentFillColorSecondaryBrush}" />
+                <Setter TargetName="Segment" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
               </MultiTrigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Segment" Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                <Setter TargetName="Segment" Property="BorderBrush" Value="{DynamicResource AccentForegroundBrush}" />
                 <Setter TargetName="Segment" Property="BorderThickness" Value="2" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledForegroundBrush}" />
                 <Setter TargetName="Segment" Property="Background" Value="Transparent" />
               </Trigger>
             </ControlTemplate.Triggers>
@@ -220,7 +220,7 @@
                      Style="{StaticResource PeriodSegmentStyle}"
                      Checked="OnPeriodChanged"
                      Unchecked="OnPeriodChanged" />
-        <Border x:Name="PeriodDivider" Background="{DynamicResource CardStrokeColorDefaultBrush}" />
+        <Border x:Name="PeriodDivider" Background="{DynamicResource CardBorderBrush}" />
         <RadioButton x:Name="PmButton"
                      Content="PM"
                      Style="{StaticResource PeriodSegmentStyle}"

@@ -24,7 +24,7 @@ public enum DayPunchPairingDialogOutcome
 /// (DayPunchPairingEditorLauncher) does the actual save/delete and the
 /// AttendanceDataVersion bump.
 /// </summary>
-public partial class DayPunchPairingDialog : Wpf.Ui.Controls.FluentWindow
+public partial class DayPunchPairingDialog : Controls.AppWindow
 {
     public DayPunchPairingDialog(DayPunchPairingEditorViewModel editor)
     {

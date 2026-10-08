@@ -16,7 +16,7 @@ namespace ScheduleApp.Desktop.Views;
 /// second click can't start a second BACKUP/RESTORE against the same database
 /// concurrently.
 /// </summary>
-public partial class BackupRestoreDialog : Wpf.Ui.Controls.FluentWindow
+public partial class BackupRestoreDialog : Controls.AppWindow
 {
     private readonly DatabaseBackupService _backupService;
     private readonly string _connectionString;

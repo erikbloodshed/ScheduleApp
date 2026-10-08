@@ -22,7 +22,7 @@ namespace ScheduleApp.Desktop.Views;
 /// dialog. Purely a decoration on top of the Add/Edit flow: it never affects
 /// Save, and a failed or still-in-flight fetch never blocks it either.
 /// </summary>
-public partial class ManualLogEntryDialog : Wpf.Ui.Controls.FluentWindow, IDisposable
+public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
 {
     private readonly IReadOnlyList<Employee> _employees;
     private readonly IAttendanceLogRepository _attendanceLogRepository;

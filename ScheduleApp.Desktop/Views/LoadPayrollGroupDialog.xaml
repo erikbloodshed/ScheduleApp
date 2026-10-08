@@ -1,14 +1,13 @@
-<ui:FluentWindow x:Class="ScheduleApp.Desktop.Views.LoadPayrollGroupDialog"
+<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.LoadPayrollGroupDialog" ShowMinimizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
         Title="Load Payroll Group"
         Width="460" Height="520"
         MinWidth="380" MinHeight="360"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        ExtendsContentIntoTitleBar="True"
 >
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -20,21 +19,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- See MainWindow.xaml's own TitleBar comment for why every FluentWindow needs
-             one of these - WPF-UI removes the native title bar entirely otherwise. -->
-        <ui:TitleBar Grid.Row="0"
-                Title="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Title}"
-                ShowMinimize="False"
-                ShowMaximize="True"
-                CanMaximize="True" />
-
     <Grid Grid.Row="1" Margin="16"
           RowDefinitions="Auto,Auto,*,Auto">
 
         <TextBlock Grid.Row="0"
                    Text="Reopen a payroll run saved via &quot;New Payroll Run…&quot; -- picking one sets this tab's period and employee checklist back to what was saved, the same as when it was first confirmed."
                    TextWrapping="Wrap"
-                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Foreground="{DynamicResource MutedForegroundBrush}"
                    Margin="0,0,0,12" />
 
         <!-- Same IsIndeterminate ProgressBar-while-running idea as PayrollPage's own
@@ -58,7 +49,7 @@
                  "list is empty" check. -->
             <TextBlock Text="No saved payroll runs yet -- use &quot;New Payroll Run…&quot; to create one."
                        TextWrapping="Wrap"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Foreground="{DynamicResource MutedForegroundBrush}"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        Visibility="{Binding HasNoRuns, Converter={StaticResource BoolToVisibility}}" />
@@ -67,7 +58,7 @@
                      ItemsSource="{Binding Runs}"
                      SelectedItem="{Binding SelectedRun}"
                      BorderThickness="1"
-                     BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                     BorderBrush="{DynamicResource CardBorderBrush}"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      MouseDoubleClick="RunsListBox_OnMouseDoubleClick">
                 <ListBox.ItemContainerStyle>
@@ -82,7 +73,7 @@
                             <TextBlock Text="{Binding Run.Label}"
                                        FontWeight="SemiBold" />
                             <TextBlock FontSize="11"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
                                        Margin="0,2,0,0">
                                 <Run Text="{Binding Run.PeriodStart, StringFormat='{}{0:MMM d, yyyy}', Mode=OneWay}" />
                                 <Run Text="–" />
@@ -90,7 +81,7 @@
                                 <Run Text="{Binding EmployeeCountText, Mode=OneWay}" />
                             </TextBlock>
                             <TextBlock FontSize="11"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
                                        Margin="0,2,0,0">
                                 <Run Text="Saved" />
                                 <Run Text="{Binding Run.CreatedAt, StringFormat='{}{0:MMM d, yyyy h:mm tt}', Mode=OneWay}" />
@@ -138,4 +129,4 @@
         </Grid>
     </Grid>
 </Grid>
-</ui:FluentWindow>
+</controls:AppWindow>

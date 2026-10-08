@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows7.0</TargetFramework>
+    <TargetFramework>$(WindowsTargetFramework)</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>ScheduleApp.Desktop</RootNamespace>
     <AssemblyName>ScheduleApp</AssemblyName>
@@ -20,7 +20,20 @@
     <!-- Needed for configuration.GetSection("Attendance").Get&lt;AttendanceSettings&gt;() in App.xaml.cs -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="WPF-UI" />
+    <PackageReference Include="DynamicData" />
+    <PackageReference Include="ReactiveUI.WPF" />
+    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Syncfusion.DataGridExcelExport.WPF" />
+    <PackageReference Include="Syncfusion.Licensing" />
+    <PackageReference Include="Syncfusion.SfGrid.WPF" />
+    <PackageReference Include="Syncfusion.SfInput.WPF" />
+    <PackageReference Include="Syncfusion.SfNavigationDrawer.WPF" />
+    <PackageReference Include="Syncfusion.SfSkinManager.WPF" />
+    <PackageReference Include="Syncfusion.SfTextInputLayout.WPF" />
+    <PackageReference Include="Syncfusion.SfTreeView.WPF" />
+    <PackageReference Include="Syncfusion.Themes.Windows11Light.WPF" />
+    <PackageReference Include="Syncfusion.Tools.WPF" />
     <!-- DPAPI (ProtectedData.Protect/Unprotect) for RememberedSignInStore's encrypted
          password on disk - not part of the shared framework, needs this package even
          on a Windows-only TFM like net10.0-windows. Bump the version if it doesn't

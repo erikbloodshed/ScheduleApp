@@ -32,7 +32,7 @@ public class PunchStatusToBrushConverter : IValueConverter
     // as CalendarDayToBrushConverter's own EmptyBrush -- a hardcoded Brushes.Black would be
     // unreadable as text on a Dark-theme background.
     private static SolidColorBrush DefaultBrush =>
-        Application.Current?.TryFindResource("TextFillColorPrimaryBrush") as SolidColorBrush
+        Application.Current?.TryFindResource("TextForegroundBrush") as SolidColorBrush
         ?? Brushes.Black;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

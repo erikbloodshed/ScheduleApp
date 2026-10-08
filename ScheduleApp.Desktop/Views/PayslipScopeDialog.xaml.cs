@@ -41,7 +41,7 @@ namespace ScheduleApp.Desktop.Views;
 /// DI, same as every other dialog in this app -- see PayslipScopeViewModel's
 /// own doc comment for why that ViewModel itself isn't DI-registered either.
 /// </summary>
-public partial class PayslipScopeDialog : Wpf.Ui.Controls.FluentWindow
+public partial class PayslipScopeDialog : Controls.AppWindow
 {
     private readonly PayslipScopeViewModel _scope;
 
