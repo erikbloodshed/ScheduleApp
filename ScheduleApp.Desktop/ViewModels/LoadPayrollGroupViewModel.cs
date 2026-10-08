@@ -1,9 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -24,13 +23,16 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// dialog's -- see DeletePayrollRunAsync's own doc comment for why this uses MessageBox
 /// instead, same as LoadPayrollGroupDialog.LoadButton_Click's own validation message).
 /// </summary>
-public partial class LoadPayrollGroupViewModel : ObservableObject
+public class LoadPayrollGroupViewModel : ReactiveViewModel
 {
     private readonly IPayrollRunRepository _payrollRunRepository;
 
     public LoadPayrollGroupViewModel(IPayrollRunRepository payrollRunRepository)
     {
         _payrollRunRepository = payrollRunRepository;
+
+        LoadRunsCommand = ReactiveCommand.CreateFromTask(async () => await LoadRunsAsync());
+        DeletePayrollRunCommand = ReactiveCommand.CreateFromTask(async () => await DeletePayrollRunAsync(), CanExecuteFrom(CanDeleteRun));
     }
 
     /// <summary>Every saved run, newest first -- a straight pass-through of
@@ -40,19 +42,43 @@ public partial class LoadPayrollGroupViewModel : ObservableObject
     /// converter. What LoadPayrollGroupDialog's ListBox binds to.</summary>
     public ObservableCollection<LoadPayrollGroupRunItem> Runs { get; } = new();
 
-    [ObservableProperty]
-    private LoadPayrollGroupRunItem? selectedRun;
+    public LoadPayrollGroupRunItem? SelectedRun
+    {
+        get => _selectedRun;
+        set
+        {
+            if (EqualityComparer<LoadPayrollGroupRunItem?>.Default.Equals(_selectedRun, value)) return;
+            this.RaisePropertyChanging();
+            _selectedRun = value;
+            OnSelectedRunChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private LoadPayrollGroupRunItem? _selectedRun;
 
     /// <summary>Delete button only makes sense once something's picked -- same
     /// "nothing selected, nothing to act on" gating LoadButton_Click already enforces by
     /// hand (via its own MessageBox warning) for Load; this one's a RelayCommand
     /// CanExecute instead since there's no separate button-click validation path to
     /// reuse the way Load's has.</summary>
-    partial void OnSelectedRunChanged(LoadPayrollGroupRunItem? value) =>
-        DeletePayrollRunCommand.NotifyCanExecuteChanged();
+    private void OnSelectedRunChanged(LoadPayrollGroupRunItem? value) =>
+        RequeryCanExecute();
 
-    [ObservableProperty]
-    private bool isLoading;
+    public bool IsLoading
+    {
+        get => _isLoading;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isLoading, value)) return;
+            this.RaisePropertyChanging();
+            _isLoading = value;
+            OnIsLoadingChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private bool _isLoading;
 
     /// <summary>Shown in place of the list while it's empty and nothing's loading --
     /// distinguishes "nothing's been saved yet" from a list that's merely still loading
@@ -60,16 +86,16 @@ public partial class LoadPayrollGroupViewModel : ObservableObject
     /// PayrollViewModel.IsBusy already uses elsewhere on this tab).</summary>
     public bool HasNoRuns => !IsLoading && Runs.Count == 0;
 
-    partial void OnIsLoadingChanged(bool value)
+    private void OnIsLoadingChanged(bool value)
     {
-        OnPropertyChanged(nameof(HasNoRuns));
+        this.RaisePropertyChanged(nameof(HasNoRuns));
 
         // Same "don't let a second write start while ListAsync/DeleteAsync is already
         // touching the shared ScheduleDbContext" reasoning PayrollViewModel's own
         // _busy-gated commands follow, just via this dialog's single IsLoading flag
         // instead of a shared AttendanceBusyState -- a single-purpose picker dialog has
         // no other work IsLoading would need to coordinate with.
-        DeletePayrollRunCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     /// <summary>Run once, from LoadPayrollGroupDialog's own Loaded handler -- same "load on
@@ -78,7 +104,8 @@ public partial class LoadPayrollGroupViewModel : ObservableObject
     /// re-run by DeletePayrollRunAsync below after a successful delete, so the list (and
     /// SelectedRun/HasNoRuns) reflect what's actually left on disk rather than the row
     /// just being spliced out of Runs by hand.</summary>
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> LoadRunsCommand { get; }
+
     private async Task LoadRunsAsync()
     {
         IsLoading = true;
@@ -124,16 +151,17 @@ public partial class LoadPayrollGroupViewModel : ObservableObject
     /// tab's already-loaded period/checklist/figures -- see ActivePayrollRunId's own doc
     /// comment: it's write-only, set once a run is saved/loaded and never read back to
     /// re-fetch anything, so there's nothing on PayrollPage for this to invalidate.</summary>
-    [RelayCommand(CanExecute = nameof(CanDeleteRun))]
+    public ReactiveCommand<RxVoid, RxVoid> DeletePayrollRunCommand { get; }
+
     private async Task DeletePayrollRunAsync()
     {
         if (SelectedRun is not { } item) return;
 
-        var confirm = MessageBox.Show(
-            $"Delete \"{item.Run.Label}\"? This can't be undone. The employees' own payroll " +
-            "figures for that period aren't affected -- only this saved run record.",
-            "Delete payroll group", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes) return;
+        if (!await ConfirmAsync(
+                $"Delete \"{item.Run.Label}\"? This can't be undone. The employees' own payroll " +
+                "figures for that period aren't affected -- only this saved run record.",
+                "Delete payroll group", isWarning: true))
+            return;
 
         try
         {
@@ -141,9 +169,9 @@ public partial class LoadPayrollGroupViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            await NotifyAsync(
                 $"Could not delete \"{item.Run.Label}\".\n\n{ex.Message}",
-                "Delete payroll group", MessageBoxButton.OK, MessageBoxImage.Error);
+                "Delete payroll group", NoticeKind.Error);
             return;
         }
 

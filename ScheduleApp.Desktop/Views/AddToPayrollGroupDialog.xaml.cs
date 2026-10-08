@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using ScheduleApp.Core.Models;
@@ -26,6 +27,10 @@ public partial class AddToPayrollGroupDialog : Controls.AppWindow
 {
     private readonly List<DepartmentGroupViewModel> _departments;
 
+    /// <summary>The departments the search hasn't hidden -- the tree's items, since
+    /// SfTreeView can't hide a row (see EmployeeTreeSearchFilter.Apply).</summary>
+    private readonly ObservableCollection<DepartmentGroupViewModel> _visibleDepartments = [];
+
     /// <summary>Every checked employee when AddButton_Click sets DialogResult = true.
     /// Null if the dialog was cancelled -- consistent with LoadPayrollGroupDialog.SelectedRun's
     /// own null-on-cancel convention.</summary>
@@ -45,7 +50,7 @@ public partial class AddToPayrollGroupDialog : Controls.AppWindow
         InitializeComponent();
 
         _departments = departments;
-        EmployeeTree.ItemsSource = departments;
+        EmployeeTree.ItemsSource = _visibleDepartments;
 
         // Pre-check employees that are already in the group, so they appear checked
         // but the person isn't forced to re-add them -- AddEmployeesToGroupAsync filters
@@ -66,12 +71,13 @@ public partial class AddToPayrollGroupDialog : Controls.AppWindow
         foreach (var dept in departments)
             dept.IsExpanded = true;
 
+        EmployeeTreeSearchFilter.Apply(_departments, string.Empty, _visibleDepartments);
         RefreshScopeText();
     }
 
     private void SearchBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
-        EmployeeTreeSearchFilter.Apply(_departments, SearchBox.Text);
+        EmployeeTreeSearchFilter.Apply(_departments, SearchBox.Text, _visibleDepartments);
         RefreshScopeText();
     }
 

@@ -1,9 +1,10 @@
 <Page x:Class="ScheduleApp.Desktop.Views.PayrollPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
+      xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
       xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
       xmlns:views="clr-namespace:ScheduleApp.Desktop.Views"
-      xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
       xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
       ScrollViewer.CanContentScroll="False"
       Title="Payroll">
@@ -40,45 +41,37 @@
                     Value="SemiBold" />
         </Style>
 
-        <!-- Same custom DatePickerTextBox template AttendanceView.xaml's own Period fields
-             (and this page's Period pickers below) use, duplicated here rather than shared
-             for the same reason CardBorder is - just applying a display StringFormat to the
-             picker's text box. Used to live in PayrollSummaryView.xaml, back when the Period
-             pickers themselves were still down there - see this page's own Border below.
-             Full "MMMM d, yyyy" month name (e.g. "September 16, 2026") rather than the
-             abbreviated "MMM" form, so the picker reads the same as every other date display
-             in the app (PayslipLineBuilder's payslip period line, LoadPayrollGroupDialog's run
-             list, etc.) - the DatePicker's own Width below is widened to fit it. -->
-        <Style x:Key="PeriodDatePickerTextBoxStyle"
-               TargetType="DatePickerTextBox">
-            <Setter Property="Control.Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="DatePickerTextBox">
-                        <TextBox Text="{Binding Path=SelectedDate,
-                            RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                 TextAlignment="Center" />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- A Period date: "September 16, 2026", typed or picked from the drop-down
+             calendar - the same full month name as every other date display in the app
+             (PayslipLineBuilder's payslip period line, LoadPayrollGroupDialog's run list,
+             etc.), and the same style as AttendanceSummaryView's own Period fields. -->
+        <Style x:Key="PeriodDate" TargetType="syncfusion:DateTimeEdit">
+            <Setter Property="Pattern" Value="CustomPattern" />
+            <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
+            <Setter Property="IsEmptyDateEnabled" Value="True" />
+            <Setter Property="NullValue" Value="{x:Null}" />
+            <Setter Property="ShowMaskOnNullValue" Value="False" />
+            <Setter Property="Width" Value="190" />
+            <Setter Property="Margin" Value="0,0,6,0" />
         </Style>
 
         <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <converters:NumberConverter x:Key="Number" />
 
-        <!-- Right-aligned numeric cell / header pair — same shape as
-             PayrollWizardDialog's own review grid copy, duplicated here for
-             the same per-file reason CardBorder is. Used by the Net Pay
-             column below. -->
-        <Style x:Key="RightAlignedCell"
-               TargetType="TextBlock">
-            <Setter Property="TextAlignment"
-                    Value="Right" />
-        </Style>
+        <!-- Right-aligned numeric header — same shape as PayrollWizardDialog's own
+             review grid copy, duplicated here for the same per-file reason CardBorder is.
+             Used by the Net Pay column below, whose cells right-align via TextAlignment. -->
         <Style x:Key="RightAlignedHeader"
-               TargetType="DataGridColumnHeader"
-               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+               TargetType="syncfusion:GridHeaderCellControl"
+               BasedOn="{StaticResource GridHeaderCellStyle}">
             <Setter Property="HorizontalContentAlignment"
                     Value="Right" />
+        </Style>
+
+        <Style x:Key="HeaderButton" TargetType="syncfusion:ButtonAdv">
+            <Setter Property="SizeMode" Value="Normal" />
+            <Setter Property="IconTemplate" Value="{StaticResource TagGlyphIconTemplate}" />
+            <Setter Property="Margin" Value="0,0,8,0" />
         </Style>
     </Page.Resources>
 
@@ -101,42 +94,21 @@
         <Border x:Name="PayrollHeaderCard"
                 Grid.Row="0"
                 Style="{StaticResource CardBorder}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Column="0"
-                           Text="Period"
-                           VerticalAlignment="Center"
-                           Margin="0,0,6,0" />
-                <DatePicker Grid.Column="1"
-                            SelectedDate="{Binding PeriodStart}"
-                            IsTodayHighlighted="True"
-                            Width="190"
-                            Margin="0,0,6,0">
-                    <DatePicker.Resources>
-                        <Style TargetType="DatePickerTextBox"
-                               BasedOn="{StaticResource PeriodDatePickerTextBoxStyle}" />
-                    </DatePicker.Resources>
-                </DatePicker>
-                <TextBlock Grid.Column="2"
-                           Text="to"
-                           VerticalAlignment="Center"
-                           Margin="0,0,6,0" />
-                <DatePicker Grid.Column="3"
-                            SelectedDate="{Binding PeriodEnd}"
-                            IsTodayHighlighted="True"
-                            Width="190">
-                    <DatePicker.Resources>
-                        <Style TargetType="DatePickerTextBox"
-                               BasedOn="{StaticResource PeriodDatePickerTextBoxStyle}" />
-                    </DatePicker.Resources>
-                </DatePicker>
+            <!-- Two groups in a WrapPanel: on a narrow window the buttons drop below the
+                 period together rather than running off the edge. -->
+            <WrapPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                    <TextBlock Text="Period"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <syncfusion:DateTimeEdit Style="{StaticResource PeriodDate}"
+                                             DateTime="{Binding PeriodStart, Mode=TwoWay}" />
+                    <TextBlock Text="to"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <syncfusion:DateTimeEdit Style="{StaticResource PeriodDate}"
+                                             DateTime="{Binding PeriodEnd, Mode=TwoWay}" />
+                </StackPanel>
 
                 <!-- Print_Feature.md's UI section: "PayrollPage gets a 'Print
                      Current Payslip' action for whoever's selected right now"
@@ -164,42 +136,36 @@
                      AttendanceBusyState.OnIsVisiblyRunningChanged), the one place it's
                      shown for every page that shares it, rather than this page
                      duplicating it in its own toolbar. -->
-                <StackPanel Grid.Column="4"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
+                <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <controls:IconButton Content="Print Current Payslip"
-                            Icon="&#xE749;"
-                            Command="{Binding PrintCurrentPayslipCommand}"
-                            Padding="8,3"
-                            Margin="0,0,8,0"
-                            ToolTip="Preview and print/save just this employee's payslip for the period shown above." />
-                    <controls:IconButton Content="Print Payslips"
-                            Icon="&#xE749;"
-                            Command="{Binding PrintPayslipsCommand}"
-                            Padding="8,3"
-                            Margin="0,0,10,0"
-                            ToolTip="Choose a scope and period, then preview/print/save a payslip for each -- 4 per Letter page." />
-                    <controls:IconButton Content="Export Payroll Report"
-                            Icon="&#xE70F;"
-                            Command="{Binding ExportPayrollReportCommand}"
-                            Padding="8,3"
-                            Margin="0,0,10,0"
-                            ToolTip="Choose a scope and period, then save an Excel payroll roster." />
-                    <controls:IconButton Content="New Payroll Run"
-                            Icon="&#xE710;"
-                            Command="{Binding NewPayrollRunCommand}"
-                            Padding="8,3"
-                            Margin="0,0,10,0"
-                            ToolTip="Choose who this period covers, review payroll, then save it as a run." />
-                    <controls:IconButton Content="Load Payroll Group"
-                            Icon="&#xE8F4;"
-                            Command="{Binding LoadPayrollGroupCommand}"
-                            Padding="8,3"
-                            Margin="0,0,10,0"
-                            ToolTip="Reopen a payroll run saved earlier -- restores its period and employee checklist." />
+                    <syncfusion:ButtonAdv Label="Print Current Payslip"
+                                          Tag="&#xE749;"
+                                          Style="{StaticResource HeaderButton}"
+                                          Command="{Binding PrintCurrentPayslipCommand}"
+                                          ToolTip="Preview and print/save just this employee's payslip for the period shown above." />
+                    <syncfusion:ButtonAdv Label="Print Payslips"
+                                          Tag="&#xE749;"
+                                          Style="{StaticResource HeaderButton}"
+                                          Command="{Binding PrintPayslipsCommand}"
+                                          ToolTip="Choose a scope and period, then preview/print/save a payslip for each -- 4 per Letter page." />
+                    <syncfusion:ButtonAdv Label="Export Payroll Report"
+                                          Tag="&#xE70F;"
+                                          Style="{StaticResource HeaderButton}"
+                                          Command="{Binding ExportPayrollReportCommand}"
+                                          ToolTip="Choose a scope and period, then save an Excel payroll roster." />
+                    <syncfusion:ButtonAdv Label="New Payroll Run"
+                                          Tag="&#xE710;"
+                                          Style="{StaticResource HeaderButton}"
+                                          Command="{Binding NewPayrollRunCommand}"
+                                          ToolTip="Choose who this period covers, review payroll, then save it as a run." />
+                    <syncfusion:ButtonAdv Label="Load Payroll Group"
+                                          Tag="&#xE8F4;"
+                                          Style="{StaticResource HeaderButton}"
+                                          Margin="0"
+                                          Command="{Binding LoadPayrollGroupCommand}"
+                                          ToolTip="Reopen a payroll run saved earlier -- restores its period and employee checklist." />
                 </StackPanel>
-            </Grid>
+            </WrapPanel>
         </Border>
 
         <Grid Grid.Row="1">
@@ -233,10 +199,11 @@
                          PayrollViewModel.PayrollGroupSearchText) - narrows which rows
                          are shown, not which employee is selected, so typing here never
                          changes who the detail panels on the right are showing. -->
-                    <TextBox DockPanel.Dock="Top"
-                             Text="{Binding PayrollGroupSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             Margin="0,0,0,8"
-                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;)." />
+                    <syncfusion:SfTextBoxExt DockPanel.Dock="Top"
+                                             Text="{Binding PayrollGroupSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             Watermark="ID, name or department"
+                                             Margin="0,0,0,8"
+                                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;)." />
 
                     <!-- "Add to group" button - opens AddToPayrollGroupDialog so the
                          person can check employees from the full roster and append them
@@ -249,13 +216,14 @@
                          dialog is still the faster path for adding several employees at
                          once - the grid's own right-click Add is for one-at-a-time picks
                          without leaving the panel. -->
-                    <Button DockPanel.Dock="Top"
-                            Content="Add to group..."
-                            Command="{Binding AddEmployeesToGroupCommand}"
-                            HorizontalAlignment="Left"
-                            Padding="6,2"
-                            Margin="0,0,0,6"
-                            ToolTip="Pick employees from the full roster to add to this payroll group." />
+                    <syncfusion:ButtonAdv DockPanel.Dock="Top"
+                                          Label="Add to group…"
+                                          IconTemplate="{StaticResource AddIconTemplate}"
+                                          SizeMode="Normal"
+                                          Command="{Binding AddEmployeesToGroupCommand}"
+                                          HorizontalAlignment="Left"
+                                          Margin="0,0,0,6"
+                                          ToolTip="Pick employees from the full roster to add to this payroll group." />
 
                     <!-- Included (PayrollGroupGrid) on top, Total Net Pay strip in the
                          middle, Not in group (AvailableEmployeeGrid) on the bottom.
@@ -301,61 +269,32 @@
                                  cleared after each click) so the highlighted row tracks
                                  who is currently loaded in the detail panels on the
                                  right. -->
-                            <DataGrid x:Name="PayrollGroupGrid"
-                                      ItemsSource="{Binding PayrollGroupRowsView}"
-                                      SelectionChanged="PayrollGroupGrid_OnSelectionChanged"
-                                      AutoGenerateColumns="False"
-                                      IsReadOnly="True"
-                                      CanUserAddRows="False"
-                                      CanUserDeleteRows="False"
-                                      CanUserReorderColumns="False"
-                                      CanUserSortColumns="False"
-                                      GridLinesVisibility="Horizontal"
-                                      BorderThickness="0"
-                                      Background="Transparent"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                <!-- Removing a row is now the "Exclude" button in the Total
-                                     Net Pay strip below (bound to RemoveEmployeeFromGroupCommand
-                                     with CommandParameter="{Binding SelectedItem.Employee,
-                                     ElementName=PayrollGroupGrid}") rather than a right-click
-                                     ContextMenu on the row itself - see that Border's own doc
-                                     comment. -->
-                                <DataGrid.RowStyle>
-                                    <!-- BasedOn the theme's row style: without it, this Style
-                                         object replaces (rather than extends) whatever the app's
-                                         theme normally applies to a DataGridRow, and the row loses
-                                         its selection highlight entirely, making this grid the only
-                                         one in the app not showing which row is selected.
-                                         EmployeesGrid gets the highlight for free since it sets no
-                                         RowStyle at all; AttendanceView's grid sets its own but
-                                         recreates the highlight explicitly (Background/Foreground
-                                         bound to IsSelected via a converter) rather than relying on
-                                         BasedOn. Either approach works, this one just needs one
-                                         of them and had neither.
-                                         NOTE: {StaticResource {x:Type DataGridRow}} would
-                                         resolve to nothing: the theme's implicit row style only
-                                         reaches a window when it loads, after this BasedOn has
-                                         been resolved. DefaultDataGridRowStyle is the theme's row
-                                         style made available at application level for exactly
-                                         this - see Themes/FrameworkFallbacks.xaml. -->
-                                    <Style TargetType="DataGridRow"
-                                           BasedOn="{StaticResource DefaultDataGridRowStyle}" />
-                                </DataGrid.RowStyle>
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Employee"
-                                                        Binding="{Binding EmployeeName}"
-                                                        Width="*" />
-                                    <DataGridTextColumn Header="Department"
-                                                        Binding="{Binding DepartmentName}"
-                                                        Width="*" />
+                            <!-- Removing a row is the "Exclude" button in the Total Net Pay
+                                 strip below (bound to RemoveEmployeeFromGroupCommand with
+                                 CommandParameter="{Binding SelectedItem.Employee,
+                                 ElementName=PayrollGroupGrid}") rather than a right-click
+                                 ContextMenu on the row itself - see that Border's own doc
+                                 comment. -->
+                            <syncfusion:SfDataGrid x:Name="PayrollGroupGrid"
+                                                   controls:GridAutoFit.IsEnabled="True"
+                                                   ItemsSource="{Binding PayrollGroupRowsView}"
+                                                   SelectionChanged="PayrollGroupGrid_OnSelectionChanged"
+                                                   AutoGenerateColumns="False"
+                                                   AllowEditing="False"
+                                                   AllowSorting="False"
+                                                   AllowDraggingColumns="False"
+                                                   SelectionMode="Single"
+                                                   NavigationMode="Row"
+                                                   GridLinesVisibility="Horizontal">
+                                <syncfusion:SfDataGrid.Columns>
+                                    <syncfusion:GridTextColumn MappingName="EmployeeName" HeaderText="Employee" ColumnSizer="Star" />
+                                    <syncfusion:GridTextColumn MappingName="DepartmentName" HeaderText="Department" ColumnSizer="Star" />
                                     <!-- Optional per the Phase 4 plan (row 9) - surfaces
                                          EmployeeType so a Monthly-rated employee is visible
                                          at a glance in the batch group, same idea as
                                          PayrollSummaryView's header badge (Daily/Monthly
                                          plain ToString(), no converter). -->
-                                    <DataGridTextColumn Header="Pay Type"
-                                                        Binding="{Binding PayTypeText}"
-                                                        Width="Auto" />
+                                    <syncfusion:GridTextColumn MappingName="PayTypeText" HeaderText="Pay Type" ColumnSizer="Auto" />
                                     <!-- Plain "Net Pay" header - this used to be a bound
                                          TextBlock reading "Net Pay (Computing NN%)" while a
                                          refresh was in flight, driven by PayrollViewModel's
@@ -364,14 +303,12 @@
                                          StatusBarPresenter's ProgressPanel) still shows that
                                          same progress while a refresh runs, this panel itself
                                          just no longer duplicates it in the column header. -->
-                                    <DataGridTextColumn Header="Net Pay"
-                                                        Binding="{Binding NetPay,
-                                                            Converter={StaticResource Number}}"
-                                                        ElementStyle="{StaticResource RightAlignedCell}"
-                                                        HeaderStyle="{StaticResource RightAlignedHeader}"
-                                                        Width="Auto" />
-                                </DataGrid.Columns>
-                            </DataGrid>
+                                    <syncfusion:GridTextColumn MappingName="NetPay" HeaderText="Net Pay" ColumnSizer="Auto"
+                                                               DisplayBinding="{Binding NetPay, Converter={StaticResource Number}}"
+                                                               TextAlignment="Right"
+                                                               HeaderStyle="{StaticResource RightAlignedHeader}" />
+                                </syncfusion:SfDataGrid.Columns>
+                            </syncfusion:SfDataGrid>
                         </DockPanel>
 
                         <!-- Include/Exclude replace the two grids' old right-click
@@ -388,19 +325,23 @@
                                 Style="{StaticResource CardBorder}"
                                 Margin="0,8">
                             <DockPanel LastChildFill="False">
-                                <Button DockPanel.Dock="Left"
-                                        Content="Include"
-                                        Command="{Binding AddEmployeeToGroupCommand}"
-                                        CommandParameter="{Binding SelectedItem.Employee, ElementName=AvailableEmployeeGrid}"
-                                        Padding="6,2"
-                                        ToolTip="Add the employee selected below (Not in group) to the payroll group." />
-                                <Button DockPanel.Dock="Left"
-                                        Content="Exclude"
-                                        Command="{Binding RemoveEmployeeFromGroupCommand}"
-                                        CommandParameter="{Binding SelectedItem.Employee, ElementName=PayrollGroupGrid}"
-                                        Padding="6,2"
-                                        Margin="6,0,0,0"
-                                        ToolTip="Remove the employee selected above (Included) from the payroll group." />
+                                <syncfusion:ButtonAdv DockPanel.Dock="Left"
+                                                      Label="Include"
+                                                      Tag="&#xE74A;"
+                                                      IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                                      SizeMode="Normal"
+                                                      Command="{Binding AddEmployeeToGroupCommand}"
+                                                      CommandParameter="{Binding SelectedItem.Employee, ElementName=AvailableEmployeeGrid}"
+                                                      ToolTip="Add the employee selected below (Not in group) to the payroll group." />
+                                <syncfusion:ButtonAdv DockPanel.Dock="Left"
+                                                      Label="Exclude"
+                                                      Tag="&#xE74B;"
+                                                      IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                                      SizeMode="Normal"
+                                                      Command="{Binding RemoveEmployeeFromGroupCommand}"
+                                                      CommandParameter="{Binding SelectedItem.Employee, ElementName=PayrollGroupGrid}"
+                                                      Margin="6,0,0,0"
+                                                      ToolTip="Remove the employee selected above (Included) from the payroll group." />
                                 <StackPanel DockPanel.Dock="Right"
                                             Orientation="Horizontal">
                                     <TextBlock Text="Total Net Pay"
@@ -425,47 +366,28 @@
                                  clicking a row here doesn't change MainViewModel.
                                  SelectedEmployee; these employees aren't part of the group
                                  yet, so there's nothing of theirs to preview in the detail
-                                 panels on the right. Same borderless/transparent/horizontal-
-                                 gridlines look as PayrollGroupGrid above so the two read as
-                                 one panel split in half, not two different controls. -->
-                            <DataGrid x:Name="AvailableEmployeeGrid"
-                                      ItemsSource="{Binding AvailableEmployeeRowsView}"
-                                      AutoGenerateColumns="False"
-                                      IsReadOnly="True"
-                                      CanUserAddRows="False"
-                                      CanUserDeleteRows="False"
-                                      CanUserReorderColumns="False"
-                                      CanUserSortColumns="False"
-                                      GridLinesVisibility="Horizontal"
-                                      BorderThickness="0"
-                                      Background="Transparent"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                <!-- Adding a row to the group is now the "Include" button in
-                                     the Total Net Pay strip above (bound to
-                                     AddEmployeeToGroupCommand with CommandParameter="{Binding
-                                     SelectedItem.Employee, ElementName=AvailableEmployeeGrid}")
-                                     rather than a right-click ContextMenu on the row itself -
-                                     see that Border's own doc comment. Still BasedOn the
-                                     theme's row style for the selection highlight, same
-                                     reasoning as PayrollGroupGrid's own RowStyle above. -->
-                                <DataGrid.RowStyle>
-                                    <Style TargetType="DataGridRow"
-                                           BasedOn="{StaticResource DefaultDataGridRowStyle}" />
-                                </DataGrid.RowStyle>
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Employee"
-                                                        Binding="{Binding EmployeeName}"
-                                                        Width="*" />
-                                    <DataGridTextColumn Header="Department"
-                                                        Binding="{Binding DepartmentName}"
-                                                        Width="*" />
+                                 panels on the right. Same horizontal-gridlines look as
+                                 PayrollGroupGrid above so the two read as one panel split in
+                                 half, not two different controls. Adding a row to the group is
+                                 the "Include" button in the Total Net Pay strip above. -->
+                            <syncfusion:SfDataGrid x:Name="AvailableEmployeeGrid"
+                                                   controls:GridAutoFit.IsEnabled="True"
+                                                   ItemsSource="{Binding AvailableEmployeeRowsView}"
+                                                   AutoGenerateColumns="False"
+                                                   AllowEditing="False"
+                                                   AllowSorting="False"
+                                                   AllowDraggingColumns="False"
+                                                   SelectionMode="Single"
+                                                   NavigationMode="Row"
+                                                   GridLinesVisibility="Horizontal">
+                                <syncfusion:SfDataGrid.Columns>
+                                    <syncfusion:GridTextColumn MappingName="EmployeeName" HeaderText="Employee" ColumnSizer="Star" />
+                                    <syncfusion:GridTextColumn MappingName="DepartmentName" HeaderText="Department" ColumnSizer="Star" />
                                     <!-- Same optional Pay Type column as PayrollGroupGrid
                                          above, same reasoning - see that column's comment. -->
-                                    <DataGridTextColumn Header="Pay Type"
-                                                        Binding="{Binding PayTypeText}"
-                                                        Width="Auto" />
-                                </DataGrid.Columns>
-                            </DataGrid>
+                                    <syncfusion:GridTextColumn MappingName="PayTypeText" HeaderText="Pay Type" ColumnSizer="Auto" />
+                                </syncfusion:SfDataGrid.Columns>
+                            </syncfusion:SfDataGrid>
                         </DockPanel>
                     </Grid>
                 </DockPanel>
@@ -550,17 +472,23 @@
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            Margin="0,0,0,24" />
-                <Button Content="New Payroll Run…"
-                        Command="{Binding NewPayrollRunCommand}"
-                        HorizontalAlignment="Stretch"
-                        Padding="8,8"
-                        Margin="0,0,0,10"
-                        ToolTip="Choose who this period covers, review payroll, then save it as a run." />
-                <Button Content="Load Payroll Group…"
-                        Command="{Binding LoadPayrollGroupCommand}"
-                        HorizontalAlignment="Stretch"
-                        Padding="8,8"
-                        ToolTip="Reopen a payroll run saved earlier -- restores its period and employee checklist." />
+                <syncfusion:ButtonAdv Label="New Payroll Run…"
+                                      Tag="&#xE710;"
+                                      IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                      SizeMode="Normal"
+                                      Command="{Binding NewPayrollRunCommand}"
+                                      HorizontalAlignment="Stretch"
+                                      Height="36"
+                                      Margin="0,0,0,10"
+                                      ToolTip="Choose who this period covers, review payroll, then save it as a run." />
+                <syncfusion:ButtonAdv Label="Load Payroll Group…"
+                                      Tag="&#xE8F4;"
+                                      IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                      SizeMode="Normal"
+                                      Command="{Binding LoadPayrollGroupCommand}"
+                                      HorizontalAlignment="Stretch"
+                                      Height="36"
+                                      ToolTip="Reopen a payroll run saved earlier -- restores its period and employee checklist." />
             </StackPanel>
         </Border>
     </Grid>

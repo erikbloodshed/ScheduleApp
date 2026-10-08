@@ -2,8 +2,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
@@ -13,6 +11,8 @@ using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
 using ScheduleApp.Payroll;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
@@ -39,13 +39,12 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// PayrollGroupViewModel/PayrollRunViewModel/PayrollPrintExportViewModel will (see the
 /// refactor plan's own "Dependency graph") -- both are shared, constructed on
 /// PayrollViewModel and passed in here, not owned by this class.</summary>
-public partial class PayrollSummaryViewModel : ObservableObject
+public class PayrollSummaryViewModel : ViewModelBase
 {
     private readonly MainViewModel _mainViewModel;
     private readonly IPayrollComputationService _payrollComputationService;
     private readonly IPayrollAdjustmentRepository _adjustmentRepository;
     private readonly IPayrollUndertimeWaiverRepository _undertimeWaiverRepository;
-    private readonly IStatusBarService _statusBarService;
     private readonly AttendanceBusyState _busy;
     private readonly PayrollScopeState _scope;
 
@@ -172,12 +171,12 @@ public partial class PayrollSummaryViewModel : ObservableObject
         PayrollScopeState scope,
         AttendanceDataVersion dataVersion,
         string companyName)
+        : base(statusBarService)
     {
         _mainViewModel = mainViewModel;
         _payrollComputationService = payrollComputationService;
         _adjustmentRepository = adjustmentRepository;
         _undertimeWaiverRepository = undertimeWaiverRepository;
-        _statusBarService = statusBarService;
         _dataVersion = dataVersion;
         _companyName = companyName;
 
@@ -196,16 +195,16 @@ public partial class PayrollSummaryViewModel : ObservableObject
                 // name" idea PayrollViewModel's own now-removed IsBusy handler used to
                 // follow, moved here unchanged since IsBusy is this class's own member now.
                 case nameof(AttendanceBusyState.IsVisiblyRunning):
-                    OnPropertyChanged(nameof(IsBusy));
+                    this.RaisePropertyChanged(nameof(IsBusy));
                     NotifyEmptyStates();
 
                     // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
                     // this is what flips the payslip header's icon button between Refresh
                     // and Cancel, same mechanism ReportViewModel's own analogous handler
                     // uses for the Attendance Summary tab's Refresh/Cancel button.
-                    OnPropertyChanged(nameof(RefreshOrCancelGlyph));
-                    OnPropertyChanged(nameof(RefreshOrCancelToolTip));
-                    RefreshOrCancelPayslipCommand.NotifyCanExecuteChanged();
+                    this.RaisePropertyChanged(nameof(RefreshOrCancelGlyph));
+                    this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
+                    RequeryCanExecute();
                     break;
 
                 // Every refresh this class runs (employee change, period edit, or an
@@ -286,6 +285,12 @@ public partial class PayrollSummaryViewModel : ObservableObject
         // nothing is selected, and queues via _refreshPending rather than double-loading if
         // _busy happens to already be running something MainViewModel kicked off.</summary>
         RequestRefresh();
+
+        AddInlineRowCommand = ReactiveCommand.CreateFromTask<PayrollAdjustmentType>(p => RunSafelyAsync(() => AddInlineRowAsync(p)), CanExecuteFrom(CanEditAdjustments));
+        DeleteAdjustmentCommand = ReactiveCommand.CreateFromTask<PayrollAdjustment>(p => RunSafelyAsync(() => DeleteAdjustmentAsync(p)), CanExecuteFrom(CanEditAdjustments));
+        PrintCurrentPayslipCommand = ReactiveCommand.Create(PrintCurrentPayslip, CanExecuteFrom(CanPrintCurrentPayslip));
+        RecalculatePayslipCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(RecalculatePayslipAsync), CanExecuteFrom(CanRecalculatePayslip));
+        RefreshOrCancelPayslipCommand = ReactiveCommand.Create(RefreshOrCancelPayslip, CanExecuteFrom(CanRefreshOrCancelPayslip));
     }
 
     /// <summary>Read straight off MainViewModel rather than duplicated here -- see
@@ -308,8 +313,20 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// PayrollAdjustmentGroup list every load would otherwise force PayrollSummaryView's
     /// ItemsControls to rebuild every category card on every single edit (see those
     /// properties' own doc comments).</summary>
-    [ObservableProperty]
-    private PayrollResult? result;
+    public PayrollResult? Result
+    {
+        get => _result;
+        set
+        {
+            if (EqualityComparer<PayrollResult?>.Default.Equals(_result, value)) return;
+            this.RaisePropertyChanging();
+            _result = value;
+            OnResultChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private PayrollResult? _result;
 
     /// <summary>PayrollSummaryView's Gross Pay column ItemsControl binds to this instead of
     /// Result.GrossPayAdjustmentGroups directly -- one PayrollAdjustmentGroupRow per
@@ -379,16 +396,14 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// since each of those can flip what either message says.</summary>
     private void NotifyEmptyStates()
     {
-        OnPropertyChanged(nameof(EmptyStateMessage));
-        OnPropertyChanged(nameof(AttendanceEmptyStateMessage));
+        this.RaisePropertyChanged(nameof(EmptyStateMessage));
+        this.RaisePropertyChanged(nameof(AttendanceEmptyStateMessage));
     }
 
-    partial void OnResultChanged(PayrollResult? value)
+    private void OnResultChanged(PayrollResult? value)
     {
         NotifyEmptyStates();
-        PrintCurrentPayslipCommand.NotifyCanExecuteChanged();
-        RecalculatePayslipCommand.NotifyCanExecuteChanged();
-        RefreshOrCancelPayslipCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     /// <summary>SelectedEmployee changing only ever affects three things here:
@@ -409,8 +424,8 @@ public partial class PayrollSummaryViewModel : ObservableObject
     {
         if (e.PropertyName != nameof(MainViewModel.SelectedEmployee)) return;
 
-        OnPropertyChanged(nameof(SelectedEmployee));
-        OnPropertyChanged(nameof(HeaderText));
+        this.RaisePropertyChanged(nameof(SelectedEmployee));
+        this.RaisePropertyChanged(nameof(HeaderText));
         NotifyEmptyStates();
         NotifyAdjustmentCommands();
         RequestRefresh();
@@ -471,7 +486,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             GrossPayAdjustmentGroupRows.Clear();
             DeductionAdjustmentGroupRows.Clear();
             AttendanceRows.Clear();
-            OnPropertyChanged(nameof(HasAttendanceRows));
+            this.RaisePropertyChanged(nameof(HasAttendanceRows));
             NotifyEmptyStates();
             _refreshPending = false;
             return;
@@ -591,7 +606,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
                 if (switchCts.IsCancellationRequested)
                     return;
 
-                _statusBarService.ShowError(ex.Message, "Could not load payroll");
+                ShowFailure(ex, "Could not load payroll");
             });
 
         // A cancelled run is not a successful one, even though nothing reported an error:
@@ -714,7 +729,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
         // would just spam and overwrite itself. LoadCoreAsync is the single-employee-in-view
         // path, which matches "the person is watching this employee's payroll."
         if (employee.EmployeeType == EmployeeType.Monthly && result.UnscheduledDayCount > 0)
-            _statusBarService.ShowCaution(
+            StatusBar.ShowCaution(
                 $"{result.UnscheduledDayCount} day(s) this period have no schedule " +
                 $"entry for \"{employee.DisplayName}\" -- they won't reduce the " +
                 "divisor or count as an absence. Mark them Rest Day if that's what they are.",
@@ -733,7 +748,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
         AttendanceRows.Clear();
         foreach (var row in AttendanceSummaryRow.BuildRows(summaries))
             AttendanceRows.Add(row);
-        OnPropertyChanged(nameof(HasAttendanceRows));
+        this.RaisePropertyChanged(nameof(HasAttendanceRows));
         NotifyEmptyStates();
 
         // Was an opportunistic direct patch into PayrollViewModel.PayrollGroupRows (this
@@ -907,7 +922,8 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// empty, zero-amount row left untouched is harmless clutter rather than bad data -- its
     /// own Delete button (the same DeleteAdjustmentCommand every row uses) removes it same as
     /// any other row.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditAdjustments))]
+    public ReactiveCommand<PayrollAdjustmentType, RxVoid> AddInlineRowCommand { get; }
+
     private async Task AddInlineRowAsync(PayrollAdjustmentType type)
     {
         if (SelectedEmployee is null) return;
@@ -934,7 +950,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // own doc comment on that parameter).
             await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Bound to an inline-itemized row's own Description box (see
@@ -970,7 +986,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // LoadCoreAsync's own doc comment on this parameter.
             await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Bound to an inline-itemized row's own Amount box (see
@@ -1006,7 +1022,7 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // LoadCoreAsync's own doc comment on this parameter.
             await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Bound to each itemized row's own Delete button (InlineAdjustmentRowTemplate
@@ -1018,18 +1034,19 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// EditSingleValueButton_Click) only focuses and selects the box's existing text so a
     /// person can type straight over it; the actual commit still goes through
     /// SetSingleValueAsync below the same as it always did, deleting a row was never how a
-    /// single-value figure got changed. Same Yes/No MessageBox
-    /// confirmation as ManualEntryEditorViewModel.DeleteManualEntryAsync -- the status bar
-    /// can't block for an answer, so a destructive action still goes through MessageBox (see
-    /// StatusBarNotificationExtensions' own doc comment).</summary>
-    [RelayCommand(CanExecute = nameof(CanEditAdjustments))]
+    /// single-value figure got changed. Same Yes/No confirmation as
+    /// ManualEntryEditorViewModel.DeleteManualEntryAsync -- the status bar can't block for
+    /// an answer, so a destructive action still asks through the Confirm interaction, which
+    /// PayrollPage shows as a message box.</summary>
+    public ReactiveCommand<PayrollAdjustment, RxVoid> DeleteAdjustmentCommand { get; }
+
     private async Task DeleteAdjustmentAsync(PayrollAdjustment adjustment)
     {
-        var confirm = MessageBox.Show(
-            $"Delete this {adjustment.Type.ToText()} line (\"{adjustment.Description}\", " +
-            $"{adjustment.Amount:N2})?",
-            "Delete payroll adjustment", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (confirm != MessageBoxResult.Yes) return;
+        if (!await ConfirmAsync(
+                $"Delete this {adjustment.Type.ToText()} line (\"{adjustment.Description}\", " +
+                $"{adjustment.Amount:N2})?",
+                "Delete payroll adjustment"))
+            return;
 
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
@@ -1039,9 +1056,9 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // LoadCoreAsync's own doc comment on this parameter.
             await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
 
-            _statusBarService.ShowSuccess("Payroll adjustment deleted.");
+            StatusBar.ShowSuccess("Payroll adjustment deleted.");
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Bound to a single-value category's own inline amount box in
@@ -1150,9 +1167,9 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // this parameter.
             await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
 
-            _statusBarService.ShowSuccess($"Updated {type.ToText()}.");
+            StatusBar.ShowSuccess($"Updated {type.ToText()}.");
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Called from the Undertime row's own Exclude/Include toggle button in
@@ -1191,9 +1208,9 @@ public partial class PayrollSummaryViewModel : ObservableObject
             // itself, see LoadCoreAsync's own doc comment on this parameter.
             await LoadCoreAsync(adjustmentsOnly: true, cancellationToken);
 
-            _statusBarService.ShowSuccess(waived ? "Undertime disregarded." : "Undertime restored.");
+            StatusBar.ShowSuccess(waived ? "Undertime disregarded." : "Undertime restored.");
         },
-        onError: ex => _statusBarService.ShowError(ex.Message));
+        onError: ex => ShowFailure(ex));
     }
 
     /// <summary>Shared by AddInlineRowCommand/DeleteAdjustmentCommand -- parameterless
@@ -1232,12 +1249,8 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// established is what this follows).</summary>
     private void NotifyAdjustmentCommands()
     {
-        AddInlineRowCommand.NotifyCanExecuteChanged();
-        DeleteAdjustmentCommand.NotifyCanExecuteChanged();
-        PrintCurrentPayslipCommand.NotifyCanExecuteChanged();
-        RecalculatePayslipCommand.NotifyCanExecuteChanged();
-        RefreshOrCancelPayslipCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(CanEditAdjustmentsNow));
+        RequeryCanExecute();
+        this.RaisePropertyChanged(nameof(CanEditAdjustmentsNow));
     }
 
     /// <summary>Build-order step 4 (Print_Feature.md): "Print Current Payslip" on
@@ -1251,7 +1264,8 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// batch UI gets built on top in step 5) rather than offering any kind of
     /// skip-the-preview shortcut of its own -- a single slip is cheap enough to
     /// render that there's no real cost to always showing it.</summary>
-    [RelayCommand(CanExecute = nameof(CanPrintCurrentPayslip))]
+    public ReactiveCommand<RxVoid, RxVoid> PrintCurrentPayslipCommand { get; }
+
     private void PrintCurrentPayslip()
     {
         if (Result is null) return;
@@ -1294,11 +1308,12 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// while _busy.IsRunning, so there's nothing left here for that wrapper to guard
     /// against, and awaiting the real work directly is what lets this method see the
     /// returned success flag at all.</summary>
-    [RelayCommand(CanExecute = nameof(CanRecalculatePayslip))]
+    public ReactiveCommand<RxVoid, RxVoid> RecalculatePayslipCommand { get; }
+
     private async Task RecalculatePayslipAsync()
     {
         if (await RefreshAsync())
-            _statusBarService.ShowSuccess("Payslip recalculated.");
+            StatusBar.ShowSuccess("Payslip recalculated.");
     }
 
     /// <summary>Same !_busy.IsRunning-plus-Result-not-null gate as CanPrintCurrentPayslip,
@@ -1324,7 +1339,8 @@ public partial class PayrollSummaryViewModel : ObservableObject
     /// Cancel button.</summary>
     private bool CanRefreshOrCancelPayslip() => IsBusy || CanRecalculatePayslip();
 
-    [RelayCommand(CanExecute = nameof(CanRefreshOrCancelPayslip))]
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelPayslipCommand { get; }
+
     private void RefreshOrCancelPayslip()
     {
         if (IsBusy)

@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Input;
 using ScheduleApp.Core.Payroll;
@@ -39,8 +40,9 @@ public partial class LoadPayrollGroupDialog : Controls.AppWindow
 
         _viewModel = new LoadPayrollGroupViewModel(payrollRunRepository);
         DataContext = _viewModel;
+        MessageBoxInteractions.Register(_viewModel, this);
 
-        Loaded += async (_, _) => await _viewModel.LoadRunsCommand.ExecuteAsync(null);
+        Loaded += async (_, _) => await _viewModel.LoadRunsCommand.Execute();
     }
 
     private void LoadButton_Click(object sender, RoutedEventArgs e)

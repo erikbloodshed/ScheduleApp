@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Models;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -31,7 +31,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// ActiveRosterProvider from whichever ViewModel opens the dialog
 /// (PayrollViewModel's PrintExport/Run children, or Schedule's own ImportExport).
 /// </summary>
-public partial class PayslipScopeViewModel : ObservableObject
+public class PayslipScopeViewModel : ReactiveViewModel
 {
     /// <summary>Replaces the raw IScheduleRepository this class used to read
     /// GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync through
@@ -44,17 +44,38 @@ public partial class PayslipScopeViewModel : ObservableObject
     public PayslipScopeViewModel(ActiveRosterProvider rosterProvider)
     {
         _rosterProvider = rosterProvider;
+
+        LoadEmployeeTreeCommand = ReactiveCommand.CreateFromTask<IReadOnlyCollection<Employee>?>(async p => await LoadEmployeeTreeAsync(p));
+        SelectAllTreeCommand = ReactiveCommand.Create(SelectAllTree, CanExecuteFrom(CanSelectAllTree));
+        ClearTreeSelectionCommand = ReactiveCommand.Create(ClearTreeSelection, CanExecuteFrom(CanClearTreeSelection));
     }
 
     public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
 
+    /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
+    /// what this dialog's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).</summary>
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
+
     /// <summary>Same comma-separated Employee ID/first name/last name/department
     /// matching as ReportScopeViewModel.SearchText -- see
     /// <see cref="EmployeeTreeSearchFilter"/>, shared between both.</summary>
-    [ObservableProperty]
-    private string searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (EqualityComparer<string>.Default.Equals(_searchText, value)) return;
+            this.RaisePropertyChanging();
+            _searchText = value;
+            OnSearchTextChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnSearchTextChanged(string value) => EmployeeTreeSearchFilter.Apply(Departments, value);
+    private string _searchText = string.Empty;
+
+    private void OnSearchTextChanged(string value) =>
+        EmployeeTreeSearchFilter.Apply(Departments, value, VisibleDepartments);
 
     /// <summary>presetSelection is null for both the "whole company" default described in
     /// this class's own doc comment (PayslipScopeDialog's own default, used any time there's
@@ -66,7 +87,8 @@ public partial class PayslipScopeViewModel : ObservableObject
     /// Employee instances come from BatchScopeEmployees, a different repository round trip
     /// than the tree this method just built, so they're never the same objects even when
     /// they represent the same row.</summary>
-    [RelayCommand]
+    public ReactiveCommand<IReadOnlyCollection<Employee>?, RxVoid> LoadEmployeeTreeCommand { get; }
+
     private async Task LoadEmployeeTreeAsync(IReadOnlyCollection<Employee>? presetSelection)
     {
         Departments.Clear();
@@ -101,22 +123,20 @@ public partial class PayslipScopeViewModel : ObservableObject
                 node.IsSelected = presetIds.Contains(node.Employee.Id);
         }
 
-        OnPropertyChanged(nameof(SelectedEmployeeCount));
-        OnPropertyChanged(nameof(SelectionScopeText));
-        SelectAllTreeCommand.NotifyCanExecuteChanged();
-        ClearTreeSelectionCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
+        this.RaisePropertyChanged(nameof(SelectionScopeText));
+        RequeryCanExecute();
 
-        EmployeeTreeSearchFilter.Apply(Departments, SearchText);
+        EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
     }
 
     private void OnEmployeeNodeSelectionChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(EmployeeNodeViewModel.IsSelected)) return;
 
-        OnPropertyChanged(nameof(SelectedEmployeeCount));
-        OnPropertyChanged(nameof(SelectionScopeText));
-        SelectAllTreeCommand.NotifyCanExecuteChanged();
-        ClearTreeSelectionCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
+        this.RaisePropertyChanged(nameof(SelectionScopeText));
+        RequeryCanExecute();
     }
 
     public int SelectedEmployeeCount => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
@@ -152,7 +172,8 @@ public partial class PayslipScopeViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanSelectAllTree))]
+    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand { get; }
+
     private void SelectAllTree()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
@@ -161,7 +182,8 @@ public partial class PayslipScopeViewModel : ObservableObject
 
     private bool CanSelectAllTree() => SelectedEmployeeCount < TotalEmployeeCount;
 
-    [RelayCommand(CanExecute = nameof(CanClearTreeSelection))]
+    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand { get; }
+
     private void ClearTreeSelection()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))

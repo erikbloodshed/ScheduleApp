@@ -1,12 +1,12 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Payroll;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -34,7 +34,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// PayslipScopeViewModel's own tree is built from) -- plus Step 3's calculate-and-review
 /// grid and Save.
 /// </summary>
-public partial class PayrollWizardViewModel : ObservableObject
+public class PayrollWizardViewModel : ReactiveViewModel
 {
     public const int StepCount = 3;
 
@@ -66,12 +66,32 @@ public partial class PayrollWizardViewModel : ObservableObject
         // Label rather than typing dates before anything downstream reacts.
         PeriodStart = defaultPeriodStart;
         PeriodEnd = defaultPeriodEnd;
+
+        BackCommand = ReactiveCommand.Create(Back, CanExecuteFrom(CanGoBack));
+        NextCommand = ReactiveCommand.CreateFromTask(async () => await NextAsync(), CanExecuteFrom(CanGoNext));
+        CancelCommand = ReactiveCommand.Create(Cancel);
+        LoadEmployeeTreeCommand = ReactiveCommand.CreateFromTask(async () => await LoadEmployeeTreeAsync());
+        SelectAllTreeCommand = ReactiveCommand.Create(SelectAllTree, CanExecuteFrom(CanSelectAllTree));
+        ClearTreeSelectionCommand = ReactiveCommand.Create(ClearTreeSelection, CanExecuteFrom(CanClearTreeSelection));
+        SavePayrollGroupCommand = ReactiveCommand.CreateFromTask(async () => await SavePayrollGroupAsync(), CanExecuteFrom(CanSavePayrollGroup));
     }
 
     // ----- Step indicator / navigation (build-order step 5) -----
 
-    [ObservableProperty]
-    private int currentStepIndex;
+    public int CurrentStepIndex
+    {
+        get => _currentStepIndex;
+        set
+        {
+            if (EqualityComparer<int>.Default.Equals(_currentStepIndex, value)) return;
+            this.RaisePropertyChanging();
+            _currentStepIndex = value;
+            OnCurrentStepIndexChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private int _currentStepIndex;
 
     public bool IsFirstStep => CurrentStepIndex == 0;
     public bool IsLastStep => CurrentStepIndex == StepCount - 1;
@@ -94,19 +114,18 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// step.</summary>
     public string NextButtonText => IsLastStep ? "Finish" : "Next";
 
-    partial void OnCurrentStepIndexChanged(int value)
+    private void OnCurrentStepIndexChanged(int value)
     {
-        OnPropertyChanged(nameof(IsFirstStep));
-        OnPropertyChanged(nameof(IsLastStep));
-        OnPropertyChanged(nameof(NextButtonText));
-        OnPropertyChanged(nameof(IsStep1Visible));
-        OnPropertyChanged(nameof(IsStep2Visible));
-        OnPropertyChanged(nameof(IsStep3Visible));
-        OnPropertyChanged(nameof(IsStep1Active));
-        OnPropertyChanged(nameof(IsStep2Active));
-        OnPropertyChanged(nameof(IsStep3Active));
-        BackCommand.NotifyCanExecuteChanged();
-        NextCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(IsFirstStep));
+        this.RaisePropertyChanged(nameof(IsLastStep));
+        this.RaisePropertyChanged(nameof(NextButtonText));
+        this.RaisePropertyChanged(nameof(IsStep1Visible));
+        this.RaisePropertyChanged(nameof(IsStep2Visible));
+        this.RaisePropertyChanged(nameof(IsStep3Visible));
+        this.RaisePropertyChanged(nameof(IsStep1Active));
+        this.RaisePropertyChanged(nameof(IsStep2Active));
+        this.RaisePropertyChanged(nameof(IsStep3Active));
+        RequeryCanExecute();
     }
 
     /// <summary>Raised when the dialog itself should close -- true from Finish, false from
@@ -118,7 +137,8 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// it subscribes to this once, in its constructor.</summary>
     public event EventHandler<bool>? RequestClose;
 
-    [RelayCommand(CanExecute = nameof(CanGoBack))]
+    public ReactiveCommand<RxVoid, RxVoid> BackCommand { get; }
+
     private void Back() => CurrentStepIndex--;
 
     /// <summary>Also blocked while IsCalculating -- same "don't let a person navigate out
@@ -134,7 +154,8 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// load. Awaited (not fire-and-forget) so CanGoNext/CanGoBack's own IsCalculating check
     /// actually reflects an in-flight calculation for as long as one is running, the same
     /// way SavePayrollGroupAsync's IsSaving does for that command.</summary>
-    [RelayCommand(CanExecute = nameof(CanGoNext))]
+    public ReactiveCommand<RxVoid, RxVoid> NextCommand { get; }
+
     private async Task NextAsync()
     {
         if (IsLastStep)
@@ -166,16 +187,41 @@ public partial class PayrollWizardViewModel : ObservableObject
         _ => true,
     };
 
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
+
     private void Cancel() => RequestClose?.Invoke(this, false);
 
     // ----- Step 1: Period + Label (build-order step 6) -----
 
-    [ObservableProperty]
-    private DateTime? periodStart;
+    public DateTime? PeriodStart
+    {
+        get => _periodStart;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_periodStart, value)) return;
+            this.RaisePropertyChanging();
+            _periodStart = value;
+            OnPeriodStartChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    [ObservableProperty]
-    private DateTime? periodEnd;
+    private DateTime? _periodStart;
+
+    public DateTime? PeriodEnd
+    {
+        get => _periodEnd;
+        set
+        {
+            if (EqualityComparer<DateTime?>.Default.Equals(_periodEnd, value)) return;
+            this.RaisePropertyChanging();
+            _periodEnd = value;
+            OnPeriodEndChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private DateTime? _periodEnd;
 
     /// <summary>Shown as this run's own title text wherever it's listed later (see
     /// PayrollRun.Label's own doc comment for the "auto-filled, freely editable"
@@ -184,8 +230,20 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// PeriodStart/PeriodEnd until a person types something that doesn't match the last
     /// auto-generated value, at which point _labelManuallyEdited latches true and this
     /// stops being touched automatically.</summary>
-    [ObservableProperty]
-    private string label = string.Empty;
+    public string Label
+    {
+        get => _label;
+        set
+        {
+            if (EqualityComparer<string>.Default.Equals(_label, value)) return;
+            this.RaisePropertyChanging();
+            _label = value;
+            OnLabelChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private string _label = string.Empty;
 
     /// <summary>The last value UpdateAutoLabel itself wrote to Label -- OnLabelChanged
     /// compares the newly-typed value against this (not against some fixed "was it ever
@@ -196,19 +254,19 @@ public partial class PayrollWizardViewModel : ObservableObject
 
     private bool _labelManuallyEdited;
 
-    partial void OnPeriodStartChanged(DateTime? value)
+    private void OnPeriodStartChanged(DateTime? value)
     {
         UpdateAutoLabel();
         NotifyPeriodAndLabelValidity();
     }
 
-    partial void OnPeriodEndChanged(DateTime? value)
+    private void OnPeriodEndChanged(DateTime? value)
     {
         UpdateAutoLabel();
         NotifyPeriodAndLabelValidity();
     }
 
-    partial void OnLabelChanged(string value)
+    private void OnLabelChanged(string value)
     {
         _labelManuallyEdited = value != _lastAutoLabel;
         NotifyPeriodAndLabelValidity();
@@ -216,9 +274,9 @@ public partial class PayrollWizardViewModel : ObservableObject
 
     private void NotifyPeriodAndLabelValidity()
     {
-        OnPropertyChanged(nameof(IsPeriodAndLabelValid));
-        OnPropertyChanged(nameof(PeriodValidationMessage));
-        NextCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(IsPeriodAndLabelValid));
+        this.RaisePropertyChanged(nameof(PeriodValidationMessage));
+        RequeryCanExecute();
     }
 
     /// <summary>Regenerates Label from PeriodStart/PeriodEnd (e.g. "May 1-15, 2026" -- see
@@ -285,15 +343,33 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// shared ViewModel instance.</summary>
     public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
 
+    /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
+    /// what this dialog's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).</summary>
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
+
     /// <summary>Same comma-separated Employee ID/first name/last name/department matching
     /// as PayslipScopeViewModel.SearchText -- see EmployeeTreeSearchFilter, shared between
     /// both.</summary>
-    [ObservableProperty]
-    private string searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (EqualityComparer<string>.Default.Equals(_searchText, value)) return;
+            this.RaisePropertyChanging();
+            _searchText = value;
+            OnSearchTextChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnSearchTextChanged(string value) => EmployeeTreeSearchFilter.Apply(Departments, value);
+    private string _searchText = string.Empty;
 
-    [RelayCommand]
+    private void OnSearchTextChanged(string value) =>
+        EmployeeTreeSearchFilter.Apply(Departments, value, VisibleDepartments);
+
+    public ReactiveCommand<RxVoid, RxVoid> LoadEmployeeTreeCommand { get; }
+
     private async Task LoadEmployeeTreeAsync()
     {
         Departments.Clear();
@@ -311,7 +387,7 @@ public partial class PayrollWizardViewModel : ObservableObject
 
         NotifyEmployeeSelectionChanged();
 
-        EmployeeTreeSearchFilter.Apply(Departments, SearchText);
+        EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
     }
 
     private void OnEmployeeNodeSelectionChanged(object? sender, PropertyChangedEventArgs e)
@@ -323,12 +399,9 @@ public partial class PayrollWizardViewModel : ObservableObject
 
     private void NotifyEmployeeSelectionChanged()
     {
-        OnPropertyChanged(nameof(SelectedEmployeeCount));
-        OnPropertyChanged(nameof(SelectionScopeText));
-        SelectAllTreeCommand.NotifyCanExecuteChanged();
-        ClearTreeSelectionCommand.NotifyCanExecuteChanged();
-        NextCommand.NotifyCanExecuteChanged();
-        SavePayrollGroupCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
+        this.RaisePropertyChanged(nameof(SelectionScopeText));
+        RequeryCanExecute();
     }
 
     public int SelectedEmployeeCount => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
@@ -364,7 +437,8 @@ public partial class PayrollWizardViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanSelectAllTree))]
+    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand { get; }
+
     private void SelectAllTree()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
@@ -373,7 +447,8 @@ public partial class PayrollWizardViewModel : ObservableObject
 
     private bool CanSelectAllTree() => SelectedEmployeeCount < TotalEmployeeCount;
 
-    [RelayCommand(CanExecute = nameof(CanClearTreeSelection))]
+    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand { get; }
+
     private void ClearTreeSelection()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
@@ -409,19 +484,29 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// between runs since a person can't edit anything on this grid directly.</summary>
     public ObservableCollection<PayrollResult> ReviewResults { get; } = new();
 
-    [ObservableProperty]
-    private bool isCalculating;
+    public bool IsCalculating
+    {
+        get => _isCalculating;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isCalculating, value)) return;
+            this.RaisePropertyChanging();
+            _isCalculating = value;
+            OnIsCalculatingChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
+
+    private bool _isCalculating;
 
     /// <summary>Notifies IsReviewReady (see that property's own doc comment) alongside the
     /// same Back/Next/Save re-gating OnIsSavingChanged already does for IsSaving below --
     /// a calculation in flight blocks navigating away from Step 3 and blocks Save the same
     /// way a save in flight blocks navigating away and blocks a second Save.</summary>
-    partial void OnIsCalculatingChanged(bool value)
+    private void OnIsCalculatingChanged(bool value)
     {
-        OnPropertyChanged(nameof(IsReviewReady));
-        BackCommand.NotifyCanExecuteChanged();
-        NextCommand.NotifyCanExecuteChanged();
-        SavePayrollGroupCommand.NotifyCanExecuteChanged();
+        this.RaisePropertyChanged(nameof(IsReviewReady));
+        RequeryCanExecute();
     }
 
     /// <summary>Same "explain the actual reason inline" idea as PeriodValidationMessage/
@@ -430,10 +515,22 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// CalculateReviewAsync attempt, not just on success, so retrying (by clicking Back
     /// then Next again) doesn't leave a stale message on screen underneath a fresh
     /// one.</summary>
-    [ObservableProperty]
-    private string? calculationErrorMessage;
+    public string? CalculationErrorMessage
+    {
+        get => _calculationErrorMessage;
+        set
+        {
+            if (EqualityComparer<string?>.Default.Equals(_calculationErrorMessage, value)) return;
+            this.RaisePropertyChanging();
+            _calculationErrorMessage = value;
+            OnCalculationErrorMessageChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnCalculationErrorMessageChanged(string? value) => OnPropertyChanged(nameof(IsReviewReady));
+    private string? _calculationErrorMessage;
+
+    private void OnCalculationErrorMessageChanged(string? value) => this.RaisePropertyChanged(nameof(IsReviewReady));
 
     /// <summary>True once there's an actual grid to show -- neither still calculating nor
     /// failed. What PayrollWizardDialog.xaml's DataGrid (and the totals strip under it)
@@ -522,16 +619,28 @@ public partial class PayrollWizardViewModel : ObservableObject
         finally
         {
             IsCalculating = false;
-            OnPropertyChanged(nameof(TotalNetPay));
-            OnPropertyChanged(nameof(TotalGrossPay));
-            OnPropertyChanged(nameof(TotalDeductions));
+            this.RaisePropertyChanged(nameof(TotalNetPay));
+            this.RaisePropertyChanged(nameof(TotalGrossPay));
+            this.RaisePropertyChanged(nameof(TotalDeductions));
         }
     }
 
-    [ObservableProperty]
-    private bool isSaving;
+    public bool IsSaving
+    {
+        get => _isSaving;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isSaving, value)) return;
+            this.RaisePropertyChanging();
+            _isSaving = value;
+            OnIsSavingChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnIsSavingChanged(bool value) => SavePayrollGroupCommand.NotifyCanExecuteChanged();
+    private bool _isSaving;
+
+    private void OnIsSavingChanged(bool value) => RequeryCanExecute();
 
     /// <summary>Null until SavePayrollGroupCommand succeeds; the created PayrollRun
     /// afterward, Id/CreatedAt included (see IPayrollRunRepository.CreateAsync). Not an
@@ -567,8 +676,13 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// there's nothing wrong -- cleared at the start of every SavePayrollGroupAsync
     /// attempt, not just on success, so retrying after a failure doesn't leave the old
     /// message on screen underneath a fresh one.</summary>
-    [ObservableProperty]
-    private string? saveErrorMessage;
+    public string? SaveErrorMessage
+    {
+        get => _saveErrorMessage;
+        set => this.RaiseAndSetIfChanged(ref _saveErrorMessage, value);
+    }
+
+    private string? _saveErrorMessage;
 
     /// <summary>Builds and persists one PayrollRun from this step's own Label/PeriodStart/
     /// PeriodEnd (Step 1) and GetSelectedEmployees() (Step 2) -- deliberately not from
@@ -587,7 +701,8 @@ public partial class PayrollWizardViewModel : ObservableObject
     /// list backs both run.Employees (as Pins) and SavedEmployees (as Employee objects) --
     /// see SavedEmployees' own doc comment for why capturing it here, instead of leaving
     /// PayrollWizardDialog.SelectedEmployees as a live re-read, matters.</summary>
-    [RelayCommand(CanExecute = nameof(CanSavePayrollGroup))]
+    public ReactiveCommand<RxVoid, RxVoid> SavePayrollGroupCommand { get; }
+
     private async Task SavePayrollGroupAsync()
     {
         IsSaving = true;
@@ -614,9 +729,9 @@ public partial class PayrollWizardViewModel : ObservableObject
             // per-employee seed/compute loop would.
             SavedRun = await _payrollRunRepository.CreateAsync(run);
             SavedEmployees = selectedEmployees;
-            OnPropertyChanged(nameof(SavedRun));
-            OnPropertyChanged(nameof(SavedEmployees));
-            OnPropertyChanged(nameof(SavedRunSummary));
+            this.RaisePropertyChanged(nameof(SavedRun));
+            this.RaisePropertyChanged(nameof(SavedEmployees));
+            this.RaisePropertyChanged(nameof(SavedRunSummary));
         }
         catch (Exception ex)
         {

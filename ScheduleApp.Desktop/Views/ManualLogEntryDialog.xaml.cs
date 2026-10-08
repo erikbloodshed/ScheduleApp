@@ -42,7 +42,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
     /// actually unwinds, and until it does, that query is still genuinely running
     /// against the shared, app-lifetime-scoped ScheduleDbContext. A new call fired
     /// quickly enough on top of that -- most easily hit via this dialog's own two
-    /// SelectedDateChanged firings during the calendar-tile/Edit-mode constructors' own
+    /// DateTimeChanged firings during the calendar-tile/Edit-mode constructors' own
     /// EmployeeBox/DateBox prefill, both against the same DbContext instance
     /// IAttendanceLogRepository wraps -- could start a second, genuinely concurrent
     /// GetLogsAsync before the first one actually finished unwinding, which is exactly
@@ -120,7 +120,7 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
         _employees = employees.ToList();
         _attendanceLogRepository = attendanceLogRepository;
 
-        DateBox.DateTime = DateTime.Today; // fires SelectedDateChanged -> RefreshMachinePunchesAsync, a no-op here since no employee is resolved yet
+        DateBox.DateTime = DateTime.Today; // fires DateTimeChanged -> RefreshMachinePunchesAsync, a no-op here since no employee is resolved yet
         EnteredByBox.Text = Environment.UserName;
 
         // Called once here, not in the Edit-mode/calendar-tile constructors below --
@@ -303,8 +303,16 @@ public partial class ManualLogEntryDialog : Controls.AppWindow, IDisposable
             _machinePunchesFetchTask = RefreshMachinePunchesAsync();
     }
 
-    private void DateBox_DateTimeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
+    /// <summary>DateTimeEdit raises this while the XAML is still loading (it settles its own
+    /// initial value), before MachinePunchesList and the rest exist -- those changes are
+    /// skipped; each constructor's own DateBox assignment comes after InitializeComponent.</summary>
+    private void DateBox_DateTimeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsInitialized)
+            return;
+
         _machinePunchesFetchTask = RefreshMachinePunchesAsync();
+    }
 
     /// <summary>Keeps ReasonBox's default in step with whichever punch type is
     /// currently selected -- see DefaultTextBox.Refresh, which no-ops once the

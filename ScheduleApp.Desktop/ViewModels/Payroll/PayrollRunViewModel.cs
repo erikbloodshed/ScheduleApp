@@ -1,6 +1,4 @@
 using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
@@ -8,6 +6,8 @@ using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
@@ -49,13 +49,12 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// NewPayrollRun and LoadPayrollGroupAsync genuinely need it (see each method's own final
 /// line/onError callback), so it's included here as a correction rather than followed to the
 /// letter.</summary>
-public partial class PayrollRunViewModel : ObservableObject
+public class PayrollRunViewModel : ViewModelBase
 {
     private readonly MainViewModel _mainViewModel;
     private readonly ActiveRosterProvider _rosterProvider;
     private readonly IPayrollRunRepository _payrollRunRepository;
     private readonly IPayrollComputationService _payrollComputationService;
-    private readonly IStatusBarService _statusBarService;
 
     /// <summary>Shared with PayrollViewModel and its other children -- see PayrollViewModel's
     /// own _busy doc comment for why this is one instance, not one per child.</summary>
@@ -76,12 +75,12 @@ public partial class PayrollRunViewModel : ObservableObject
         IStatusBarService statusBarService,
         AttendanceBusyState busy,
         PayrollScopeState scope)
+        : base(statusBarService)
     {
         _mainViewModel = mainViewModel;
         _rosterProvider = rosterProvider;
         _payrollRunRepository = payrollRunRepository;
         _payrollComputationService = payrollComputationService;
-        _statusBarService = statusBarService;
         _busy = busy;
         _scope = scope;
 
@@ -108,6 +107,9 @@ public partial class PayrollRunViewModel : ObservableObject
             if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
             NotifyRunCommands();
         };
+
+        NewPayrollRunCommand = ReactiveCommand.Create(NewPayrollRun, CanExecuteFrom(CanNewPayrollRun));
+        LoadPayrollGroupCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(LoadPayrollGroupAsync), CanExecuteFrom(CanLoadPayrollGroup));
     }
 
     /// <summary>The two command notifications gated on _busy.IsRunning that this class owns --
@@ -117,8 +119,7 @@ public partial class PayrollRunViewModel : ObservableObject
     /// NotifyAdjustmentCommands() already follow.</summary>
     private void NotifyRunCommands()
     {
-        NewPayrollRunCommand.NotifyCanExecuteChanged();
-        LoadPayrollGroupCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     /// <summary>Build-order step 9's own entry point for starting a payroll run --
@@ -185,7 +186,8 @@ public partial class PayrollRunViewModel : ObservableObject
     /// operation completed" race _busy exists to prevent (see _busy's own doc comment),
     /// just via the wizard's tree load instead of PayslipScopeDialog's.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanNewPayrollRun))]
+    public ReactiveCommand<RxVoid, RxVoid> NewPayrollRunCommand { get; }
+
     private void NewPayrollRun()
     {
         var wizardDialog = new PayrollWizardDialog(
@@ -226,7 +228,7 @@ public partial class PayrollRunViewModel : ObservableObject
         _scope.ActivePayrollRunId = run.Id;
         _mainViewModel.SelectedEmployee = employees[0];
 
-        _statusBarService.ShowSuccess($"Saved payroll run: {run.Label}");
+        StatusBar.ShowSuccess($"Saved payroll run: {run.Label}");
     }
 
     /// <summary>Same !_busy.IsRunning-only guard as PayrollViewModel's own CanPrintPayslips/
@@ -283,7 +285,8 @@ public partial class PayrollRunViewModel : ObservableObject
     /// app-lifetime-scoped ScheduleDbContext instance every other dialog on this tab
     /// already reads through, so letting either happen mid-refresh would risk the same
     /// race _busy exists to prevent.</summary>
-    [RelayCommand(CanExecute = nameof(CanLoadPayrollGroup))]
+    public ReactiveCommand<RxVoid, RxVoid> LoadPayrollGroupCommand { get; }
+
     private async Task LoadPayrollGroupAsync()
     {
         var listDialog = new LoadPayrollGroupDialog(_payrollRunRepository)
@@ -308,7 +311,7 @@ public partial class PayrollRunViewModel : ObservableObject
                 .Where(e => e is not null)
                 .Select(e => e!)];
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not load payroll group"));
+        onError: ex => ShowFailure(ex, "Could not load payroll group"));
 
         // null means the block above threw and onError already reported it -- see this
         // method's own doc comment for why that's distinct from an empty (but non-null)
@@ -317,7 +320,7 @@ public partial class PayrollRunViewModel : ObservableObject
 
         if (employees.Count == 0)
         {
-            _statusBarService.ShowError(
+            StatusBar.ShowError(
                 $"None of \"{run.Label}\"'s employees could be found -- they may have been deleted.",
                 "Could not load payroll group");
             return;
@@ -354,7 +357,7 @@ public partial class PayrollRunViewModel : ObservableObject
         _scope.ActivePayrollRunId = run.Id;
         _mainViewModel.SelectedEmployee = employees[0];
 
-        _statusBarService.ShowSuccess($"Loaded payroll run: {run.Label}");
+        StatusBar.ShowSuccess($"Loaded payroll run: {run.Label}");
     }
 
     /// <summary>Same !_busy.IsRunning-only guard as CanNewPayrollRun above, and for the

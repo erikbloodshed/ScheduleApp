@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using System.Windows;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.ViewModels;
@@ -68,22 +69,22 @@ public partial class PayslipScopeDialog : Controls.AppWindow
 
         Title = title;
         DescriptionText.Text = description;
-        ConfirmButton.Content = confirmButtonText;
+        ConfirmButton.Label = confirmButtonText;
         ConfirmButton.ToolTip = confirmButtonTooltip;
 
-        PeriodStartPicker.SelectedDate = defaultPeriodStart;
-        PeriodEndPicker.SelectedDate = defaultPeriodEnd;
+        PeriodStartPicker.DateTime = defaultPeriodStart;
+        PeriodEndPicker.DateTime = defaultPeriodEnd;
 
         // presetSelection defaults to null -- today's "check everyone" tree, unchanged for
         // every existing caller. PrintPayslipsAsync/ExportPayrollReportAsync are the only
         // callers that ever pass one, and only when they have an active payroll group to
         // hand in -- see PayslipScopeViewModel.LoadEmployeeTreeAsync's own doc comment.
-        Loaded += async (_, _) => await _scope.LoadEmployeeTreeCommand.ExecuteAsync(presetSelection);
+        Loaded += async (_, _) => await _scope.LoadEmployeeTreeCommand.Execute(presetSelection);
     }
 
     private void ConfirmButton_Click(object sender, RoutedEventArgs e)
     {
-        if (PeriodStartPicker.SelectedDate is not DateTime start || PeriodEndPicker.SelectedDate is not DateTime end)
+        if (PeriodStartPicker.DateTime?.Date is not DateTime start || PeriodEndPicker.DateTime?.Date is not DateTime end)
         {
             Warn("Choose a period start and end date.");
             return;

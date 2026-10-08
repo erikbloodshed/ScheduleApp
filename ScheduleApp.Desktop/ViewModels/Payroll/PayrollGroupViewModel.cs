@@ -1,16 +1,14 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Windows;
-using System.Windows.Data;
 using System.Windows.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
@@ -39,7 +37,7 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// <see cref="PayrollSummaryViewModel.EmployeeNetPayComputed"/> event for the first case (see
 /// this constructor), and by calling <see cref="PayrollSummaryViewModel.RefreshAsync"/>
 /// directly for the second (see RemoveEmployeeFromGroupAsync below).</summary>
-public partial class PayrollGroupViewModel : ObservableObject
+public class PayrollGroupViewModel : ViewModelBase
 {
     private readonly MainViewModel _mainViewModel;
 
@@ -53,7 +51,6 @@ public partial class PayrollGroupViewModel : ObservableObject
     private readonly ActiveRosterProvider _rosterProvider;
     private readonly IPayrollComputationService _payrollComputationService;
     private readonly IPayrollRunRepository _payrollRunRepository;
-    private readonly IStatusBarService _statusBarService;
 
     /// <summary>Shared with PayrollViewModel and its other children -- see
     /// PayrollViewModel's own _busy doc comment for why this is one instance, not one per
@@ -173,12 +170,12 @@ public partial class PayrollGroupViewModel : ObservableObject
         PayrollScopeState scope,
         PayrollSummaryViewModel summary,
         AttendanceDataVersion dataVersion)
+        : base(statusBarService)
     {
         _mainViewModel = mainViewModel;
         _rosterProvider = rosterProvider;
         _payrollComputationService = payrollComputationService;
         _payrollRunRepository = payrollRunRepository;
-        _statusBarService = statusBarService;
         _busy = busy;
         _scope = scope;
         _summary = summary;
@@ -241,25 +238,27 @@ public partial class PayrollGroupViewModel : ObservableObject
         // typing in the search box narrows the grid without touching the underlying rows
         // (RefreshPayrollGroupRowsAsync/the EmployeeNetPayComputed handler above both still
         // read/write PayrollGroupRows itself, same as before). The ObservableCollection's own
-        // Add/Clear calls raise CollectionChanged, which the default view picks up on its own
-        // -- only a search-text change needs an explicit Refresh() (see
+        // Add/Clear calls raise CollectionChanged, which the filtered collection picks up on
+        // its own -- only a search-text change needs an explicit Refresh() (see
         // OnPayrollGroupSearchTextChanged), same split SummaryRowsView/FilterSummaryRow
         // already follows.
-        PayrollGroupRowsView = CollectionViewSource.GetDefaultView(PayrollGroupRows);
-        PayrollGroupRowsView.Filter = FilterPayrollGroupRow;
-
-        // PayrollGroupGrid has CanUserSortColumns="False" (a flat table, not the tree it
-        // replaced, so there's no natural grouping order to preserve by disabling sort the way
-        // the tree's own department/employee order does) -- this SortDescription is what
-        // actually keeps the grid alphabetical by employee name instead of
-        // RefreshPayrollGroupRowsAsync's own BatchScopeEmployees enumeration order (itself
-        // following the tree's department-then-employee order, not a name order).
-        // ListCollectionView applies SortDescriptions on every Add, so this stays correct as
-        // RefreshPayrollGroupRowsAsync clears and repopulates PayrollGroupRows on each
-        // period/scope change, with no extra Refresh() call needed the way
-        // OnPayrollGroupSearchTextChanged needs one for the Filter above.
-        PayrollGroupRowsView.SortDescriptions.Add(
-            new SortDescription(nameof(PayrollGroupRow.EmployeeName), ListSortDirection.Ascending));
+        //
+        // PayrollGroupGrid doesn't let the user sort (a flat table, not the tree it replaced,
+        // so there's no natural grouping order to preserve by disabling sort the way the
+        // tree's own department/employee order does) -- the comparer is what actually keeps
+        // the grid alphabetical by employee name instead of RefreshPayrollGroupRowsAsync's own
+        // BatchScopeEmployees enumeration order (itself following the tree's
+        // department-then-employee order, not a name order). FilteredCollection inserts each
+        // added row in order, so this stays correct as RefreshPayrollGroupRowsAsync clears and
+        // repopulates PayrollGroupRows on each period/scope change, with no extra Refresh()
+        // call needed the way OnPayrollGroupSearchTextChanged needs one for the filter.
+        PayrollGroupRowsView = new FilteredCollection<PayrollGroupRow>(
+            PayrollGroupRows,
+            Comparer<PayrollGroupRow>.Create((a, b) =>
+                StringComparer.CurrentCulture.Compare(a.EmployeeName, b.EmployeeName)))
+        {
+            Filter = FilterPayrollGroupRow,
+        };
 
         // Same "grid binds to a live-filtered view over the real collection" shape as
         // PayrollGroupRowsView just above, for AvailableEmployeeRows (the "Not in group" grid
@@ -267,10 +266,13 @@ public partial class PayrollGroupViewModel : ObservableObject
         // PayrollGroupSearchText's own search box rather than getting one of its own --
         // OnPayrollGroupSearchTextChanged below Refreshes both views together, so typing
         // narrows the whole panel, not just whichever grid happens to be on top.
-        AvailableEmployeeRowsView = CollectionViewSource.GetDefaultView(AvailableEmployeeRows);
-        AvailableEmployeeRowsView.Filter = FilterAvailableEmployeeRow;
-        AvailableEmployeeRowsView.SortDescriptions.Add(
-            new SortDescription(nameof(AvailableEmployeeRow.EmployeeName), ListSortDirection.Ascending));
+        AvailableEmployeeRowsView = new FilteredCollection<AvailableEmployeeRow>(
+            AvailableEmployeeRows,
+            Comparer<AvailableEmployeeRow>.Create((a, b) =>
+                StringComparer.CurrentCulture.Compare(a.EmployeeName, b.EmployeeName)))
+        {
+            Filter = FilterAvailableEmployeeRow,
+        };
 
         // Keeps TotalNetPay live as PayrollGroupRows itself changes shape -- same "subscribe
         // once per child as it's added, no unsubscribe needed since a discarded row taking its
@@ -290,7 +292,7 @@ public partial class PayrollGroupViewModel : ObservableObject
                     row.PropertyChanged += (_, rowArgs) =>
                     {
                         if (rowArgs.PropertyName == nameof(PayrollGroupRow.NetPay))
-                            OnPropertyChanged(nameof(TotalNetPay));
+                            this.RaisePropertyChanged(nameof(TotalNetPay));
                     };
 
             // Covers both the Add case above (a freshly-added row already carries its final
@@ -302,7 +304,7 @@ public partial class PayrollGroupViewModel : ObservableObject
             // on top of whatever the loop above just wired up for future NetPay changes on the
             // new rows themselves (e.g. the EmployeeNetPayComputed handler's opportunistic
             // per-row patch).
-            OnPropertyChanged(nameof(TotalNetPay));
+            this.RaisePropertyChanged(nameof(TotalNetPay));
         };
 
         // Replaces the four CommunityToolkit.Mvvm-generated OnPeriodStartChanged/
@@ -354,6 +356,11 @@ public partial class PayrollGroupViewModel : ObservableObject
         // "program start" hook to clear this from, because construction itself IS that start.
         if (_scope.BatchScopeEmployees.Count > 0)
             _scope.BatchScopeEmployees = [];
+
+        SelectBatchEmployeeCommand = ReactiveCommand.Create<Employee>(SelectBatchEmployee);
+        RemoveEmployeeFromGroupCommand = ReactiveCommand.CreateFromTask<Employee?>(p => RunSafelyAsync(() => RemoveEmployeeFromGroupAsync(p)), CanExecuteFrom(CanEditGroupMembership));
+        AddEmployeeToGroupCommand = ReactiveCommand.CreateFromTask<Employee?>(p => RunSafelyAsync(() => AddEmployeeToGroupAsync(p)), CanExecuteFrom(CanEditGroupMembership));
+        AddEmployeesToGroupCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(AddEmployeesToGroupAsync), CanExecuteFrom(CanEditGroupMembership));
     }
 
     /// <summary>One PayrollGroupRow per BatchScopeEmployees entry — what PayrollPage's
@@ -380,12 +387,10 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// forwarding) instead of PayrollGroupRows directly -- same "grid binds to a live-filtered
     /// view over the real collection" shape as ReportViewModel.SummaryRowsView, just filtered
     /// on PayrollGroupSearchText (see FilterPayrollGroupRow) rather than the report-scope
-    /// tree's checked state. Built once in the constructor, since CollectionViewSource.
-    /// GetDefaultView returns the same view instance for a given source collection every time
-    /// it's asked -- there's nothing to rebuild when PayrollGroupRows itself is
-    /// cleared/repopulated by RefreshPayrollGroupRowsAsync, only when the *filter* criterion
-    /// (the search text) changes.</summary>
-    public ICollectionView PayrollGroupRowsView { get; }
+    /// tree's checked state. Built once in the constructor: it follows PayrollGroupRows
+    /// itself, so there's nothing to rebuild when RefreshPayrollGroupRowsAsync clears and
+    /// repopulates it, only when the *filter* criterion (the search text) changes.</summary>
+    public FilteredCollection<PayrollGroupRow> PayrollGroupRowsView { get; }
 
     /// <summary>One AvailableEmployeeRow per roster employee NOT in BatchScopeEmployees --
     /// what PayrollPage's "Not in group" DataGrid (Employee Name / Department, under
@@ -400,7 +405,7 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// <summary>Same "grid binds to a live-filtered view over the real collection" role as
     /// PayrollGroupRowsView, for AvailableEmployeeRows instead of PayrollGroupRows -- see that
     /// property's own doc comment.</summary>
-    public ICollectionView AvailableEmployeeRowsView { get; }
+    public FilteredCollection<AvailableEmployeeRow> AvailableEmployeeRowsView { get; }
 
     /// <summary>Sum of every row's own NetPay across the whole payroll group -- what
     /// PayrollPage's totals strip under PayrollGroupGrid binds to. Deliberately sums
@@ -437,15 +442,27 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// failed run doesn't leave the status bar stuck reading "Computing…". Deliberately does
     /// NOT drive anything in the Payroll Group panel itself (the grid's Net Pay header is a
     /// plain, static string) -- only the status bar shows this progress.</summary>
-    [ObservableProperty]
-    private bool isPayrollGroupLoading;
+    public bool IsPayrollGroupLoading
+    {
+        get => _isPayrollGroupLoading;
+        set
+        {
+            if (EqualityComparer<bool>.Default.Equals(_isPayrollGroupLoading, value)) return;
+            this.RaisePropertyChanging();
+            _isPayrollGroupLoading = value;
+            OnIsPayrollGroupLoadingChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnIsPayrollGroupLoadingChanged(bool value)
+    private bool _isPayrollGroupLoading;
+
+    private void OnIsPayrollGroupLoadingChanged(bool value)
     {
         if (value)
-            _statusBarService.ShowProgress("Computing payroll group…", PayrollGroupLoadPercent);
+            StatusBar.ShowProgress("Computing payroll group…", PayrollGroupLoadPercent);
         else
-            _statusBarService.ClearProgress();
+            StatusBar.ClearProgress();
     }
 
     /// <summary>0-100 -- how far RefreshPayrollGroupRowsAsync/AddEmployeesToGroupAsync's
@@ -454,13 +471,25 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// is true; the status bar's left-aligned progress bar (see the handler right after this
     /// property) is what actually surfaces it, since PayrollGroupRows itself isn't touched (and
     /// so can't show per-row progress) until the whole batch is done.</summary>
-    [ObservableProperty]
-    private int payrollGroupLoadPercent;
+    public int PayrollGroupLoadPercent
+    {
+        get => _payrollGroupLoadPercent;
+        set
+        {
+            if (EqualityComparer<int>.Default.Equals(_payrollGroupLoadPercent, value)) return;
+            this.RaisePropertyChanging();
+            _payrollGroupLoadPercent = value;
+            OnPayrollGroupLoadPercentChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnPayrollGroupLoadPercentChanged(int value)
+    private int _payrollGroupLoadPercent;
+
+    private void OnPayrollGroupLoadPercentChanged(int value)
     {
         if (IsPayrollGroupLoading)
-            _statusBarService.ShowProgress("Computing payroll group…", value);
+            StatusBar.ShowProgress("Computing payroll group…", value);
     }
 
     /// <summary>Free-text filter for the Payroll Group table -- comma-separated terms, each
@@ -474,10 +503,22 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// elsewhere -- narrows what's shown in PayrollGroupRowsView, never touches
     /// PayrollGroupRows itself or which employee is selected. Not persisted across sessions,
     /// same as EmployeeTreeSearchText.</summary>
-    [ObservableProperty]
-    private string payrollGroupSearchText = string.Empty;
+    public string PayrollGroupSearchText
+    {
+        get => _payrollGroupSearchText;
+        set
+        {
+            if (EqualityComparer<string>.Default.Equals(_payrollGroupSearchText, value)) return;
+            this.RaisePropertyChanging();
+            _payrollGroupSearchText = value;
+            OnPayrollGroupSearchTextChanged(value);
+            this.RaisePropertyChanged();
+        }
+    }
 
-    partial void OnPayrollGroupSearchTextChanged(string value)
+    private string _payrollGroupSearchText = string.Empty;
+
+    private void OnPayrollGroupSearchTextChanged(string value)
     {
         PayrollGroupRowsView.Refresh();
         AvailableEmployeeRowsView.Refresh();
@@ -564,7 +605,7 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// needs it.</summary>
     private void OnBatchScopeEmployeesChanged()
     {
-        OnPropertyChanged(nameof(HasBatchScope));
+        this.RaisePropertyChanged(nameof(HasBatchScope));
 
         // Cheap in-memory re-filter of whatever _fullRoster already holds -- correct for every
         // case, suppressed or not: a suppressed single-row Add/Remove only moves one employee
@@ -592,9 +633,7 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// read _scope.ActivePayrollRunId directly if a future change needs it.</summary>
     private void OnActivePayrollRunIdChanged()
     {
-        RemoveEmployeeFromGroupCommand.NotifyCanExecuteChanged();
-        AddEmployeesToGroupCommand.NotifyCanExecuteChanged();
-        AddEmployeeToGroupCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     /// <summary>Gate and defer counterpart to PayrollSummaryViewModel's own RequestRefresh(),
@@ -727,7 +766,7 @@ public partial class PayrollGroupViewModel : ObservableObject
         onError: ex =>
         {
             succeeded = false;
-            _statusBarService.ShowError(ex.Message, "Could not refresh payroll group");
+            ShowFailure(ex, "Could not refresh payroll group");
         });
 
         if (succeeded)
@@ -865,7 +904,7 @@ public partial class PayrollGroupViewModel : ObservableObject
             _fullRoster = [.. departments.SelectMany(d => d.Employees), .. unassigned];
             RebuildAvailableEmployeeRows();
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not load employee roster"));
+        onError: ex => ShowFailure(ex, "Could not load employee roster"));
     }
 
     /// <summary>Rebuilds AvailableEmployeeRows from _fullRoster minus whoever's currently in
@@ -901,9 +940,7 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// gave away its last two entries -- see the facade's own constructor doc comment.</summary>
     private void NotifyGroupCommands()
     {
-        RemoveEmployeeFromGroupCommand.NotifyCanExecuteChanged();
-        AddEmployeesToGroupCommand.NotifyCanExecuteChanged();
-        AddEmployeeToGroupCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     /// <summary>Bound to each PayrollGroup table row's click (see PayrollPage.xaml.cs's
@@ -912,7 +949,8 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// exact same RequestRefresh() cascade on PayrollSummaryViewModel. No CanExecute — clicking
     /// a row doesn't touch _busy or the database directly, it only changes which employee is
     /// selected (same as the tree click was never disabled while _busy.IsRunning).</summary>
-    [RelayCommand]
+    public ReactiveCommand<Employee, RxVoid> SelectBatchEmployeeCommand { get; }
+
     private void SelectBatchEmployee(Employee employee) => _mainViewModel.SelectedEmployee = employee;
 
     /// <summary>Right-click "Remove from group" on a PayrollGroupGrid row. Requires an active
@@ -939,7 +977,8 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// IsRunning instead of toggling it again. Keeping everything nested means one Remove click
     /// flips IsRunning (and re-notifies every gated button's CanExecute) once, not
     /// twice.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditGroupMembership))]
+    public ReactiveCommand<Employee?, RxVoid> RemoveEmployeeFromGroupCommand { get; }
+
     private async Task RemoveEmployeeFromGroupAsync(Employee? employee)
     {
         // Null guard: CommandParameter binding can resolve to null if something goes wrong
@@ -985,7 +1024,7 @@ public partial class PayrollGroupViewModel : ObservableObject
                 await _summary.RefreshAsync();
             }
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not remove employee"));
+        onError: ex => ShowFailure(ex, "Could not remove employee"));
     }
 
     /// <summary>Right-click "Add to group" on an AvailableEmployeeGrid row -- the
@@ -1013,7 +1052,8 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// "local flag set only after the risky work succeeds" convention AddEmployeesToGroupAsync's
     /// own addedEmployees follows -- so a failed round trip (caught by onError below) skips the
     /// success toast instead of falsely confirming an add that never happened.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditGroupMembership))]
+    public ReactiveCommand<Employee?, RxVoid> AddEmployeeToGroupCommand { get; }
+
     private async Task AddEmployeeToGroupAsync(Employee? employee)
     {
         // Null guard: CommandParameter binding can resolve to null if something goes wrong
@@ -1044,10 +1084,10 @@ public partial class PayrollGroupViewModel : ObservableObject
             _scope.BatchScopeEmployees = [.. _scope.BatchScopeEmployees, employee];
             _suppressGroupRefreshOnScopeChange = false;
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not add employee"));
+        onError: ex => ShowFailure(ex, "Could not add employee"));
 
         if (added)
-            _statusBarService.ShowSuccess($"Added {employee.DisplayName} to the group.");
+            StatusBar.ShowSuccess($"Added {employee.DisplayName} to the group.");
     }
 
     /// <summary>Opens a department/employee checkbox tree (same PayrollWizardDialog Step 2
@@ -1063,7 +1103,8 @@ public partial class PayrollGroupViewModel : ObservableObject
     /// RemoveEmployeeFromGroupAsync). Opens the tree dialog outside the busy window, same
     /// "dialog shown before _busy.RunAsync starts" pattern PayrollRunViewModel's own NewPayrollRun
     /// follows for PayrollWizardDialog itself.</summary>
-    [RelayCommand(CanExecute = nameof(CanEditGroupMembership))]
+    public ReactiveCommand<RxVoid, RxVoid> AddEmployeesToGroupCommand { get; }
+
     private async Task AddEmployeesToGroupAsync()
     {
         if (_scope.ActivePayrollRunId is not { } runId) return;
@@ -1090,7 +1131,7 @@ public partial class PayrollGroupViewModel : ObservableObject
             // for this exact same round trip a second time.
             _fullRoster = [.. departments.SelectMany(d => d.Employees), .. unassigned];
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not load employee list"));
+        onError: ex => ShowFailure(ex, "Could not load employee list"));
 
         if (treeGroups.Count == 0) return;
 
@@ -1113,7 +1154,7 @@ public partial class PayrollGroupViewModel : ObservableObject
 
         if (toAdd.Count == 0)
         {
-            _statusBarService.ShowSuccess("No new employees selected.");
+            StatusBar.ShowSuccess("No new employees selected.");
             return;
         }
 
@@ -1199,7 +1240,7 @@ public partial class PayrollGroupViewModel : ObservableObject
                 IsPayrollGroupLoading = false;
             }
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not add employees"));
+        onError: ex => ShowFailure(ex, "Could not add employees"));
 
         if (addedEmployees is null || addedEmployees.Count == 0) return;
 
@@ -1212,7 +1253,7 @@ public partial class PayrollGroupViewModel : ObservableObject
         _scope.BatchScopeEmployees = [.. _scope.BatchScopeEmployees, .. addedEmployees];
         _suppressGroupRefreshOnScopeChange = false;
 
-        _statusBarService.ShowSuccess(
+        StatusBar.ShowSuccess(
             addedEmployees.Count == 1
                 ? $"Added {addedEmployees[0].DisplayName} to the group."
                 : $"Added {addedEmployees.Count} employees to the group.");

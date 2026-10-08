@@ -1,6 +1,8 @@
 <UserControl x:Class="ScheduleApp.Desktop.Views.EmployeeAttendancePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
+             xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
              xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
              xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -40,21 +42,12 @@
         <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
         <converters:PunchStatusToBrushConverter x:Key="StatusToBrush" />
 
-        <!-- Right-aligns the hours columns, same idea (and same key names, so both grids
-             read consistently) as AttendanceView's own Summary grid - see that file's copy
-             of these two styles for the DefaultDataGridColumnHeaderStyle explanation
-             RightAlignedHeader's BasedOn depends on. -->
-        <Style x:Key="RightAlignedCell"
-               TargetType="TextBlock">
-            <Setter Property="TextAlignment"
-                    Value="Right" />
-            <Setter Property="Margin"
-                    Value="0,0,8,0" />
-        </Style>
-
+        <!-- Right-aligns the hours columns' headers, same idea (and same key name, so both
+             grids read consistently) as AttendanceSummaryView's own Summary grid; the cells
+             right-align through each column's TextAlignment. -->
         <Style x:Key="RightAlignedHeader"
-               TargetType="DataGridColumnHeader"
-               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+               TargetType="syncfusion:GridHeaderCellControl"
+               BasedOn="{StaticResource GridHeaderCellStyle}">
             <Setter Property="HorizontalContentAlignment"
                     Value="Right" />
         </Style>
@@ -90,56 +83,41 @@
                  sense of them, not the full Attendance tab's PIN/Name/Department/Check In/
                  Check Out/Late In/Early Out set - those either don't apply (this grid is
                  already scoped to one employee) or don't bear on payroll math. -->
-            <DataGrid Margin="0"
-                      ColumnWidth="Auto"
-                      ItemsSource="{Binding AttendanceRows}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      CanUserReorderColumns="False"
-                      RowHeight="25"
-                      GridLinesVisibility="All"
-                      HeadersVisibility="Column"
-                      Visibility="{Binding HasAttendanceRows, Converter={StaticResource BoolToVisibility}}">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Date"
-                                        Binding="{Binding ShiftDate, StringFormat={}{0:MM/dd/yy ddd}}" />
-                    <DataGridTextColumn Header="Type"
-                                        Binding="{Binding TypeText}" />
-                    <DataGridTextColumn Header="Status"
-                                        Binding="{Binding StatusText}">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="FontWeight"
-                                        Value="SemiBold" />
-                                <Setter Property="Foreground"
-                                        Value="{Binding Status, Converter={StaticResource StatusToBrush}}" />
+            <syncfusion:SfDataGrid ItemsSource="{Binding AttendanceRows}"
+                                   AutoGenerateColumns="False"
+                                   AllowEditing="False"
+                                   AllowDraggingColumns="False"
+                                   ColumnSizer="Auto"
+                                   controls:GridAutoFit.IsEnabled="True"
+                                   RowHeight="25"
+                                   GridLinesVisibility="Both"
+                                   NavigationMode="Row"
+                                   SelectionMode="Single"
+                                   Visibility="{Binding HasAttendanceRows, Converter={StaticResource BoolToVisibility}}">
+                <syncfusion:SfDataGrid.Columns>
+                    <syncfusion:GridTextColumn MappingName="ShiftDate" HeaderText="Date"
+                                               DisplayBinding="{Binding ShiftDate, StringFormat={}{0:MM/dd/yy ddd}}" />
+                    <syncfusion:GridTextColumn MappingName="TypeText" HeaderText="Type" />
+                    <syncfusion:GridTextColumn MappingName="StatusText" HeaderText="Status">
+                        <syncfusion:GridTextColumn.CellStyle>
+                            <Style TargetType="syncfusion:GridCell" BasedOn="{StaticResource GridCellStyle}">
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="Foreground" Value="{Binding Status, Converter={StaticResource StatusToBrush}}" />
                             </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Clock In"
-                                        Binding="{Binding ClockInText}" />
-                    <DataGridTextColumn Header="Clock Out"
-                                        Binding="{Binding ClockOutText}" />
-                    <DataGridTextColumn Header="Work Day"
-                                        Binding="{Binding WorkDayText}"
-                                        ElementStyle="{StaticResource RightAlignedCell}"
-                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
-                    <DataGridTextColumn Header="Overtime (h)"
-                                        Binding="{Binding OvertimeHoursText}"
-                                        ElementStyle="{StaticResource RightAlignedCell}"
-                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
-                    <DataGridTextColumn Header="Night Diff (h)"
-                                        Binding="{Binding NightDiffHoursText}"
-                                        ElementStyle="{StaticResource RightAlignedCell}"
-                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
-                    <DataGridTextColumn Header="Undertime (h)"
-                                        Binding="{Binding RemainHoursText}"
-                                        ElementStyle="{StaticResource RightAlignedCell}"
-                                        HeaderStyle="{StaticResource RightAlignedHeader}" />
-                </DataGrid.Columns>
-            </DataGrid>
+                        </syncfusion:GridTextColumn.CellStyle>
+                    </syncfusion:GridTextColumn>
+                    <syncfusion:GridTextColumn MappingName="ClockInText" HeaderText="Clock In" />
+                    <syncfusion:GridTextColumn MappingName="ClockOutText" HeaderText="Clock Out" />
+                    <syncfusion:GridTextColumn MappingName="WorkDayText" HeaderText="Work Day"
+                                               TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                    <syncfusion:GridTextColumn MappingName="OvertimeHoursText" HeaderText="Overtime (h)"
+                                               TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                    <syncfusion:GridTextColumn MappingName="NightDiffHoursText" HeaderText="Night Diff (h)"
+                                               TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                    <syncfusion:GridTextColumn MappingName="RemainHoursText" HeaderText="Undertime (h)"
+                                               TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                </syncfusion:SfDataGrid.Columns>
+            </syncfusion:SfDataGrid>
         </Grid>
     </DockPanel>
 </UserControl>

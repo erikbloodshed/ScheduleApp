@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Payroll;
+using ReactiveUI;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -35,7 +35,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// SyncAdjustmentRows already used for itemized rows) rather than assuming index i always means
 /// the same PayrollAdjustmentType across calls.
 /// </summary>
-public sealed partial class PayrollAdjustmentGroupRow : ObservableObject
+public sealed class PayrollAdjustmentGroupRow : ReactiveObject
 {
     public required PayrollAdjustmentType Type { get; init; }
 
@@ -53,9 +53,20 @@ public sealed partial class PayrollAdjustmentGroupRow : ObservableObject
     /// Setter is observable (not init) precisely so re-assigning it on an existing row raises
     /// PropertyChanged instead of requiring a whole new PayrollAdjustmentGroupRow instance --
     /// that's the entire point of this class.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SingleValueAmount))]
-    private PayrollAdjustment? singleValueAdjustment;
+    public PayrollAdjustment? SingleValueAdjustment
+    {
+        get => _singleValueAdjustment;
+        set
+        {
+            if (EqualityComparer<PayrollAdjustment?>.Default.Equals(_singleValueAdjustment, value)) return;
+            this.RaisePropertyChanging();
+            _singleValueAdjustment = value;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(SingleValueAmount));
+        }
+    }
+
+    private PayrollAdjustment? _singleValueAdjustment;
 
     /// <summary>Same value as SingleValueAdjustment?.Amount, same "TextBox binding breaks on a
     /// null intermediate hop" reasoning as PayrollAdjustmentGroup.SingleValueAmount's own doc
@@ -68,8 +79,13 @@ public sealed partial class PayrollAdjustmentGroupRow : ObservableObject
     /// <summary>Patched in place by PayrollViewModel.SyncAdjustmentGroupRows on every
     /// LoadCoreAsync, same as SingleValueAdjustment above -- what AdjustmentGroupTemplate's
     /// inline-itemized subtotal box binds to.</summary>
-    [ObservableProperty]
-    private decimal subtotal;
+    public decimal Subtotal
+    {
+        get => _subtotal;
+        set => this.RaiseAndSetIfChanged(ref _subtotal, value);
+    }
+
+    private decimal _subtotal;
 
     /// <summary>What InlineAdjustmentRowTemplate/DeductionInlineAdjustmentRowTemplate's own
     /// ItemsControl binds to for Incentive/OtherCharge's itemized rows. A stable

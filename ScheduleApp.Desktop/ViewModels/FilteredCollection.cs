@@ -5,25 +5,27 @@ using System.ComponentModel;
 namespace ScheduleApp.Desktop.ViewModels;
 
 /// <summary>
-/// The items of a source collection that pass <see cref="Filter"/>, in the source's order, as a
-/// collection an SfDataGrid can bind to. It replaces CollectionViewSource.GetDefaultView(...)
-/// plus ICollectionView.Filter, which SfDataGrid doesn't honour: the grid builds its own view
-/// over whatever it's given. The same shape as the ICollectionView it replaces, so the
+/// The items of a source collection that pass <see cref="Filter"/>, in the source's order or the
+/// one an optional comparer gives, as a collection an SfDataGrid can bind to. It replaces CollectionViewSource.GetDefaultView(...)
+/// plus ICollectionView.Filter and SortDescriptions, which SfDataGrid doesn't honour: the grid
+/// builds its own view over whatever it's given. The same shape as the ICollectionView it replaces, so the
 /// ViewModels using it set <see cref="Filter"/> and call <see cref="Refresh"/> exactly as
 /// before.
 ///
 /// Rows appended to the source -- a load adding its results one by one -- are appended here as
-/// they come, if they pass. Anything else (a Clear, a removal, a Filter change, Refresh) rebuilds
+/// they come, if they pass (inserted in order, when there's a comparer). Anything else (a Clear, a removal, a Filter change, Refresh) rebuilds
 /// the whole collection and raises a single Reset, as a CollectionView's own Refresh did.
 /// </summary>
 public sealed class FilteredCollection<T> : ObservableCollection<T>
 {
     private readonly ObservableCollection<T> _source;
+    private readonly IComparer<T>? _order;
     private Predicate<object>? _filter;
 
-    public FilteredCollection(ObservableCollection<T> source)
+    public FilteredCollection(ObservableCollection<T> source, IComparer<T>? order = null)
     {
         _source = source;
+        _order = order;
         _source.CollectionChanged += OnSourceChanged;
         Rebuild();
     }
@@ -53,7 +55,7 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
             foreach (T item in added)
             {
                 if (Passes(item))
-                    Add(item);
+                    Insert(InsertionIndex(item), item);
             }
 
             return;
@@ -62,14 +64,25 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
         Rebuild();
     }
 
+    /// <summary>The end, or with a comparer the index after every item that sorts at or before
+    /// <paramref name="item"/>, so equal items keep the source's order.</summary>
+    private int InsertionIndex(T item)
+    {
+        if (_order is null)
+            return Count;
+
+        var index = Count;
+        while (index > 0 && _order.Compare(this[index - 1], item) > 0)
+            index--;
+        return index;
+    }
+
     private void Rebuild()
     {
         Items.Clear();
-        foreach (var item in _source)
-        {
-            if (Passes(item))
-                Items.Add(item);
-        }
+        var passing = _source.Where(Passes);
+        foreach (var item in _order is null ? passing : passing.OrderBy(i => i, _order))
+            Items.Add(item);
 
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
         OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));

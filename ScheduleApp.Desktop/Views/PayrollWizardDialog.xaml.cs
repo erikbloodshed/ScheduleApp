@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using System.Windows;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
@@ -86,6 +87,6 @@ public partial class PayrollWizardDialog : Controls.AppWindow
         // rather than the ViewModel doing this itself.
         _wizard.RequestClose += (_, result) => DialogResult = result;
 
-        Loaded += async (_, _) => await _wizard.LoadEmployeeTreeCommand.ExecuteAsync(null);
+        Loaded += async (_, _) => await _wizard.LoadEmployeeTreeCommand.Execute();
     }
 }

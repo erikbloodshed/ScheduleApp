@@ -1,6 +1,7 @@
 <UserControl x:Class="ScheduleApp.Desktop.Views.PayrollSummaryView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
              xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
              xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
              xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
@@ -176,16 +177,15 @@
                     Value="{DynamicResource SurfaceBackgroundBrush}" />
         </Style>
 
-        <!-- Small Edit/Delete/"+ Add" buttons sitting at the right of a row - same "compact,
-             row-scoped action" role as the Edit/Delete buttons in AttendanceView's own manual
-             entries grid, just not DataGrid-column-hosted here since these rows live in plain
-             ItemsControls, not a DataGrid. -->
+        <!-- The small Delete button at the right of an itemized row - same "compact,
+             row-scoped action" role as the Edit/Delete buttons in the Manual Entries grid,
+             just not grid-column-hosted here since these rows live in plain ItemsControls. -->
         <Style x:Key="RowActionButton"
-               TargetType="Button">
-            <Setter Property="Padding"
-                    Value="8,2" />
-            <Setter Property="FontSize"
-                    Value="11" />
+               TargetType="syncfusion:ButtonAdv">
+            <Setter Property="SizeMode"
+                    Value="Normal" />
+            <Setter Property="IconTemplate"
+                    Value="{StaticResource DeleteIconTemplate}" />
             <Setter Property="Margin"
                     Value="6,0,0,0" />
             <Setter Property="VerticalAlignment"
@@ -197,10 +197,10 @@
              category header's own action button (single-value's "Edit", inline-itemized's
              "+ Add Row", dialog-itemized's "+ Add") so all of them read as an inline label
              sitting beside the category's own Label rather than a bordered button off on the
-             far right the way RowActionButton above still looks for the per-row Edit/Delete
-             buttons. A Button (not RowActionButton) so it keeps Click's built-in mouse+Space/
-             Enter activation and correct button automation semantics, but templated down to
-             bare text. Default WPF focus-visual (dotted rectangle on Tab) is deliberately left
+             far right the way RowActionButton above still looks for the per-row Delete
+             buttons. A framework Button (a ButtonAdv's template mustn't be replaced) so it
+             keeps Click's built-in mouse+Space/Enter activation and correct button automation
+             semantics, but templated down to bare text. Default WPF focus-visual (dotted rectangle on Tab) is deliberately left
              in place rather than suppressed, since that's the one piece of keyboard-accessible
              affordance this control gets "for free" by being a real Button. IsMouseOver/
              IsEnabled just dim the whole thing rather than adding an underline or color swap,
@@ -235,65 +235,6 @@
                                      Value="True">
                                 <Setter Property="Opacity"
                                         Value="0.7"
-                                        TargetName="Bg" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled"
-                                     Value="False">
-                                <Setter Property="Opacity"
-                                        Value="0.4"
-                                        TargetName="Bg" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Icon-only header action button - currently just the payslip Refresh button
-             at the right edge of the employee-name header below. A small, roughly square
-             hit target with a rounded hover background, rather than
-             TransparentHeaderActionButton's plain text-link look above - a lone glyph
-             needs its own visible affordance instead of blending into the header row
-             until hovered the way a "+ Add Row" text link can. FontFamily lists Segoe
-             Fluent Icons first, falling back to Segoe MDL2 Assets - both fonts share the
-             same glyph codepoints for common icons (Refresh, E72C, included), but Segoe
-             Fluent Icons only ships with Windows 11 by default, so a Windows 10 machine
-             without it installed still renders the glyph correctly from the older,
-             still-present MDL2 font instead of showing a missing-glyph box. -->
-        <Style x:Key="IconHeaderActionButton"
-               TargetType="Button">
-            <Setter Property="FontFamily"
-                    Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
-            <Setter Property="FontSize"
-                    Value="14" />
-            <Setter Property="Background"
-                    Value="Transparent" />
-            <Setter Property="Foreground"
-                    Value="#2563EB" />
-            <Setter Property="BorderThickness"
-                    Value="0" />
-            <Setter Property="Cursor"
-                    Value="Hand" />
-            <Setter Property="Width"
-                    Value="28" />
-            <Setter Property="Height"
-                    Value="28" />
-            <Setter Property="VerticalAlignment"
-                    Value="Center" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="14">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver"
-                                     Value="True">
-                                <Setter Property="Background"
-                                        Value="{DynamicResource CardBorderBrush}"
                                         TargetName="Bg" />
                             </Trigger>
                             <Trigger Property="IsEnabled"
@@ -422,11 +363,11 @@
                                          ClearFocusOnEnter="True"
                                          ValueCommitted="InlineAmountBox_ValueCommitted"
                                          IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                <Button Grid.Column="2"
-                        Content="Delete"
-                        Style="{StaticResource RowActionButton}"
-                        Command="{Binding DataContext.DeleteAdjustmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                        CommandParameter="{Binding}" />
+                <syncfusion:ButtonAdv Grid.Column="2"
+                                      Label="Delete"
+                                      Style="{StaticResource RowActionButton}"
+                                      Command="{Binding DataContext.DeleteAdjustmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      CommandParameter="{Binding}" />
             </Grid>
         </DataTemplate>
 
@@ -458,11 +399,11 @@
                                          ClearFocusOnEnter="True"
                                          ValueCommitted="InlineAmountBox_ValueCommitted"
                                          IsEnabled="{Binding DataContext.CanEditAdjustmentsNow, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                <Button Grid.Column="2"
-                        Content="Delete"
-                        Style="{StaticResource RowActionButton}"
-                        Command="{Binding DataContext.DeleteAdjustmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                        CommandParameter="{Binding}" />
+                <syncfusion:ButtonAdv Grid.Column="2"
+                                      Label="Delete"
+                                      Style="{StaticResource RowActionButton}"
+                                      Command="{Binding DataContext.DeleteAdjustmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      CommandParameter="{Binding}" />
             </Grid>
         </DataTemplate>
 
@@ -717,11 +658,9 @@
                  replacement for the payroll group panel's own manual "Reload" button (see
                  PayrollGroupViewModel's doc comments for why that one was removed), living
                  right next to the payslip it actually recalculates instead of off in the
-                 group grid's own header. Icon-only (the Segoe Fluent Icons/Segoe MDL2
-                 Assets "Refresh" glyph, U+E72C - see IconHeaderActionButton's own doc
-                 comment for the font fallback) rather than a text button, since this is a
-                 single, self-explanatory action sitting in a header row that's already
-                 tight on space. Same NotNullToVisibility toggle as the Pay Type badge above
+                 group grid's own header. Icon-only (the "Refresh" glyph, U+E72C) rather
+                 than a text button, since this is a single, self-explanatory action sitting
+                 in a header row that's already tight on space. Same NotNullToVisibility toggle as the Pay Type badge above
                  - there's nothing to recalculate with no employee selected, so this
                  disappears right alongside it.
 
@@ -730,12 +669,13 @@
                  on PayrollSummaryViewModel) - same in-place Refresh<->Cancel toggle as
                  AttendanceSummaryView's own Period-row button, rather than just sitting
                  disabled with no way to stop a recalculation once started. -->
-            <Button DockPanel.Dock="Right"
-                    Style="{StaticResource IconHeaderActionButton}"
-                    Content="{Binding RefreshOrCancelGlyph}"
-                    Command="{Binding RefreshOrCancelPayslipCommand}"
-                    Visibility="{Binding SelectedEmployee, Converter={StaticResource NotNullToVisibility}}"
-                    ToolTip="{Binding RefreshOrCancelToolTip}" />
+            <syncfusion:ButtonAdv DockPanel.Dock="Right"
+                                  SizeMode="Small"
+                                  Tag="{Binding RefreshOrCancelGlyph}"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  Command="{Binding RefreshOrCancelPayslipCommand}"
+                                  Visibility="{Binding SelectedEmployee, Converter={StaticResource NotNullToVisibility}}"
+                                  ToolTip="{Binding RefreshOrCancelToolTip}" />
         </DockPanel>
 
         <!-- Empty-state placeholder and the itemized breakdown occupy the same Grid cell,

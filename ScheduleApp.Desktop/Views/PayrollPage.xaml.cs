@@ -1,8 +1,11 @@
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using ScheduleApp.Desktop.ViewModels;
+using Syncfusion.UI.Xaml.Grid;
+using Syncfusion.UI.Xaml.ScrollAxis;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -36,7 +39,7 @@ public partial class PayrollPage : Page, INavigationAware
     /// <summary>Kept as a field (unlike PayrollHeaderCard/SummaryViewControl/
     /// AttendancePanelControl, which only ever need PayrollViewModel as a DataContext
     /// assignment) so PayrollGroupGrid_OnSelectionChanged below has something to call
-    /// SelectBatchEmployeeCommand on -- a DataGridRow isn't an ICommandSource the way
+    /// SelectBatchEmployeeCommand on -- a grid row isn't an ICommandSource the way
     /// Button is, so that command has to be invoked from code-behind rather than a
     /// Command/CommandParameter binding in XAML (see PayrollPage.xaml's own comment on the
     /// Payroll Group DataGrid).</summary>
@@ -54,6 +57,8 @@ public partial class PayrollPage : Page, INavigationAware
         AttendancePanelControl.DataContext = payrollViewModel;
         PayrollGroupPanel.DataContext = payrollViewModel;
         EmptyStateOverlay.DataContext = payrollViewModel;
+
+        MessageBoxInteractions.Register(payrollViewModel.Summary, this);
 
         // Re-sync the DataGrid's highlighted row after PayrollGroupRows is rebuilt
         // (period change, scope change) — same DispatcherPriority.ContextIdle pattern
@@ -90,18 +95,18 @@ public partial class PayrollPage : Page, INavigationAware
 
     public Task OnNavigatedFromAsync() => Task.CompletedTask;
 
-    /// <summary>Forwards a DataGrid row click to MainViewModel.SelectedEmployee —
+    /// <summary>Forwards a grid row click to MainViewModel.SelectedEmployee —
     /// same _mainViewModel.SelectedEmployee assignment the old
     /// EmployeeTree_OnSelectedItemChanged made from a tree click. Never nulls
     /// SelectedEmployee out (no "deselect" concept in the table, same as the old
-    /// checklist never nulled it out either). The re-entrant call produced when
-    /// PayrollGroupRows is rebuilt and RestorePayrollGroupSelection sets
-    /// SelectedItem is harmless: AddedItems is empty in that call, so the
-    /// pattern match below simply skips it.</summary>
-    private void PayrollGroupGrid_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// checklist never nulled it out either). SfDataGrid raises SelectionChanged only
+    /// for the user's own clicks, so RestorePayrollGroupSelection setting SelectedItem
+    /// after a rebuild doesn't come back through here. Invoked through ICommand, which
+    /// runs it: a ReactiveCommand's own Execute only builds an observable.</summary>
+    private void PayrollGroupGrid_OnSelectionChanged(object? sender, GridSelectionChangedEventArgs e)
     {
-        if (e.AddedItems.Count > 0 && e.AddedItems[0] is PayrollGroupRow row)
-            _payrollViewModel.SelectBatchEmployeeCommand.Execute(row.Employee);
+        if (PayrollGroupGrid.SelectedItem is PayrollGroupRow row)
+            ((ICommand)_payrollViewModel.SelectBatchEmployeeCommand).Execute(row.Employee);
     }
 
     /// <summary>Dispatches RestorePayrollGroupSelection with ExecutionContext flow suppressed
@@ -134,7 +139,12 @@ public partial class PayrollPage : Page, INavigationAware
     /// BeginInvoke call that's actually the source of the problem.
     ///
     /// IsFlowSuppressed()-guarded the same way RunAction's own version was -- SuppressFlow()
-    /// throws InvalidOperationException if flow is already suppressed on this call chain.</summary>
+    /// throws InvalidOperationException if flow is already suppressed on this call chain.
+    ///
+    /// Since the move to SfDataGrid, which raises SelectionChanged only for a user's click, the
+    /// SelectedItem assignment no longer reaches SelectBatchEmployeeCommand at all; the
+    /// suppression stays as a guard for anything else RestorePayrollGroupSelection ends up
+    /// triggering.</summary>
     private void DispatchRestorePayrollGroupSelection()
     {
         if (ExecutionContext.IsFlowSuppressed())
@@ -166,7 +176,10 @@ public partial class PayrollPage : Page, INavigationAware
         if (row is not null)
         {
             PayrollGroupGrid.SelectedItem = row;
-            PayrollGroupGrid.ScrollIntoView(row);
+
+            var rowIndex = PayrollGroupGrid.ResolveToRowIndex(row);
+            if (rowIndex >= 0)
+                PayrollGroupGrid.ScrollInView(new RowColumnIndex(rowIndex, 0));
         }
     }
 }

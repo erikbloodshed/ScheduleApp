@@ -1,6 +1,4 @@
 using System.Windows;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
@@ -8,6 +6,8 @@ using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
 using ScheduleApp.Excel;
 using ScheduleApp.Payroll;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
@@ -56,11 +56,10 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync round trip. Also
 /// takes IPayrollComputationService (the batch compute loop itself) and IStatusBarService
 /// (the success/failure messages both methods report through).</summary>
-public partial class PayrollPrintExportViewModel : ObservableObject
+public class PayrollPrintExportViewModel : ViewModelBase
 {
     private readonly ActiveRosterProvider _rosterProvider;
     private readonly IPayrollComputationService _payrollComputationService;
-    private readonly IStatusBarService _statusBarService;
 
     /// <summary>Shared with PayrollViewModel and its other children -- see PayrollViewModel's
     /// own _busy doc comment for why this is one instance, not one per child.</summary>
@@ -88,10 +87,10 @@ public partial class PayrollPrintExportViewModel : ObservableObject
         AttendanceBusyState busy,
         PayrollScopeState scope,
         string companyName)
+        : base(statusBarService)
     {
         _rosterProvider = rosterProvider;
         _payrollComputationService = payrollComputationService;
-        _statusBarService = statusBarService;
         _busy = busy;
         _scope = scope;
         _companyName = companyName;
@@ -117,6 +116,9 @@ public partial class PayrollPrintExportViewModel : ObservableObject
             if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
             NotifyPrintExportCommands();
         };
+
+        PrintPayslipsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(PrintPayslipsAsync), CanExecuteFrom(CanPrintPayslips));
+        ExportPayrollReportCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportPayrollReportAsync), CanExecuteFrom(CanExportPayrollReport));
     }
 
     /// <summary>The two command notifications gated on _busy.IsRunning that this class owns --
@@ -125,8 +127,7 @@ public partial class PayrollPrintExportViewModel : ObservableObject
     /// child's own NotifyXCommands() already follows.</summary>
     private void NotifyPrintExportCommands()
     {
-        PrintPayslipsCommand.NotifyCanExecuteChanged();
-        ExportPayrollReportCommand.NotifyCanExecuteChanged();
+        RequeryCanExecute();
     }
 
     /// <summary>_scope.BatchScopeEmployees.Count > 0, read directly off the shared scope
@@ -161,7 +162,8 @@ public partial class PayrollPrintExportViewModel : ObservableObject
     /// other _busy.RunAsync calls, though, nothing here writes to the database, so
     /// there's no reload to chain afterward, just PayslipPreviewDialog to open once
     /// every employee's PayrollResult is in hand.</summary>
-    [RelayCommand(CanExecute = nameof(CanPrintPayslips))]
+    public ReactiveCommand<RxVoid, RxVoid> PrintPayslipsCommand { get; }
+
     private async Task PrintPayslipsAsync()
     {
         var scopeDialog = new PayslipScopeDialog(
@@ -211,7 +213,7 @@ public partial class PayrollPrintExportViewModel : ObservableObject
 
             results = computed;
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not compute payroll for printing"));
+        onError: ex => ShowFailure(ex, "Could not compute payroll for printing"));
 
         // A cancelled or failed run leaves results null -- nothing to preview.
         if (results is not { Count: > 0 }) return;
@@ -242,7 +244,8 @@ public partial class PayrollPrintExportViewModel : ObservableObject
     /// the right message for what actually went wrong ("could not compute" vs "could
     /// not save"), the same split PrintPayslipsAsync already keeps between computing
     /// and previewing.</summary>
-    [RelayCommand(CanExecute = nameof(CanExportPayrollReport))]
+    public ReactiveCommand<RxVoid, RxVoid> ExportPayrollReportCommand { get; }
+
     private async Task ExportPayrollReportAsync()
     {
         var scopeDialog = new PayslipScopeDialog(
@@ -286,7 +289,7 @@ public partial class PayrollPrintExportViewModel : ObservableObject
 
             results = computed;
         },
-        onError: ex => _statusBarService.ShowError(ex.Message, "Could not compute payroll for export"));
+        onError: ex => ShowFailure(ex, "Could not compute payroll for export"));
 
         // A cancelled or failed run leaves results null -- nothing to save, same guard
         // PrintPayslipsAsync applies before opening its own preview dialog.
@@ -303,11 +306,11 @@ public partial class PayrollPrintExportViewModel : ObservableObject
         try
         {
             PayrollExcelExporter.ExportRosterToExcel(saveDialog.FileName, results, employees, start, end);
-            _statusBarService.ShowSuccess($"Saved payroll report to {saveDialog.FileName}.");
+            StatusBar.ShowSuccess($"Saved payroll report to {saveDialog.FileName}.");
         }
         catch (Exception ex)
         {
-            _statusBarService.ShowError(ex.Message, "Could not save payroll report");
+            ShowFailure(ex, "Could not save payroll report");
         }
     }
 

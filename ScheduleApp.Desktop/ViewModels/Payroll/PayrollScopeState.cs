@@ -1,5 +1,5 @@
-using CommunityToolkit.Mvvm.ComponentModel;
 using ScheduleApp.Core.Models;
+using ReactiveUI;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
@@ -31,10 +31,10 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// four live in shared state at all rather than being split apart along with everything
 /// else; see the refactor plan's own "Target shape" section for the fuller reasoning.
 /// </summary>
-public partial class PayrollScopeState : ObservableObject
+public class PayrollScopeState : ReactiveObject
 {
-    /// <summary>periodStart/periodEnd are assigned directly to the backing fields here,
-    /// bypassing the generated property setters below, so constructing this with today's
+    /// <summary>The period is assigned directly to the backing fields here, bypassing
+    /// the property setters below, so constructing this with today's
     /// default half-month range doesn't raise a PropertyChanged that nothing is
     /// subscribed to catch yet -- the same reason PayrollViewModel's own constructor used
     /// to assign its periodStart/periodEnd backing fields directly, before those fields
@@ -42,23 +42,43 @@ public partial class PayrollScopeState : ObservableObject
     /// flicker on first load" story this sidesteps).</summary>
     public PayrollScopeState(DateTime periodStart, DateTime periodEnd)
     {
-        this.periodStart = periodStart;
-        this.periodEnd = periodEnd;
+        _periodStart = periodStart;
+        _periodEnd = periodEnd;
     }
 
-    [ObservableProperty]
-    private DateTime periodStart;
+    public DateTime PeriodStart
+    {
+        get => _periodStart;
+        set => this.RaiseAndSetIfChanged(ref _periodStart, value);
+    }
 
-    [ObservableProperty]
-    private DateTime periodEnd;
+    private DateTime _periodStart;
+
+    public DateTime PeriodEnd
+    {
+        get => _periodEnd;
+        set => this.RaiseAndSetIfChanged(ref _periodEnd, value);
+    }
+
+    private DateTime _periodEnd;
 
     /// <summary>See PayrollViewModel.BatchScopeEmployees' own doc comment (still the
     /// facade every reaction and every XAML binding goes through) for what this actually
     /// represents and who writes it -- this field is only the storage.</summary>
-    [ObservableProperty]
-    private IReadOnlyList<Employee> batchScopeEmployees = [];
+    public IReadOnlyList<Employee> BatchScopeEmployees
+    {
+        get => _batchScopeEmployees;
+        set => this.RaiseAndSetIfChanged(ref _batchScopeEmployees, value);
+    }
+
+    private IReadOnlyList<Employee> _batchScopeEmployees = [];
 
     /// <summary>See PayrollViewModel.ActivePayrollRunId's own doc comment.</summary>
-    [ObservableProperty]
-    private int? activePayrollRunId;
+    public int? ActivePayrollRunId
+    {
+        get => _activePayrollRunId;
+        set => this.RaiseAndSetIfChanged(ref _activePayrollRunId, value);
+    }
+
+    private int? _activePayrollRunId;
 }

@@ -1,6 +1,7 @@
 <controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PayrollWizardDialog" ShowMinimizeButton="False"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
         xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
@@ -16,38 +17,24 @@
         <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
         <converters:NumberConverter x:Key="Number" />
 
-        <!-- Applies to both Step 1 Period pickers below via implicit TargetType match
-             (no x:Key needed - this dialog has no other DatePicker to accidentally
-             catch). Full "MMMM d, yyyy" month name (e.g. "September 16, 2026") rather
-             than the short default date, matching AttendanceView.xaml/PayrollPage.xaml's
-             own Period pickers - see those files' own copy of this style. Each
-             DatePicker's own Width below is widened to fit the longer text. -->
-        <Style TargetType="DatePickerTextBox">
-            <Setter Property="Control.Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="DatePickerTextBox">
-                        <TextBox Text="{Binding Path=SelectedDate,
-                            RelativeSource={RelativeSource AncestorType={x:Type DatePicker}}, StringFormat='{}{0:MMMM d, yyyy}'}"
-                                 TextAlignment="Center" />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- Step 1's Period dates: the full "MMMM d, yyyy" month name (e.g. "September 16,
+             2026"), matching AttendanceSummaryView/PayrollPage's own Period fields. -->
+        <Style x:Key="PeriodDate" TargetType="syncfusion:DateTimeEdit">
+            <Setter Property="Pattern" Value="CustomPattern" />
+            <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
+            <Setter Property="IsEmptyDateEnabled" Value="True" />
+            <Setter Property="NullValue" Value="{x:Null}" />
+            <Setter Property="ShowMaskOnNullValue" Value="False" />
+            <Setter Property="Width" Value="190" />
         </Style>
 
-        <!-- Right-aligned numeric grid cell/header pair, same shape as EmployeesPage's own
-             copy of this style (and AttendanceStatusDetailDialog/EmployeeAttendancePanel/
-             AttendanceView's) - see those files' own copies for why it's duplicated
-             per-file rather than shared. Used by Step 3's review grid below. -->
-        <Style x:Key="RightAlignedCell"
-               TargetType="TextBlock">
-            <Setter Property="TextAlignment"
-                    Value="Right" />
-            <Setter Property="Margin"
-                    Value="0,0,8,0" />
-        </Style>
+        <!-- Right-aligned numeric grid header, same shape as AttendanceStatusDetailDialog/
+             EmployeeAttendancePanel/AttendanceSummaryView's own copies - see those files for
+             why it's duplicated per-file rather than shared. Used by Step 3's review grid
+             below, whose cells right-align through each column's TextAlignment. -->
         <Style x:Key="RightAlignedHeader"
-               TargetType="DataGridColumnHeader"
-               BasedOn="{StaticResource DefaultDataGridColumnHeaderStyle}">
+               TargetType="syncfusion:GridHeaderCellControl"
+               BasedOn="{StaticResource GridHeaderCellStyle}">
             <Setter Property="HorizontalContentAlignment"
                     Value="Right" />
         </Style>
@@ -56,11 +43,17 @@
              step is current (see PayrollWizardViewModel.IsStep1Active/IsStep2Active/
              IsStep3Active). Three near-identical styles rather than one parameterized one -
              each needs a DataTrigger bound to a different property, and a WPF Style can't
-             take a binding path as a parameter. -->
-        <Style x:Key="Step1LabelStyle"
+             take a binding path as a parameter. Each is BasedOn StepLabelStyle, not on
+             Step1LabelStyle: a BasedOn style inherits its base's triggers, so steps 2 and 3
+             would also turn bold whenever step 1 was current. -->
+        <Style x:Key="StepLabelStyle"
                TargetType="TextBlock">
             <Setter Property="Foreground"
                     Value="{DynamicResource MutedForegroundBrush}" />
+        </Style>
+        <Style x:Key="Step1LabelStyle"
+               TargetType="TextBlock"
+               BasedOn="{StaticResource StepLabelStyle}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsStep1Active}"
                              Value="True">
@@ -73,7 +66,7 @@
         </Style>
         <Style x:Key="Step2LabelStyle"
                TargetType="TextBlock"
-               BasedOn="{StaticResource Step1LabelStyle}">
+               BasedOn="{StaticResource StepLabelStyle}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsStep2Active}"
                              Value="True">
@@ -86,7 +79,7 @@
         </Style>
         <Style x:Key="Step3LabelStyle"
                TargetType="TextBlock"
-               BasedOn="{StaticResource Step1LabelStyle}">
+               BasedOn="{StaticResource StepLabelStyle}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsStep3Active}"
                              Value="True">
@@ -98,22 +91,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Same two-style department/employee TreeView split PayslipScopeDialog.xaml
-             uses for its own tree - see that file's own comment for why department-level
-             visibility needs its own ItemContainerStyle while the nested employee level
-             gets one through the HierarchicalDataTemplate instead. -->
-        <Style x:Key="WizardEmployeeDepartmentItemStyle"
-               TargetType="TreeViewItem">
-            <Setter Property="Visibility"
-                    Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
-            <Setter Property="IsExpanded"
-                    Value="{Binding IsExpanded, Mode=TwoWay}" />
-        </Style>
-        <Style x:Key="WizardEmployeeItemStyle"
-               TargetType="TreeViewItem">
-            <Setter Property="Visibility"
-                    Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
-        </Style>
     </Window.Resources>
 
     <Grid>
@@ -157,23 +134,21 @@
                            Margin="0,0,0,6" />
                 <StackPanel Orientation="Horizontal"
                             Margin="0,0,0,16">
-                    <DatePicker SelectedDate="{Binding PeriodStart}"
-                                IsTodayHighlighted="True"
-                                Width="190"
-                                Margin="0,0,8,0" />
+                    <syncfusion:DateTimeEdit Style="{StaticResource PeriodDate}"
+                                             DateTime="{Binding PeriodStart, Mode=TwoWay}"
+                                             Margin="0,0,8,0" />
                     <TextBlock Text="to"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
-                    <DatePicker SelectedDate="{Binding PeriodEnd}"
-                                IsTodayHighlighted="True"
-                                Width="190" />
+                    <syncfusion:DateTimeEdit Style="{StaticResource PeriodDate}"
+                                             DateTime="{Binding PeriodEnd, Mode=TwoWay}" />
                 </StackPanel>
 
                 <TextBlock Text="Label"
                            FontWeight="SemiBold"
                            Margin="0,0,0,6" />
-                <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Shown later in &quot;Load Payroll Group…&quot; -- auto-filled, but editable." />
+                <syncfusion:SfTextBoxExt Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Shown later in &quot;Load Payroll Group…&quot; -- auto-filled, but editable." />
 
                 <TextBlock Text="{Binding PeriodValidationMessage}"
                            Visibility="{Binding PeriodValidationMessage, Converter={StaticResource NotNullToVisibility}}"
@@ -185,7 +160,9 @@
             <!-- Step 2: Employees (build-order step 7) - same department/employee
                  checkbox tree PayslipScopeDialog.xaml uses, reusing the same
                  DepartmentGroupViewModel/EmployeeNodeViewModel shapes (see
-                 PayrollWizardViewModel.Departments' own doc comment). -->
+                 PayrollWizardViewModel.Departments' own doc comment). SfTreeView can't hide
+                 a row, so it binds to the search's VisibleDepartments and each department's
+                 VisibleEmployees rather than to Departments/Employees. -->
             <Grid Visibility="{Binding IsStep2Visible, Converter={StaticResource BoolToVisibility}}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -199,70 +176,81 @@
                                FontSize="11"
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                Margin="0,0,0,4" />
-                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
+                    <syncfusion:SfTextBoxExt Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             Watermark="ID, name or department"
+                                             ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
                 </StackPanel>
 
-                <TreeView Grid.Row="1"
-                          ItemsSource="{Binding Departments}"
-                          BorderThickness="1"
-                          BorderBrush="{DynamicResource CardBorderBrush}"
-                          ItemContainerStyle="{StaticResource WizardEmployeeDepartmentItemStyle}">
-                    <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}"
-                                                  ItemsSource="{Binding Employees}"
-                                                  ItemContainerStyle="{StaticResource WizardEmployeeItemStyle}">
-                            <StackPanel Orientation="Horizontal">
-                                <CheckBox IsChecked="{Binding IsSelected}"
-                                          IsThreeState="False"
-                                          VerticalAlignment="Center"
-                                          ToolTip="Include/exclude every employee in this department"
-                                          Margin="0,0,4,0" />
-                                <TextBlock Text="{Binding Name}"
-                                           FontWeight="Bold" />
-                            </StackPanel>
-                            <HierarchicalDataTemplate.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:EmployeeNodeViewModel}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <CheckBox IsChecked="{Binding IsSelected}"
-                                                  VerticalAlignment="Center"
-                                                  Margin="0,0,4,0" />
-                                        <TextBlock Text="{Binding Employee.DisplayName}">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasPin}"
-                                                                     Value="False">
-                                                            <Setter Property="Foreground"
-                                                                    Value="{DynamicResource TertiaryForegroundBrush}" />
-                                                            <Setter Property="ToolTip"
-                                                                    Value="No Employee ID (Pin) set for this person -- payroll can't be computed until one is. Set it in the Add/Edit Employee dialog on the Schedule tab." />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <!-- Optional per the Phase 4 plan (row 9) - same Monthly
-                                             badge as AddToPayrollGroupDialog's tree, same reasoning. -->
-                                        <Border Background="{DynamicResource CardBackgroundBrush}"
-                                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="4"
-                                                Padding="4,1"
-                                                Margin="6,0,0,0"
-                                                VerticalAlignment="Center"
-                                                Visibility="{Binding IsMonthly, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="Monthly"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource MutedForegroundBrush}" />
-                                        </Border>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </HierarchicalDataTemplate.ItemTemplate>
-                        </HierarchicalDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
+                <Border Grid.Row="1"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource CardBorderBrush}">
+                    <syncfusion:SfTreeView ItemsSource="{Binding VisibleDepartments}"
+                                           SelectionMode="None"
+                                           ExpandActionTrigger="Node"
+                                           FocusVisualStyle="{x:Null}">
+                        <syncfusion:SfTreeView.Resources>
+                            <DataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox IsChecked="{Binding IsSelected}"
+                                              IsThreeState="False"
+                                              VerticalAlignment="Center"
+                                              ToolTip="Include/exclude every employee in this department"
+                                              Margin="0,0,4,0" />
+                                    <TextBlock Text="{Binding Name}"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:EmployeeNodeViewModel}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <CheckBox IsChecked="{Binding IsSelected}"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,4,0" />
+                                    <TextBlock Text="{Binding Employee.DisplayName}" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasPin}"
+                                                                 Value="False">
+                                                        <Setter Property="Foreground"
+                                                                Value="{DynamicResource TertiaryForegroundBrush}" />
+                                                        <Setter Property="ToolTip"
+                                                                Value="No Employee ID (Pin) set for this person -- payroll can't be computed until one is. Set it in the Add/Edit Employee dialog on the Schedule tab." />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <!-- Optional per the Phase 4 plan (row 9) - same Monthly
+                                         badge as AddToPayrollGroupDialog's tree, same reasoning. -->
+                                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="4,1"
+                                            Margin="6,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsMonthly, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="Monthly"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource MutedForegroundBrush}" />
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </syncfusion:SfTreeView.Resources>
+                        <syncfusion:SfTreeView.HierarchyPropertyDescriptors>
+                            <syncfusion:HierarchyPropertyDescriptor TargetType="{x:Type vm:DepartmentGroupViewModel}"
+                                                                    ChildPropertyName="VisibleEmployees"
+                                                                    IsExpandedPropertyName="IsExpanded" />
+                        </syncfusion:SfTreeView.HierarchyPropertyDescriptors>
+                        <syncfusion:SfTreeView.ItemTemplate>
+                            <DataTemplate>
+                                <ContentControl Content="{Binding}" Focusable="False" VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </syncfusion:SfTreeView.ItemTemplate>
+                    </syncfusion:SfTreeView>
+                </Border>
 
                 <StackPanel Grid.Row="2"
                             Margin="0,8,0,0">
@@ -272,13 +260,15 @@
                                TextWrapping="Wrap"
                                Margin="0,0,0,8" />
                     <StackPanel Orientation="Horizontal">
-                        <Button Content="Select All"
-                                Command="{Binding SelectAllTreeCommand}"
-                                Padding="8,3"
-                                Margin="0,0,6,0" />
-                        <Button Content="Clear"
-                                Command="{Binding ClearTreeSelectionCommand}"
-                                Padding="8,3" />
+                        <syncfusion:ButtonAdv Label="Select All"
+                                              IconTemplate="{StaticResource SelectAllIconTemplate}"
+                                              SizeMode="Normal"
+                                              Command="{Binding SelectAllTreeCommand}"
+                                              Margin="0,0,6,0" />
+                        <syncfusion:ButtonAdv Label="Clear"
+                                              IconTemplate="{StaticResource ClearSelectionIconTemplate}"
+                                              SizeMode="Normal"
+                                              Command="{Binding ClearTreeSelectionCommand}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -355,40 +345,29 @@
                             </DockPanel>
                         </Border>
 
-                        <DataGrid ItemsSource="{Binding ReviewResults}"
-                                  AutoGenerateColumns="False"
-                                  IsReadOnly="True"
-                                  CanUserAddRows="False"
-                                  CanUserDeleteRows="False"
-                                  CanUserReorderColumns="False"
-                                  CanUserResizeColumns="False"
-                                  SelectionMode="Single"
-                                  SelectionUnit="FullRow"
-                                  GridLinesVisibility="Horizontal"
-                                  HeadersVisibility="Column"
-                                  BorderThickness="1"
-                                  BorderBrush="{DynamicResource CardBorderBrush}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Employee"
-                                                    Binding="{Binding EmployeeName}"
-                                                    Width="*" />
-                                <DataGridTextColumn Header="Gross Pay"
-                                                    Binding="{Binding TotalGrossPay, Converter={StaticResource Number}}"
-                                                    ElementStyle="{StaticResource RightAlignedCell}"
-                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
-                                                    Width="110" />
-                                <DataGridTextColumn Header="Deductions"
-                                                    Binding="{Binding TotalDeductions, Converter={StaticResource Number}}"
-                                                    ElementStyle="{StaticResource RightAlignedCell}"
-                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
-                                                    Width="110" />
-                                <DataGridTextColumn Header="Net Pay"
-                                                    Binding="{Binding NetPay, Converter={StaticResource Number}}"
-                                                    ElementStyle="{StaticResource RightAlignedCell}"
-                                                    HeaderStyle="{StaticResource RightAlignedHeader}"
-                                                    Width="110" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+                        <syncfusion:SfDataGrid ItemsSource="{Binding ReviewResults}"
+                                               AutoGenerateColumns="False"
+                                               AllowEditing="False"
+                                               AllowDraggingColumns="False"
+                                               AllowResizingColumns="False"
+                                               SelectionMode="Single"
+                                               NavigationMode="Row"
+                                               GridLinesVisibility="Horizontal"
+                                               BorderThickness="1"
+                                               BorderBrush="{DynamicResource CardBorderBrush}">
+                            <syncfusion:SfDataGrid.Columns>
+                                <syncfusion:GridTextColumn MappingName="EmployeeName" HeaderText="Employee" ColumnSizer="Star" />
+                                <syncfusion:GridTextColumn MappingName="TotalGrossPay" HeaderText="Gross Pay" Width="110"
+                                                           DisplayBinding="{Binding TotalGrossPay, Converter={StaticResource Number}}"
+                                                           TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                                <syncfusion:GridTextColumn MappingName="TotalDeductions" HeaderText="Deductions" Width="110"
+                                                           DisplayBinding="{Binding TotalDeductions, Converter={StaticResource Number}}"
+                                                           TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                                <syncfusion:GridTextColumn MappingName="NetPay" HeaderText="Net Pay" Width="110"
+                                                           DisplayBinding="{Binding NetPay, Converter={StaticResource Number}}"
+                                                           TextAlignment="Right" HeaderStyle="{StaticResource RightAlignedHeader}" />
+                            </syncfusion:SfDataGrid.Columns>
+                        </syncfusion:SfDataGrid>
                     </DockPanel>
                 </Grid>
 
@@ -396,10 +375,11 @@
                 <StackPanel Grid.Row="2"
                             HorizontalAlignment="Center"
                             Margin="0,12,0,0">
-                    <Button Content="Save Payroll Group"
-                            Command="{Binding SavePayrollGroupCommand}"
-                            HorizontalAlignment="Center"
-                            Padding="14,6" />
+                    <syncfusion:ButtonAdv Label="Save Payroll Group"
+                                          IconTemplate="{StaticResource SaveIconTemplate}"
+                                          SizeMode="Normal"
+                                          Command="{Binding SavePayrollGroupCommand}"
+                                          HorizontalAlignment="Center" />
 
                     <TextBlock Text="Saving…"
                                Visibility="{Binding IsSaving, Converter={StaticResource BoolToVisibility}}"
@@ -435,24 +415,33 @@
             </Grid>
         </Grid>
 
-        <!-- Back / Next (Finish on the last step) / Cancel -->
+        <!-- Back / Next (Finish on the last step) / Cancel. Cancel is IsCancel alone, with
+             no CancelCommand: AppWindow closes the window for a cancel ButtonAdv before the
+             button's command would run, and CancelCommand only asks for that same close. -->
         <StackPanel Grid.Row="3"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,16,0,0">
-            <Button Content="Back"
-                    Command="{Binding BackCommand}"
-                    Width="80"
-                    Margin="0,0,8,0" />
-            <Button Content="{Binding NextButtonText}"
-                    Command="{Binding NextCommand}"
-                    Width="90"
-                    Margin="0,0,8,0"
-                    IsDefault="True" />
-            <Button Content="Cancel"
-                    Command="{Binding CancelCommand}"
-                    Width="80"
-                    IsCancel="True" />
+            <syncfusion:ButtonAdv Label="Back"
+                                  Tag="&#xE72B;"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  SizeMode="Normal"
+                                  Command="{Binding BackCommand}"
+                                  MinWidth="80"
+                                  Margin="0,0,8,0" />
+            <syncfusion:ButtonAdv Label="{Binding NextButtonText}"
+                                  Tag="&#xE72A;"
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  SizeMode="Normal"
+                                  Command="{Binding NextCommand}"
+                                  MinWidth="90"
+                                  Margin="0,0,8,0"
+                                  IsDefault="True" />
+            <syncfusion:ButtonAdv Label="Cancel"
+                                  IconTemplate="{StaticResource CancelIconTemplate}"
+                                  SizeMode="Normal"
+                                  MinWidth="80"
+                                  IsCancel="True" />
         </StackPanel>
     </Grid>
 </Grid>

@@ -1,10 +1,6 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Globalization;
-using System.Windows.Data;
 using System.Windows.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
@@ -14,6 +10,8 @@ using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.ViewModels.Payroll;
 using ScheduleApp.Payroll;
 using ScheduleApp.Payroll.Pdf;
+using ReactiveUI;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -40,7 +38,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// tab's own Summary tab recomputing on every relevant change rather than waiting on an
 /// explicit button.
 /// </summary>
-public partial class PayrollViewModel : ObservableObject
+public class PayrollViewModel : ReactiveObject
 {
     private readonly MainViewModel _mainViewModel;
     private readonly IPayrollComputationService _payrollComputationService;
@@ -260,7 +258,7 @@ public partial class PayrollViewModel : ObservableObject
         // partial-method hooks that used to fire automatically whenever those properties
         // lived directly on this class -- now that their storage has moved to
         // PayrollScopeState (see that field's own doc comment), this subscription's whole
-        // remaining job is the blanket OnPropertyChanged(e.PropertyName) forward, the same
+        // remaining job is the blanket this.RaisePropertyChanged(e.PropertyName) forward, the same
         // "forward under this class's own name" convention AttendanceViewModel's own
         // child-forwarding subscriptions use (see that class's constructor) -- safe here
         // because PayrollScopeState's four property names exactly match the four
@@ -275,7 +273,7 @@ public partial class PayrollViewModel : ObservableObject
         // subscription (constructed just below), alongside PayrollSummaryViewModel's own
         // (build-order step 2). Nothing is left here to react with; the forward is all
         // that remains.
-        _scope.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
+        _scope.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
 
         // Build-order step 2 of the Payroll refactor plan -- see PayrollSummaryViewModel's
         // own doc comment for the concern it owns (Result, the adjustment CRUD methods,
@@ -298,7 +296,7 @@ public partial class PayrollViewModel : ObservableObject
         // seven child ViewModels (see that class's constructor) -- safe here because none
         // of Summary's forwarded member names collide with anything already declared
         // directly on this class.
-        Summary.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
+        Summary.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
 
         // Build-order step 3 of the Payroll refactor plan -- see PayrollGroupViewModel's
         // own doc comment for the concern it owns (the Payroll Group table, the "Not in
@@ -315,7 +313,7 @@ public partial class PayrollViewModel : ObservableObject
 
         // Same blanket-relay convention as Summary's own PropertyChanged subscription just
         // above, for the same reason -- see that subscription's own doc comment.
-        Group.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
+        Group.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
 
         // Build-order step 4 of the Payroll refactor plan -- see PayrollRunViewModel's own
         // doc comment for the concern it owns (starting a fresh payroll run via the wizard,
@@ -329,7 +327,7 @@ public partial class PayrollViewModel : ObservableObject
 
         // No PropertyChanged relay for Run, unlike Summary/Group just above -- its only two
         // forwarded members (NewPayrollRunCommand/LoadPayrollGroupCommand) are commands whose
-        // CanExecute changes are signaled via CommunityToolkit.Mvvm's own CanExecuteChanged,
+        // CanExecute changes are signaled via the command's own CanExecuteChanged,
         // not PropertyChanged, and neither command's reference ever changes after
         // construction -- so there's nothing on Run a relay would ever actually forward. Same
         // reason AttendanceViewModel's own constructor doesn't wire one up for
@@ -350,7 +348,7 @@ public partial class PayrollViewModel : ObservableObject
         // No PropertyChanged relay for PrintExport, for the exact same reason Run doesn't get
         // one just above -- its only two forwarded members (PrintPayslipsCommand/
         // ExportPayrollReportCommand) are commands whose CanExecute changes are signaled via
-        // CommunityToolkit.Mvvm's own CanExecuteChanged, not PropertyChanged.
+        // the command's own CanExecuteChanged, not PropertyChanged.
     }
 
     // ---- Forwarded members (PayrollSummaryViewModel) ----
@@ -374,21 +372,21 @@ public partial class PayrollViewModel : ObservableObject
     public string? AttendanceEmptyStateMessage => Summary.AttendanceEmptyStateMessage;
     public bool CanEditAdjustmentsNow => Summary.CanEditAdjustmentsNow;
 
-    public IAsyncRelayCommand<PayrollAdjustmentType> AddInlineRowCommand => Summary.AddInlineRowCommand;
+    public ReactiveCommand<PayrollAdjustmentType, RxVoid> AddInlineRowCommand => Summary.AddInlineRowCommand;
     public Task UpdateInlineDescriptionAsync(PayrollAdjustment original, string rawDescription) =>
         Summary.UpdateInlineDescriptionAsync(original, rawDescription);
     public Task UpdateInlineAmountAsync(PayrollAdjustment original, string rawAmountText) =>
         Summary.UpdateInlineAmountAsync(original, rawAmountText);
-    public IAsyncRelayCommand<PayrollAdjustment> DeleteAdjustmentCommand => Summary.DeleteAdjustmentCommand;
+    public ReactiveCommand<PayrollAdjustment, RxVoid> DeleteAdjustmentCommand => Summary.DeleteAdjustmentCommand;
     public Task SetSingleValueAsync(PayrollAdjustmentType type, string rawAmountText) =>
         Summary.SetSingleValueAsync(type, rawAmountText);
     public Task SetUndertimeWaivedAsync(bool waived) => Summary.SetUndertimeWaivedAsync(waived);
-    public IRelayCommand PrintCurrentPayslipCommand => Summary.PrintCurrentPayslipCommand;
-    public IAsyncRelayCommand RecalculatePayslipCommand => Summary.RecalculatePayslipCommand;
+    public ReactiveCommand<RxVoid, RxVoid> PrintCurrentPayslipCommand => Summary.PrintCurrentPayslipCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RecalculatePayslipCommand => Summary.RecalculatePayslipCommand;
 
     /// <summary>What PayrollSummaryView's payslip-header icon button actually binds to now
     /// -- see PayrollSummaryViewModel.RefreshOrCancelPayslip's own doc comment.</summary>
-    public IRelayCommand RefreshOrCancelPayslipCommand => Summary.RefreshOrCancelPayslipCommand;
+    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelPayslipCommand => Summary.RefreshOrCancelPayslipCommand;
     public string RefreshOrCancelGlyph => Summary.RefreshOrCancelGlyph;
     public string RefreshOrCancelToolTip => Summary.RefreshOrCancelToolTip;
 
@@ -462,9 +460,9 @@ public partial class PayrollViewModel : ObservableObject
     // refactor plan.
 
     public ObservableCollection<PayrollGroupRow> PayrollGroupRows => Group.PayrollGroupRows;
-    public ICollectionView PayrollGroupRowsView => Group.PayrollGroupRowsView;
+    public FilteredCollection<PayrollGroupRow> PayrollGroupRowsView => Group.PayrollGroupRowsView;
     public ObservableCollection<AvailableEmployeeRow> AvailableEmployeeRows => Group.AvailableEmployeeRows;
-    public ICollectionView AvailableEmployeeRowsView => Group.AvailableEmployeeRowsView;
+    public FilteredCollection<AvailableEmployeeRow> AvailableEmployeeRowsView => Group.AvailableEmployeeRowsView;
     public decimal TotalNetPay => Group.TotalNetPay;
     public bool IsPayrollGroupLoading => Group.IsPayrollGroupLoading;
     public int PayrollGroupLoadPercent => Group.PayrollGroupLoadPercent;
@@ -475,10 +473,10 @@ public partial class PayrollViewModel : ObservableObject
     }
     public bool HasBatchScope => Group.HasBatchScope;
 
-    public IRelayCommand<Employee> SelectBatchEmployeeCommand => Group.SelectBatchEmployeeCommand;
-    public IAsyncRelayCommand<Employee?> RemoveEmployeeFromGroupCommand => Group.RemoveEmployeeFromGroupCommand;
-    public IAsyncRelayCommand<Employee?> AddEmployeeToGroupCommand => Group.AddEmployeeToGroupCommand;
-    public IAsyncRelayCommand AddEmployeesToGroupCommand => Group.AddEmployeesToGroupCommand;
+    public ReactiveCommand<Employee, RxVoid> SelectBatchEmployeeCommand => Group.SelectBatchEmployeeCommand;
+    public ReactiveCommand<Employee?, RxVoid> RemoveEmployeeFromGroupCommand => Group.RemoveEmployeeFromGroupCommand;
+    public ReactiveCommand<Employee?, RxVoid> AddEmployeeToGroupCommand => Group.AddEmployeeToGroupCommand;
+    public ReactiveCommand<RxVoid, RxVoid> AddEmployeesToGroupCommand => Group.AddEmployeesToGroupCommand;
 
     // ---- End forwarded members (PayrollGroupViewModel) ----
 
@@ -517,8 +515,8 @@ public partial class PayrollViewModel : ObservableObject
     // own logic; it's here so none of that XAML needed to change as part of build-order
     // step 4 of the Payroll refactor plan.
 
-    public IRelayCommand NewPayrollRunCommand => Run.NewPayrollRunCommand;
-    public IAsyncRelayCommand LoadPayrollGroupCommand => Run.LoadPayrollGroupCommand;
+    public ReactiveCommand<RxVoid, RxVoid> NewPayrollRunCommand => Run.NewPayrollRunCommand;
+    public ReactiveCommand<RxVoid, RxVoid> LoadPayrollGroupCommand => Run.LoadPayrollGroupCommand;
 
     // ---- End forwarded members (PayrollRunViewModel) ----
 
@@ -530,8 +528,8 @@ public partial class PayrollViewModel : ObservableObject
     // its own logic; it's here so none of that XAML needed to change as part of build-order
     // step 5 of the Payroll refactor plan, the plan's last extraction.
 
-    public IAsyncRelayCommand PrintPayslipsCommand => PrintExport.PrintPayslipsCommand;
-    public IAsyncRelayCommand ExportPayrollReportCommand => PrintExport.ExportPayrollReportCommand;
+    public ReactiveCommand<RxVoid, RxVoid> PrintPayslipsCommand => PrintExport.PrintPayslipsCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ExportPayrollReportCommand => PrintExport.ExportPayrollReportCommand;
 
     // ---- End forwarded members (PayrollPrintExportViewModel) ----
 }
