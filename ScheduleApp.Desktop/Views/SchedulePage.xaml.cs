@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -18,14 +19,14 @@ public partial class SchedulePage : Page, INavigationAware
     }
 
     // Loads on first navigation to this page rather than eagerly at app
-    // startup - NavigationView calls this each time the Schedule item is
+    // startup - MainWindow calls this each time the Schedule item is
     // selected, but the schedule only needs to be pulled from the database
     // once per run.
     public async Task OnNavigatedToAsync()
     {
         if (_loaded) return;
         _loaded = true;
-        await _viewModel.LoadCommand.ExecuteAsync(null);
+        await _viewModel.LoadCommand.Execute();
 
         // The calendar's company-wide holiday markers aren't tied to an employee, so they
         // don't load as a side effect of LoadCommand the way the schedule does -- on a

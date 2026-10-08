@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using ReactiveUI;
 using ScheduleApp.Core.Models;
 
 namespace ScheduleApp.Desktop.ViewModels;
@@ -8,7 +8,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// RealDepartment is null -- the synthetic "Unassigned" bucket of employees
 /// with no department yet.
 /// </summary>
-public partial class DepartmentGroupViewModel : ObservableObject
+public class DepartmentGroupViewModel : ReactiveObject
 {
     public required string Name { get; init; }
     public Department? RealDepartment { get; init; }
@@ -23,8 +23,18 @@ public partial class DepartmentGroupViewModel : ObservableObject
     /// produces null for IsThreeState="False" checkboxes programmatically, never
     /// from a click) pushes that value down to every employee in the group.
     /// </summary>
-    [ObservableProperty]
-    private bool? isSelected = false;
+    public bool? IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            this.RaiseAndSetIfChanged(ref _isSelected, value);
+            OnIsSelectedChanged(value);
+        }
+    }
+
+    private bool? _isSelected = false;
 
     /// <summary>True unless the report-scope tree's search box has hidden every
     /// employee in this department and the department's own name doesn't match either
@@ -33,8 +43,13 @@ public partial class DepartmentGroupViewModel : ObservableObject
     /// IsVisible is. Always true while the search box is empty, and always true on the
     /// Schedule tab's tree, which shares this same view-model shape but has no search box
     /// of its own.</summary>
-    [ObservableProperty]
-    private bool isVisible = true;
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set => this.RaiseAndSetIfChanged(ref _isVisible, value);
+    }
+
+    private bool _isVisible = true;
 
     /// <summary>Bound two-way to the TreeViewItem's own IsExpanded via
     /// ItemContainerStyle, so a manual click still flows back here. ApplySearchFilter
@@ -42,8 +57,13 @@ public partial class DepartmentGroupViewModel : ObservableObject
     /// actually on screen instead of tucked behind a collapsed node -- it never forces a
     /// collapse itself, so clearing the search box leaves whatever the person had open
     /// exactly as they left it.</summary>
-    [ObservableProperty]
-    private bool isExpanded;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => this.RaiseAndSetIfChanged(ref _isExpanded, value);
+    }
+
+    private bool _isExpanded;
 
     private bool _suppressChildSync;
 
@@ -63,7 +83,7 @@ public partial class DepartmentGroupViewModel : ObservableObject
         RecomputeIsSelected();
     }
 
-    partial void OnIsSelectedChanged(bool? value)
+    private void OnIsSelectedChanged(bool? value)
     {
         if (_suppressChildSync || value is null) return;
 

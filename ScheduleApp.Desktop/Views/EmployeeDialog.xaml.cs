@@ -1,10 +1,9 @@
 using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
-using ScheduleApp.Desktop.Controls;
+using Syncfusion.Windows.Shared;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -125,15 +124,13 @@ public partial class EmployeeDialog : Controls.AppWindow
     /// <summary>See DefaultSss above; see Employee.DefaultCashAdvance for what this feeds into.</summary>
     public decimal DefaultCashAdvance { get; private set; }
 
-    /// <summary>Set by OkButton_Click once ClockInBufferBeforeHoursBox's text has passed
-    /// validation -- see Employee.ClockInBufferBeforeHours for what this feeds into and
-    /// who reads it. Unlike the money fields above, blank stays null here (not 0) --
-    /// null is itself the meaningful "no employee-level default, inherit the policy
-    /// default" value, not a placeholder amount, so treating it as 0 would silently turn
-    /// "no override" into "always match immediately, no search window at all." See
-    /// TryParseOptionalBufferField for the shared blank-stays-null/non-negative-number
-    /// validation these four buffer fields use instead of TryParseMoneyField's
-    /// blank-is-0 rule.</summary>
+    /// <summary>Set by OkButton_Click straight off ClockInBufferBeforeHoursBox -- see
+    /// Employee.ClockInBufferBeforeHours for what this feeds into and who reads it. Unlike
+    /// the money fields above, blank stays null here (not 0) -- null is itself the
+    /// meaningful "no employee-level default, inherit the policy default" value, not a
+    /// placeholder amount, so treating it as 0 would silently turn "no override" into
+    /// "always match immediately, no search window at all." The box itself refuses a
+    /// negative (MinValue 0), so there's nothing left to validate.</summary>
     public double? ClockInBufferBeforeHours { get; private set; }
 
     /// <summary>See ClockInBufferBeforeHours above; see Employee.ClockInBufferAfterHours
@@ -152,9 +149,8 @@ public partial class EmployeeDialog : Controls.AppWindow
     /// <param name="preselectedDepartmentId">Department to preselect when adding a new employee.</param>
     /// <param name="payrollPolicy">The company's current Payroll settings -- read only for
     /// RestDayPremiumPercentage/HolidayPremiumPercentage, shown as each override box's own
-    /// grayed-out placeholder (see NumericTextBox.PlaceholderValue) so a box left blank
-    /// visibly shows what it's actually inheriting rather than sitting empty with nothing to
-    /// say so.</param>
+    /// watermark so a box left blank visibly shows what it's actually inheriting rather than
+    /// sitting empty with nothing to say so.</param>
     /// <param name="defaultWorkTimeHours">AttendanceSettings.DefaultWorkTimeHours -- the
     /// company's current work-time default, shown as DefaultWorkTimeHoursBox's own
     /// grayed-out placeholder, same reasoning as payrollPolicy above.</param>
@@ -171,13 +167,13 @@ public partial class EmployeeDialog : Controls.AppWindow
         _takenEmployeeIds = takenEmployeeIds ?? new HashSet<int>();
         _existing = existing;
 
-        // Placeholders only -- never read back as a real value (see PlaceholderValue's
-        // own doc comment). Set unconditionally, before the existing/new-employee branch
-        // below, since both cases want the same "show what blank currently inherits"
-        // behavior regardless of whether this employee already has an override on file.
-        RestDayWorkPremiumPercentageBox.PlaceholderValue = payrollPolicy.RestDayPremiumPercentage;
-        HolidayPremiumPercentageBox.PlaceholderValue = payrollPolicy.HolidayPremiumPercentage;
-        DefaultWorkTimeHoursBox.PlaceholderValue = (decimal)defaultWorkTimeHours;
+        // Watermarks only -- never read back as a real value. Set unconditionally, before
+        // the existing/new-employee branch below, since both cases want the same "show
+        // what blank currently inherits" behavior regardless of whether this employee
+        // already has an override on file.
+        RestDayWorkPremiumPercentageBox.WatermarkText = PercentText(payrollPolicy.RestDayPremiumPercentage);
+        HolidayPremiumPercentageBox.WatermarkText = PercentText(payrollPolicy.HolidayPremiumPercentage);
+        DefaultWorkTimeHoursBox.WatermarkText = defaultWorkTimeHours.ToString("0.##", CultureInfo.CurrentCulture);
 
         // Deliberately set here, after InitializeComponent, rather than as a XAML
         // IsChecked="True" default on PayTypeDailyRadio -- see that radio's XAML
@@ -193,7 +189,7 @@ public partial class EmployeeDialog : Controls.AppWindow
         if (existing is not null)
         {
             Title = "Edit Employee";
-            EmployeeIdBox.Text = existing.Pin.ToString(CultureInfo.InvariantCulture);
+            EmployeeIdBox.Value = existing.Pin;
             LastNameBox.Text = existing.LastName;
             FirstNameBox.Text = existing.FirstName;
             QualifiesForOvertimeCheck.IsChecked = existing.QualifiesForOvertime;
@@ -211,9 +207,9 @@ public partial class EmployeeDialog : Controls.AppWindow
 
             DailyRateBox.Value = existing.DailyRate;
             MonthlyRateBox.Value = existing.MonthlyRate;
-            RestDayWorkPremiumPercentageBox.Value = existing.RestDayWorkPremiumPercentage;
-            HolidayPremiumPercentageBox.Value = existing.HolidayPremiumPercentage;
-            DefaultWorkTimeHoursBox.Value = existing.DefaultWorkTimeHours;
+            RestDayWorkPremiumPercentageBox.PercentValue = ToPercent(existing.RestDayWorkPremiumPercentage);
+            HolidayPremiumPercentageBox.PercentValue = ToPercent(existing.HolidayPremiumPercentage);
+            DefaultWorkTimeHoursBox.Value = (double?)existing.DefaultWorkTimeHours;
             DefaultSssBox.Value = existing.DefaultSss;
             DefaultPhilHealthBox.Value = existing.DefaultPhilHealth;
             DefaultPagIbigBox.Value = existing.DefaultPagIbig;
@@ -227,10 +223,10 @@ public partial class EmployeeDialog : Controls.AppWindow
             // money fields above, null here means "no employee-level default," a
             // real, meaningful state of its own, not just an unset amount, so
             // it's shown as genuinely empty rather than a formatted zero.
-            ClockInBufferBeforeHoursBox.Text = existing.ClockInBufferBeforeHours?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty;
-            ClockInBufferAfterHoursBox.Text = existing.ClockInBufferAfterHours?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty;
-            ClockOutBufferBeforeHoursBox.Text = existing.ClockOutBufferBeforeHours?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty;
-            ClockOutBufferAfterHoursBox.Text = existing.ClockOutBufferAfterHours?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty;
+            ClockInBufferBeforeHoursBox.Value = existing.ClockInBufferBeforeHours;
+            ClockInBufferAfterHoursBox.Value = existing.ClockInBufferAfterHours;
+            ClockOutBufferBeforeHoursBox.Value = existing.ClockOutBufferBeforeHours;
+            ClockOutBufferAfterHoursBox.Value = existing.ClockOutBufferAfterHours;
 
             if (existing.DepartmentId is int existingDeptId)
             {
@@ -252,12 +248,11 @@ public partial class EmployeeDialog : Controls.AppWindow
             // Left null, not 0 -- a brand-new employee inherits the company's Rest
             // Day premium until someone deliberately types an override (see the
             // RestDayWorkPremiumPercentage property above). Shows as that company
-            // default, grayed out, rather than sitting empty -- see
-            // PlaceholderValue's own doc comment.
-            RestDayWorkPremiumPercentageBox.Value = null;
+            // default, as the box's watermark, rather than sitting empty.
+            RestDayWorkPremiumPercentageBox.PercentValue = null;
             // Same reasoning, for Holiday Pay's own premium (see the
             // HolidayPremiumPercentage property above).
-            HolidayPremiumPercentageBox.Value = null;
+            HolidayPremiumPercentageBox.PercentValue = null;
             // Same reasoning again -- a brand-new employee starts out suggesting the
             // company's own default work time (shown grayed out) rather than any
             // particular number (see DefaultWorkTimeHours property above).
@@ -347,19 +342,15 @@ public partial class EmployeeDialog : Controls.AppWindow
 
         // Required now -- see Employee.Pin's own doc comment for why (assigned on the
         // ZKTeco device before an employee can be added here at all, not something
-        // ScheduleApp generates or lets stand in for "not yet known").
-        if (string.IsNullOrWhiteSpace(EmployeeIdBox.Text))
+        // ScheduleApp generates or lets stand in for "not yet known"). The box only
+        // takes a whole number from 0 up, so blank is the one case left to catch.
+        if (EmployeeIdBox.Value is not long typedId)
         {
             MessageBox.Show("Employee ID is required.", "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        if (!int.TryParse(EmployeeIdBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var employeeId))
-        {
-            MessageBox.Show("Employee ID must be a whole number.", "Required",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
+        var employeeId = (int)typedId;
 
         if (_takenEmployeeIds.Contains(employeeId))
         {
@@ -373,16 +364,14 @@ public partial class EmployeeDialog : Controls.AppWindow
         // Blank is treated as 0 -- same "never blocks saving" convention as
         // Employee.DailyRate's own default. All eight of those money fields (DailyRate,
         // MonthlyRate, the three statutory contribution defaults, and the three
-        // pay-adjustment defaults) are NumericTextBoxes, so there's
-        // nothing left to validate here: that control refuses a non-number or a negative at
-        // the keystroke, so the old TryParseMoneyField check -- parse, then warn on what
-        // came back bad -- has no case left to catch, and MoneyValue below is just "what's
-        // in the box, or 0 if it's empty".
+        // pay-adjustment defaults) are CurrencyTextBoxes, so there's nothing left to
+        // validate here: that control refuses a non-number or a negative at the keystroke,
+        // and MoneyValue below is just "what's in the box, or 0 if it's empty".
         //
-        // RestDayWorkPremiumPercentageBox and HolidayPremiumPercentageBox are the two
-        // NumericTextBoxes here that do NOT take that rule -- blank stays null for
-        // both, since null is a meaningful "inherit the company default" rather than
-        // an unset amount. See each property's own doc comment.
+        // RestDayWorkPremiumPercentageBox and HolidayPremiumPercentageBox do NOT take
+        // that rule -- blank stays null for both, since null is a meaningful "inherit the
+        // company default" rather than an unset amount. See each property's own doc
+        // comment.
         //
         // Only the active Pay Type's rate box is read here -- DailyRateBox when
         // Daily is selected, MonthlyRateBox when Monthly is (see PayTypeRadio_CheckedChanged
@@ -406,23 +395,23 @@ public partial class EmployeeDialog : Controls.AppWindow
 
         // Not gated behind Pay Type -- always read regardless of which radio is checked,
         // since a Daily-rated employee can be called in on a Rest Day too (see
-        // Employee.RestDayWorkPremiumPercentage). Read straight off Value rather than
+        // Employee.RestDayWorkPremiumPercentage). Read straight off the box rather than
         // through MoneyValue: that helper's blank-is-0 rule is exactly wrong for an
         // override column -- see the property's own doc comment.
-        RestDayWorkPremiumPercentage = RestDayWorkPremiumPercentageBox.Value;
+        RestDayWorkPremiumPercentage = ToFraction(RestDayWorkPremiumPercentageBox.PercentValue);
 
         // Same reasoning as RestDayWorkPremiumPercentage above -- read regardless of
         // whether QualifiesForPremiumPayCheck is currently checked, so a value typed in
         // before the checkbox was unchecked survives the round trip instead of being
         // silently discarded (same "hidden fields still save" rule this dialog follows
         // everywhere else).
-        HolidayPremiumPercentage = HolidayPremiumPercentageBox.Value;
+        HolidayPremiumPercentage = ToFraction(HolidayPremiumPercentageBox.PercentValue);
 
         // Same reasoning as RestDayWorkPremiumPercentage/HolidayPremiumPercentage
         // above -- null is itself the meaningful "no employee-level suggestion" state,
         // not an unset amount, so it's read straight off Value rather than through
         // MoneyValue's blank-is-0 rule.
-        DefaultWorkTimeHours = DefaultWorkTimeHoursBox.Value;
+        DefaultWorkTimeHours = DefaultWorkTimeHoursBox.Value is double hours ? Math.Round((decimal)hours, 2) : null;
 
         DefaultSss = MoneyValue(DefaultSssBox);
         DefaultPhilHealth = MoneyValue(DefaultPhilHealthBox);
@@ -431,53 +420,29 @@ public partial class EmployeeDialog : Controls.AppWindow
         DefaultAllowance = MoneyValue(DefaultAllowanceBox);
         DefaultCashAdvance = MoneyValue(DefaultCashAdvanceBox);
 
-        if (!TryParseOptionalBufferField(ClockInBufferBeforeHoursBox, "Clock-in buffer, before", out var clockInBufferBeforeHours)) return;
-        ClockInBufferBeforeHours = clockInBufferBeforeHours;
-
-        if (!TryParseOptionalBufferField(ClockInBufferAfterHoursBox, "Clock-in buffer, after", out var clockInBufferAfterHours)) return;
-        ClockInBufferAfterHours = clockInBufferAfterHours;
-
-        if (!TryParseOptionalBufferField(ClockOutBufferBeforeHoursBox, "Clock-out buffer, before", out var clockOutBufferBeforeHours)) return;
-        ClockOutBufferBeforeHours = clockOutBufferBeforeHours;
-
-        if (!TryParseOptionalBufferField(ClockOutBufferAfterHoursBox, "Clock-out buffer, after", out var clockOutBufferAfterHours)) return;
-        ClockOutBufferAfterHours = clockOutBufferAfterHours;
+        // Blank stays null -- see ClockInBufferBeforeHours' own doc comment.
+        ClockInBufferBeforeHours = ClockInBufferBeforeHoursBox.Value;
+        ClockInBufferAfterHours = ClockInBufferAfterHoursBox.Value;
+        ClockOutBufferBeforeHours = ClockOutBufferBeforeHoursBox.Value;
+        ClockOutBufferAfterHours = ClockOutBufferAfterHoursBox.Value;
 
         DialogResult = true;
     }
 
-    /// <summary>What one of this dialog's nine money/rate boxes currently holds, with an
-    /// empty box reading as 0 -- the "never blocks saving" rule those nine share (see the
-    /// comment at this method's call sites). Replaces the old TryParseMoneyField, whose parse
-    /// and its warning both became unreachable once these boxes became NumericTextBoxes: a
-    /// letter, a second decimal point and a minus sign are all refused as they're typed now,
-    /// so there is no bad value left for a check here to find.</summary>
-    private static decimal MoneyValue(NumericTextBox box) => box.Value ?? 0m;
+    /// <summary>What one of this dialog's money/rate boxes currently holds, with an empty
+    /// box reading as 0 -- the "never blocks saving" rule those boxes share (see the comment
+    /// at this method's call sites).</summary>
+    private static decimal MoneyValue(CurrencyTextBox box) => box.Value ?? 0m;
 
-    /// <summary>Shared blank-stays-null/non-negative-number validation for the four
-    /// buffer-default boxes (ClockInBufferBeforeHoursBox/.../ClockOutBufferAfterHoursBox)
-    /// -- deliberately NOT TryParseMoneyField's blank-is-0 rule, since null is itself
-    /// the meaningful "no employee-level default, inherit the policy default" state
-    /// for these four (see NormalBufferResolver), not just an unset amount the way
-    /// 0.00 is for the money fields above. Otherwise the same "never blocks saving,
-    /// only a real invalid value does" shape as TryParseMoneyField.</summary>
-    private static bool TryParseOptionalBufferField(TextBox box, string fieldLabel, out double? value)
-    {
-        if (string.IsNullOrWhiteSpace(box.Text))
-        {
-            value = null;
-            return true;
-        }
+    /// <summary>A premium fraction (0.30) as the percent PercentTextBox shows (30).</summary>
+    private static double? ToPercent(decimal? fraction) => fraction is decimal f ? (double)(f * 100m) : null;
 
-        if (!double.TryParse(box.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) || parsed < 0)
-        {
-            MessageBox.Show($"{fieldLabel} must be a valid number of hours, 0 or greater (or left blank to inherit the policy default).",
-                "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-            value = null;
-            return false;
-        }
+    /// <summary>A percent typed into a PercentTextBox (30) as the fraction the employee row
+    /// stores (0.30), to the four decimal places its decimal(5,4) column holds.</summary>
+    private static decimal? ToFraction(double? percent) =>
+        percent is double p ? Math.Round((decimal)p / 100m, 4) : null;
 
-        value = parsed;
-        return true;
-    }
+    /// <summary>A premium fraction as a percent box's watermark text: 0.3 as "30 %".</summary>
+    private static string PercentText(decimal fraction) =>
+        $"{(fraction * 100m).ToString("0.##", CultureInfo.CurrentCulture)} %";
 }

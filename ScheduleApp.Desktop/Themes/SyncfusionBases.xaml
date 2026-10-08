@@ -1,0 +1,35 @@
+<ResourceDictionary
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:syncfusion="http://schemas.syncfusion.com/wpf">
+
+    <!--
+        The theme's own styles for the Syncfusion parts a view restyles with BasedOn, such as an
+        SfDataGrid row greyed out by a DataTrigger. SfSkinManager merges the Windows11Light theme
+        into each window only when that window loads (App.xaml.cs), but a BasedOn is a
+        StaticResource, resolved when the view's XAML is parsed, before that. So the theme's
+        SfDataGrid dictionary is merged here, at application level, and views base their styles on
+        the keys below; a style with no BasedOn would replace the theme's template and lose its
+        look, selection highlight included. The same reason, for the native controls the port
+        hasn't reached yet, is behind Themes/FrameworkFallbacks.xaml.
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/Syncfusion.Themes.Windows11Light.WPF;component/SfDataGrid/SfDataGrid.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- An SfDataGrid row (RowStyle), as the theme draws it. -->
+    <Style x:Key="GridRowStyle"
+           TargetType="syncfusion:VirtualizingCellsControl"
+           BasedOn="{StaticResource SyncfusionVirtualizingCellsControlStyle}" />
+
+    <!-- An SfDataGrid header cell (HeaderStyle), as the theme draws it. -->
+    <Style x:Key="GridHeaderCellStyle"
+           TargetType="syncfusion:GridHeaderCellControl"
+           BasedOn="{StaticResource SyncfusionGridHeaderCellControlStyle}" />
+
+    <!-- An SfDataGrid cell (CellStyle), as the theme draws it. -->
+    <Style x:Key="GridCellStyle"
+           TargetType="syncfusion:GridCell"
+           BasedOn="{StaticResource SyncfusionGridCellStyle}" />
+
+</ResourceDictionary>

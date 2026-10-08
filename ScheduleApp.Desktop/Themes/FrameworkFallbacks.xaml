@@ -12,8 +12,8 @@
         parsed, before that. So the theme's own DataGrid and TextBox dictionaries are merged here, at
         application level, and the keys the views name are based on the theme's styles - a restyled
         header, row or text box keeps the theme's look, selection highlight included. That needs the
-        theme's settings (the accent) registered before App.xaml loads, which is why App's static
-        constructor does it.
+        theme's settings (the accent) registered before App.xaml loads, which is why App's
+        constructor does it first (ConfigureSyncfusion).
 
         Delete each key, and its dictionary, once nothing names it.
     -->

@@ -9,6 +9,7 @@
                  design tokens named from it, and the shared styles that use them. -->
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/FrameworkFallbacks.xaml" />
+                <ResourceDictionary Source="Themes/SyncfusionBases.xaml" />
                 <ResourceDictionary Source="Themes/Tokens.xaml" />
                 <ResourceDictionary Source="Themes/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>

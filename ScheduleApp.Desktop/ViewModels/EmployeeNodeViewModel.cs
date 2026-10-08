@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using ReactiveUI;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 
@@ -12,7 +12,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// from). Employee itself is a plain Core model with no change notification,
 /// so this wrapper is what the checkbox actually binds to.
 /// </summary>
-public partial class EmployeeNodeViewModel : ObservableObject
+public class EmployeeNodeViewModel : ReactiveObject
 {
     public required Employee Employee { get; init; }
 
@@ -22,8 +22,13 @@ public partial class EmployeeNodeViewModel : ObservableObject
     /// attendance report scoped to specific employees on the Attendance tab.
     /// Independent of TreeView.SelectedItem, which still drives the
     /// single-employee calendar view on the Schedule tab's right pane.</summary>
-    [ObservableProperty]
-    private bool isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+    }
+
+    private bool _isSelected;
 
     /// <summary>Always true now -- every employee has an Employee ID (Pin) set (see
     /// Employee.Pin's own doc comment), so there's no longer a "can never be matched to a
@@ -49,6 +54,11 @@ public partial class EmployeeNodeViewModel : ObservableObject
     /// would lose its checkbox state. Independent of IsSelected -- searching only changes
     /// what's shown, never what's checked. Always true on the Schedule tab's tree, which
     /// shares this same view-model shape but has no search box of its own.</summary>
-    [ObservableProperty]
-    private bool isVisible = true;
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set => this.RaiseAndSetIfChanged(ref _isVisible, value);
+    }
+
+    private bool _isVisible = true;
 }

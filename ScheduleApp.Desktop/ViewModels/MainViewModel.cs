@@ -1,7 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ReactiveUI;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
@@ -10,6 +10,7 @@ using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.ViewModels.Schedule;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -56,8 +57,13 @@ namespace ScheduleApp.Desktop.ViewModels;
 ///    (an explicit ToggleMultiSelectMode click, or Assignment's own bulk-write clearing it
 ///    back to false after a successful assign). See MultiSelectModeState's own doc comment
 ///    for why this cascade couldn't live on either sibling that reads/writes the flag.
+///
+/// A ReactiveObject: it has no action of its own that can fail, so it doesn't need
+/// ViewModelBase. Its children move to ReactiveUI one at a time; until they all have,
+/// the forwarded commands below are a mix of ReactiveCommands (Tree's) and the
+/// CommunityToolkit commands the other children still have.
 /// </summary>
-public partial class MainViewModel : ObservableObject
+public class MainViewModel : ReactiveObject
 {
     private readonly ViewStateStore _viewStateStore;
 
@@ -115,10 +121,10 @@ public partial class MainViewModel : ObservableObject
         // collides across more than one child (each forwarded property belongs to exactly one
         // of them; see the region below), so a blanket relay is safe -- same reasoning
         // AttendanceViewModel's own constructor already documents for its seven children.
-        Tree.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
-        Calendar.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
-        Assignment.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
-        ImportExport.PropertyChanged += (_, e) => OnPropertyChanged(e.PropertyName);
+        Tree.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+        Calendar.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+        Assignment.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
+        ImportExport.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
 
         // CalendarHeaderText is built out of Tree.SelectedEmployee *and*
         // MultiSelectModeState.IsMultiSelectMode (see that property below), so the blanket
@@ -130,7 +136,7 @@ public partial class MainViewModel : ObservableObject
         Tree.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EmployeeTreeViewModel.SelectedEmployee))
-                OnPropertyChanged(nameof(CalendarHeaderText));
+                this.RaisePropertyChanged(nameof(CalendarHeaderText));
         };
 
         // The MultiSelectModeState cascade -- see this class's own doc comment above and
@@ -148,9 +154,9 @@ public partial class MainViewModel : ObservableObject
         {
             if (e.PropertyName != nameof(MultiSelectModeState.IsMultiSelectMode)) return;
 
-            OnPropertyChanged(nameof(IsMultiSelectMode));
-            OnPropertyChanged(nameof(MultiSelectButtonText));
-            OnPropertyChanged(nameof(CalendarHeaderText));
+            this.RaisePropertyChanged(nameof(IsMultiSelectMode));
+            this.RaisePropertyChanged(nameof(MultiSelectButtonText));
+            this.RaisePropertyChanged(nameof(CalendarHeaderText));
             Assignment.SetScheduleForSelectionCommand.NotifyCanExecuteChanged();
             Assignment.SetLeaveForSelectionCommand.NotifyCanExecuteChanged();
             Assignment.ClearScheduleForSelectionCommand.NotifyCanExecuteChanged();
@@ -159,17 +165,14 @@ public partial class MainViewModel : ObservableObject
 
             // Leaving the mode (whether by cancelling or after a successful bulk assign)
             // clears whatever was checked -- checkboxes are about to disappear, so a leftover
-            // checked state would just be invisible state. Execute(null) rather than a direct
-            // method call: ClearEmployeeSelection itself is private on EmployeeTreeViewModel
-            // (this facade only ever reaches it through the generated command, same as every
-            // other member in the "Forwarded members" region below), and -- same as the old,
-            // unsplit OnIsMultiSelectModeChanged's own direct call -- this bypasses
-            // ClearEmployeeSelectionCommand's own CanExecute gate entirely rather than
-            // respecting it, since there's always something to clear (or nothing, harmlessly)
-            // whenever this fires.
+            // checked state would just be invisible state. A direct call rather than through
+            // ClearEmployeeSelectionCommand, which is only enabled while something's checked:
+            // there's always something to clear (or nothing, harmlessly) whenever this fires.
             if (!_multiSelectMode.IsMultiSelectMode)
-                Tree.ClearEmployeeSelectionCommand.Execute(null);
+                Tree.ClearEmployeeSelection();
         };
+
+        ToggleMultiSelectModeCommand = ReactiveCommand.Create(ToggleMultiSelectMode);
     }
 
     // ---- Forwarded members ----
@@ -250,7 +253,8 @@ public partial class MainViewModel : ObservableObject
     /// refreshing the calendar's contents isn't part of the multi-select flag flip itself, the
     /// same "child subscribes to / is called by whoever needs it" layering the rest of this
     /// split already follows.</summary>
-    [RelayCommand]
+    public ReactiveCommand<RxVoid, RxVoid> ToggleMultiSelectModeCommand { get; }
+
     private void ToggleMultiSelectMode()
     {
         IsMultiSelectMode = !IsMultiSelectMode;
@@ -269,7 +273,7 @@ public partial class MainViewModel : ObservableObject
     public string RefreshOrCancelGlyph => Calendar.RefreshOrCancelGlyph;
     public string RefreshOrCancelToolTip => Calendar.RefreshOrCancelToolTip;
 
-    public IAsyncRelayCommand LoadCommand => Tree.LoadCommand;
+    public ReactiveCommand<RxVoid, RxVoid> LoadCommand => Tree.LoadCommand;
 
     /// <summary>Schedule-page navigation entry point beyond LoadCommand (Tree's own) -- the
     /// calendar's company-wide holiday markers aren't tied to an employee selection, so
@@ -282,17 +286,17 @@ public partial class MainViewModel : ObservableObject
 
     public IEnumerable<Department> RealDepartments => Tree.RealDepartments;
 
-    public IAsyncRelayCommand AddDepartmentCommand => Tree.AddDepartmentCommand;
-    public IAsyncRelayCommand DeleteDepartmentCommand => Tree.DeleteDepartmentCommand;
-    public IAsyncRelayCommand AddEmployeeCommand => Tree.AddEmployeeCommand;
-    public IAsyncRelayCommand EditEmployeeCommand => Tree.EditEmployeeCommand;
-    public IAsyncRelayCommand DeleteEmployeeCommand => Tree.DeleteEmployeeCommand;
-    public IAsyncRelayCommand BlacklistEmployeeCommand => Tree.BlacklistEmployeeCommand;
-    public IAsyncRelayCommand UnblacklistEmployeeCommand => Tree.UnblacklistEmployeeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> AddDepartmentCommand => Tree.AddDepartmentCommand;
+    public ReactiveCommand<RxVoid, RxVoid> DeleteDepartmentCommand => Tree.DeleteDepartmentCommand;
+    public ReactiveCommand<RxVoid, RxVoid> AddEmployeeCommand => Tree.AddEmployeeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> EditEmployeeCommand => Tree.EditEmployeeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> DeleteEmployeeCommand => Tree.DeleteEmployeeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> BlacklistEmployeeCommand => Tree.BlacklistEmployeeCommand;
+    public ReactiveCommand<RxVoid, RxVoid> UnblacklistEmployeeCommand => Tree.UnblacklistEmployeeCommand;
 
     public IAsyncRelayCommand<ScheduleType?> SetScheduleForSelectionCommand => Assignment.SetScheduleForSelectionCommand;
     public IAsyncRelayCommand SetLeaveForSelectionCommand => Assignment.SetLeaveForSelectionCommand;
-    public IRelayCommand ClearEmployeeSelectionCommand => Tree.ClearEmployeeSelectionCommand;
+    public ReactiveCommand<RxVoid, RxVoid> ClearEmployeeSelectionCommand => Tree.ClearEmployeeSelectionCommand;
     public IAsyncRelayCommand ClearScheduleForSelectionCommand => Assignment.ClearScheduleForSelectionCommand;
     public IRelayCommand ClearCalendarSelectionCommand => Calendar.ClearCalendarSelectionCommand;
     public IAsyncRelayCommand<CalendarDayViewModel> AddManualEntryForDayCommand => Assignment.AddManualEntryForDayCommand;

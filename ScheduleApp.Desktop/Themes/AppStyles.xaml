@@ -22,6 +22,71 @@
         <Setter Property="FontSize" Value="14" />
     </Style>
 
+    <!-- ButtonAdv.IconTemplate glyphs, one per verb, reused across every screen's buttons
+         instead of repeating the glyph markup on each one - the same set TinapayanRMS keeps
+         in its App.xaml. Every ButtonAdv gets one, OK and Cancel included: one without shows
+         Syncfusion's own placeholder image instead. -->
+    <DataTemplate x:Key="AddIconTemplate">
+        <TextBlock Text="&#xE710;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="EditIconTemplate">
+        <TextBlock Text="&#xE70F;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="DeleteIconTemplate">
+        <TextBlock Text="&#xE74D;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="SaveIconTemplate">
+        <TextBlock Text="&#xE74E;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <!-- OK / confirm: CheckMark -->
+    <DataTemplate x:Key="ApplyIconTemplate">
+        <TextBlock Text="&#xE73E;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="CancelIconTemplate">
+        <TextBlock Text="&#xE711;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="SearchIconTemplate">
+        <TextBlock Text="&#xE721;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="RefreshIconTemplate">
+        <TextBlock Text="&#xE72C;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <!-- A workbook read in: Upload, an arrow into the tray -->
+    <DataTemplate x:Key="ImportIconTemplate">
+        <TextBlock Text="&#xE8B5;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <!-- A table to an Excel workbook: Export, an arrow leaving a box -->
+    <DataTemplate x:Key="ExportIconTemplate">
+        <TextBlock Text="&#xEDE1;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="PrintIconTemplate">
+        <TextBlock Text="&#xE749;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <!-- Blacklist / Unblacklist an employee: BlockContact / AddFriend -->
+    <DataTemplate x:Key="BlacklistIconTemplate">
+        <TextBlock Text="&#xE8F8;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="UnblacklistIconTemplate">
+        <TextBlock Text="&#xE8FA;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <!-- Uncheck everything: ClearSelection -->
+    <DataTemplate x:Key="ClearSelectionIconTemplate">
+        <TextBlock Text="&#xE8E6;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <!-- Check everything: SelectAll -->
+    <DataTemplate x:Key="SelectAllIconTemplate">
+        <TextBlock Text="&#xE8B3;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="CalendarIconTemplate">
+        <TextBlock Text="&#xE787;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="FolderIconTemplate">
+        <TextBlock Text="&#xE838;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+    <DataTemplate x:Key="SettingsIconTemplate">
+        <TextBlock Text="&#xE713;" Style="{StaticResource IconGlyphStyle}" />
+    </DataTemplate>
+
     <!-- Generic card-like grouping container - the shared replacement for the plain
          <Border Background="#F..." BorderBrush="#E../#C.."> pattern repeated across most
          pages/dialogs before this file existed. -->

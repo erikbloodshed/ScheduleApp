@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using Syncfusion.Windows.Shared;
+using Syncfusion.Windows.Tools.Controls;
 
 namespace ScheduleApp.Desktop.Controls;
 
@@ -25,6 +27,11 @@ namespace ScheduleApp.Desktop.Controls;
 /// ShowIcon is off by default: none of this app's windows has an icon of its own, so the title bar would otherwise show
 /// the generic window glyph, which FluentWindow never did.
 /// </para>
+/// <para>
+/// A ButtonAdv with IsCancel closes the window as cancelled, as a WPF Button with IsCancel does: ButtonAdv is a ButtonBase,
+/// not a Button, so it registers Esc as its access key and raises Click, but nothing then closed the window. See
+/// OnButtonClick.
+/// </para>
 /// </summary>
 public class AppWindow : ChromelessWindow
 {
@@ -34,6 +41,27 @@ public class AppWindow : ChromelessWindow
         CornerRadius = new CornerRadius(0);
         ResizeBorderThickness = new Thickness(0);
         ShowIcon = false;
+
+        AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(OnButtonClick));
+    }
+
+    /// <summary>
+    /// After a cancel ButtonAdv's own Click handlers have run (this handler is the window's, so the event reaches it last),
+    /// closes the window: as a dialog that was cancelled when it was shown with ShowDialog, or plainly when it wasn't, where
+    /// setting DialogResult throws.
+    /// </summary>
+    private void OnButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not ButtonAdv { IsCancel: true } || !IsLoaded) return;
+
+        try
+        {
+            DialogResult = false;
+        }
+        catch (InvalidOperationException)
+        {
+            Close();
+        }
     }
 
     /// <summary>
