@@ -1,9 +1,11 @@
-﻿using System.IO;
+﻿using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ReactiveUI;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Configuration;
@@ -16,6 +18,7 @@ using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using ScheduleApp.Desktop.Views;
+using Serilog;
 using Syncfusion.Licensing;
 using Syncfusion.SfSkinManager;
 using Syncfusion.Themes.Windows11Light.WPF;
@@ -103,17 +106,25 @@ public partial class App : Application
     /// observed/awaited by anything -- logged rather than shown as a MessageBox, since by
     /// the time the GC finalizer thread raises this the person has typically moved on from
     /// whatever triggered it, and a message box popping up from a finalizer thread with no
-    /// clear connection to anything currently on screen would just be confusing.</summary>
+    /// clear connection to anything currently on screen would just be confusing.
+    ///
+    /// Every one of them is logged too (see ConfigureLogging). A ReactiveCommand or an
+    /// observable whose error nothing handled reaches DispatcherUnhandledException wrapped
+    /// in ReactiveUI's UnhandledErrorException; the cause inside it is what's worth showing.</summary>
     public App()
     {
         // The generated Main calls this constructor, then InitializeComponent (App.xaml).
+        ConfigureLogging();
+        ReactiveUIBootstrapper.EnsureInitialized();
         ConfigureSyncfusion();
 
         DispatcherUnhandledException += (_, args) =>
         {
+            var exception = args.Exception is UnhandledErrorException { InnerException: { } inner } ? inner : args.Exception;
+            Log.Error(exception, "Unhandled exception on the UI thread");
             MessageBox.Show(
                 "Something went wrong and Schedule Manager needs your attention.\n\n" +
-                args.Exception.Message +
+                Failure.Of(exception).Text +
                 "\n\nYou can keep working, but if this keeps happening, a restart is worth trying.",
                 "Unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
@@ -121,6 +132,8 @@ public partial class App : Application
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
+            Log.Fatal(args.ExceptionObject as Exception, "Unhandled exception (terminating: {IsTerminating})", args.IsTerminating);
+            Log.CloseAndFlush();
             if (args.ExceptionObject is Exception ex)
                 MessageBox.Show(
                     "Schedule Manager hit an unrecoverable error and needs to close.\n\n" + ex.Message,
@@ -129,8 +142,27 @@ public partial class App : Application
 
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
+            Log.Warning(args.Exception, "A task failed with nothing awaiting it");
             args.SetObserved();
         };
+    }
+
+    /// <summary>The app's log: one file a day under %LOCALAPPDATA%\ScheduleApp\logs, the
+    /// folder the app keeps its other per-user state in (NavigationDrawerStateStore,
+    /// RememberedSignInStore), a month of them kept. ViewModelBase logs every failure a
+    /// screen shows, and the handlers above whatever escaped one.</summary>
+    private static void ConfigureLogging()
+    {
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.File(
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "ScheduleApp", "logs", "scheduleapp-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 31,
+                formatProvider: CultureInfo.InvariantCulture)
+            .CreateLogger();
     }
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -654,6 +686,7 @@ public partial class App : Application
 
         _scope?.Dispose();
         _serviceProvider?.Dispose();
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 }
