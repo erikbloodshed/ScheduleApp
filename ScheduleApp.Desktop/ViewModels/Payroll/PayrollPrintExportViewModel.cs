@@ -1,62 +1,30 @@
-using System.Windows;
-using Microsoft.Win32;
+using System.Reactive.Linq;
+using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Services;
-using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
-using ScheduleApp.Desktop.Views;
 using ScheduleApp.Excel;
 using ScheduleApp.Payroll;
-using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
 /// <summary>Concern 4 of the Payroll refactor plan (see PayrollViewModel_Refactor_Plan.md's
 /// "What's tangled together" and "Full member mapping") -- extracted from PayrollViewModel as
-/// build-order step 5, the plan's last extraction. Owns batch print/export: previewing a
-/// payslip for many employees at once (<see cref="PrintPayslipsAsync"/>) and saving an Excel
-/// roster of many employees' payroll at once (<see cref="ExportPayrollReportAsync"/>) -- both
-/// the same "open PayslipScopeDialog, then IPayrollComputationService.PrepareBatchAsync +
-/// ComputeOneFromBatchAsync over whoever's checked" shape, differing only in what they do with
-/// the results once computed (a PayslipPreviewDialog vs a SaveFileDialog + PayrollExcelExporter
-/// call) -- see each method's own doc comment.
+/// build-order step 5, the plan's last extraction. Owns batch print/export: previewing payslips
+/// for many employees at once (<see cref="PrintPayslipsAsync"/>) and saving an Excel roster of
+/// many employees' payroll at once (<see cref="ExportPayrollReportAsync"/>) -- both "pick a
+/// scope, then compute over whoever's checked" (<see cref="ComputeForChosenScopeAsync"/>),
+/// differing only in what they do with the results.
 ///
-/// Like PayrollRunViewModel (concern 3), needs no reference to PayrollSummaryViewModel or
-/// PayrollGroupViewModel themselves -- see the refactor plan's own "Dependency graph": this
-/// class and PayrollRunViewModel are the two concerns that stay fully decoupled from Summary
-/// and Group, touching only PayrollScopeState, AttendanceBusyState, and their own repositories.
-/// Unlike PayrollRunViewModel, this class doesn't take MainViewModel either -- neither method
-/// here ever reads or writes MainViewModel.SelectedEmployee the way NewPayrollRun/
-/// LoadPayrollGroupAsync's own landing sequence does; both open PayslipScopeDialog's own
-/// department/employee tree and loop over whichever employees come back checked from *that*,
-/// entirely independent of whoever happens to be selected on the Payroll tab's own
-/// MainViewModel-shared tree. The refactor plan's own "The one real wrinkle" section describes
-/// Run and this class together as touching "PayrollScopeState, _mainViewModel, and their own
-/// repositories" -- the actual extraction found that generalization doesn't quite hold for this
-/// half of the pair, so MainViewModel is left off this class's constructor as a correction, the
-/// same "actual extraction found X" precedent PayrollRunViewModel's own doc comment already sets
-/// for IStatusBarService.
+/// Needs no reference to PayrollSummaryViewModel, PayrollGroupViewModel or MainViewModel:
+/// neither command reads whoever is selected on the Payroll tab -- each opens its own
+/// department/employee tree and works over whoever comes back checked from *that*.
 ///
-/// PayrollPage.xaml's "Print Payslips…"/"Export Payroll Report…" toolbar buttons are bound
-/// directly to PayrollViewModel (the facade), never to this class -- so PrintPayslipsCommand/
-/// ExportPayrollReportCommand are forwarded back out under the same name via
-/// PayrollViewModel.PrintExport (see that class's own "Forwarded members
-/// (PayrollPrintExportViewModel)" region). Nothing in this class itself needs to know that.
-///
-/// Takes PayrollScopeState and AttendanceBusyState the same shared-not-owned way every other
-/// child does (see any of their own doc comments and the refactor plan's own "Dependency
-/// graph") -- both constructed on PayrollViewModel and passed in here. Also takes
-/// ActiveRosterProvider, purely to hand off to PayslipScopeDialog's own tree -- replaces the
-/// raw IScheduleRepository this class used to hand off directly, same "constructor-injected
-/// just to hand off to a dialog" convention PayrollViewModel's own _rosterProvider doc
-/// comment already describes, and PayrollRunViewModel's own constructor already follows for
-/// PayrollWizardDialog/LoadPayrollGroupDialog -- see ActiveRosterProvider's own doc comment
-/// for why both PrintPayslipsAsync and ExportPayrollReportAsync below now go through the
-/// shared, RosterVersion-gated cache instead of each paying for its own
-/// GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync round trip. Also
-/// takes IPayrollComputationService (the batch compute loop itself) and IStatusBarService
-/// (the success/failure messages both methods report through).</summary>
-public class PayrollPrintExportViewModel : ViewModelBase
+/// Takes PayrollScopeState and AttendanceBusyState shared-not-owned, the same way every other
+/// Payroll child does. Never writes to the scope -- it only reads the active batch to preset
+/// the scope tree. ActiveRosterProvider is only here to hand to that tree.</summary>
+public partial class PayrollPrintExportViewModel : ViewModelBase
 {
     private readonly ActiveRosterProvider _rosterProvider;
     private readonly IPayrollComputationService _payrollComputationService;
@@ -66,19 +34,16 @@ public class PayrollPrintExportViewModel : ViewModelBase
     private readonly AttendanceBusyState _busy;
 
     /// <summary>Shared with PayrollViewModel and its other children -- see PayrollViewModel's
-    /// own _scope doc comment. This class reads PeriodStart/PeriodEnd/BatchScopeEmployees
-    /// straight off this instance rather than through any forwarding property of its own, the
-    /// same way PayrollSummaryViewModel/PayrollGroupViewModel/PayrollRunViewModel already do.
-    /// Never writes to it -- unlike Run, neither method here establishes or replaces a batch
-    /// scope, they only read whatever's already active to preset PayslipScopeDialog's own
-    /// tree (see HasActiveBatchScope below).</summary>
+    /// own _scope doc comment.</summary>
     private readonly PayrollScopeState _scope;
 
     /// <summary>Already resolved to whatever's effective -- see PayrollSummaryViewModel's
-    /// own _companyName doc comment for the shared reasoning (both children get the same
-    /// one value from PayrollViewModel's constructor). Passed straight through to
-    /// PayslipPreviewDialog by PrintPayslipsAsync below.</summary>
+    /// own _companyName doc comment. Passed straight through to the payslip preview.</summary>
     private readonly string _companyName;
+
+    /// <summary>Both commands are scope-independent by design -- they open their own tree --
+    /// so, unlike Print Current Payslip, nothing but a running refresh holds them back.</summary>
+    private readonly IObservable<bool> _notBusy;
 
     public PayrollPrintExportViewModel(
         ActiveRosterProvider rosterProvider,
@@ -95,218 +60,68 @@ public class PayrollPrintExportViewModel : ViewModelBase
         _scope = scope;
         _companyName = companyName;
 
-        // Trimmed to just this class's own concern (PrintPayslipsCommand/
-        // ExportPayrollReportCommand) as of build-order step 5 -- the Payroll refactor plan's
-        // last extraction, so PayrollViewModel's own NotifyToolbarCommands is retired entirely
-        // rather than trimmed further (nothing is left on the facade for it to cover -- see
-        // that class's own now-removed doc comment history). Same "PropertyChanged ->
-        // NotifyCanExecuteChanged, immediately, every time, no artificial hold" behavior every
-        // other child's own _busy.PropertyChanged subscription already follows -- see any of
-        // their doc comments for why smoothing this independently never actually worked.
-        //
-        // No pending-refresh flag to check afterward the way PayrollSummaryViewModel's own
-        // _refreshPending/PayrollGroupViewModel's own _payrollGroupRefreshPending/
-        // _fullRosterRefreshPending are -- same reasoning PayrollRunViewModel's own
-        // constructor doc comment gives for itself: neither PrintPayslipsAsync nor
-        // ExportPayrollReportAsync is ever triggered by a _scope change arriving mid-refresh,
-        // both only ever run from a direct button click, so there's nothing here that could go
-        // stale while _busy.IsRunning was already true.
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(AttendanceBusyState.IsRunning)) return;
-            NotifyPrintExportCommands();
-        };
+        _notBusy = _busy.WhenAnyValue(b => b.IsRunning).Select(running => !running);
 
-        PrintPayslipsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(PrintPayslipsAsync), CanExecuteFrom(CanPrintPayslips));
-        ExportPayrollReportCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportPayrollReportAsync), CanExecuteFrom(CanExportPayrollReport));
+        ReportFailuresOf(PrintPayslipsCommand, ExportPayrollReportCommand);
     }
 
-    /// <summary>The two command notifications gated on _busy.IsRunning that this class owns --
-    /// factored out so the constructor's _busy.PropertyChanged handler above is the only
-    /// caller, same "one list, not two copies that could drift apart" reasoning every other
-    /// child's own NotifyXCommands() already follows.</summary>
-    private void NotifyPrintExportCommands()
-    {
-        RequeryCanExecute();
-    }
-
-    /// <summary>_scope.BatchScopeEmployees.Count > 0, read directly off the shared scope
-    /// rather than through PayrollGroupViewModel.HasBatchScope -- this class has no reference
-    /// to Group to read that through (see this class's own doc comment for why staying
-    /// decoupled from Group is deliberate here), so the same one-line condition is duplicated
-    /// rather than taking on that dependency just for it. Both PrintPayslipsAsync and
-    /// ExportPayrollReportAsync read this once, to decide whether PayslipScopeDialog's own
-    /// tree should start checked to the active batch instead of the whole company -- see
-    /// each method's own doc comment, build-order step 11.</summary>
-    private bool HasActiveBatchScope => _scope.BatchScopeEmployees.Count > 0;
-
-    /// <summary>Build-order step 5's batch command: "Print Payslips…" on
-    /// PayrollPage. Opens PayslipScopeDialog first (its own department/employee
-    /// tree, defaulting to this tab's current period and, per build-order step 11,
-    /// pre-checked to BatchScopeEmployees when HasActiveBatchScope is true instead of the
-    /// whole company -- see that dialog's own doc
-    /// comment) entirely outside the _busy window, same "dialog shown before
-    /// _busy.RunAsync starts" reasoning ManualEntryEditorViewModel.AddOrEditManualEntryAsync
-    /// follows for its own dialog -- Cancel-ing the scope dialog never touches
-    /// _busy.IsRunning at all.
-    ///
-    /// Once a scope and period are confirmed, recomputes a PayrollResult for every
-    /// checked employee via IPayrollComputationService.PrepareBatchAsync (one shared
-    /// attendance/adjustments/waiver fetch for every checked pin) followed by
-    /// ComputeOneFromBatchAsync per employee -- see PayrollBatchContext's own doc comment
-    /// for why looping ComputeOneAsync here instead used to repeat that same company-wide
-    /// attendance fetch once per checked employee. Runs inside _busy.RunAsync the same way
-    /// every other read/write in this
-    /// class does, so the progress bar shows something's happening and every busy-gated
-    /// command disables itself while a large run is still fetching -- unlike most of those
-    /// other _busy.RunAsync calls, though, nothing here writes to the database, so
-    /// there's no reload to chain afterward, just PayslipPreviewDialog to open once
-    /// every employee's PayrollResult is in hand.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> PrintPayslipsCommand { get; }
-
+    /// <summary>"Print Payslips…" on PayrollPage: picks a scope and period, computes everyone
+    /// checked, and previews their payslips (see PayslipPreviewViewModel).</summary>
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private async Task PrintPayslipsAsync()
     {
-        var scopeDialog = new PayslipScopeDialog(
-            _rosterProvider, _scope.PeriodStart, _scope.PeriodEnd,
-            title: "Print Payslips",
-            description: "Choose who to print payslips for and which period -- 4 per Letter page, cut apart along the quarter-page lines.",
-            confirmButtonText: "Print…",
-            confirmButtonTooltip: "Opens a preview of every checked employee's payslip for the chosen period.",
-            // Build-order step 11: with an active payroll group, start the tree checked to
-            // that group instead of the whole company -- still just a starting point, every
-            // box stays editable before Print… is clicked.
-            presetSelection: HasActiveBatchScope ? _scope.BatchScopeEmployees : null)
-        {
-            Owner = Application.Current.MainWindow,
-        };
-        if (scopeDialog.ShowDialog() != true) return;
-
-        var start = DateOnly.FromDateTime(scopeDialog.PeriodStart);
-        var end = DateOnly.FromDateTime(scopeDialog.PeriodEnd);
-        var employees = scopeDialog.SelectedEmployees;
-
-        List<PayrollResult>? results = null;
-
-        await _busy.RunAsync(visibly: true, async cancellationToken =>
-        {
-            // One IPayrollComputationService.PrepareBatchAsync call for every checked
-            // employee's pin, then ComputeOneFromBatchAsync per employee against that shared
-            // result -- see PayrollBatchContext's own doc comment for why looping
-            // ComputeOneAsync here used to repeat a company-wide attendance fetch once per
-            // employee.
-            var pins = employees.Select(e => e.Pin).ToHashSet();
-            var batch = await _payrollComputationService.PrepareBatchAsync(pins, start, end, cancellationToken);
-
-            // Same batch-wide seed-before-compute shape PayrollGroupViewModel.
-            // RefreshPayrollGroupRowsAsync uses -- see SeedContributionsForBatchAsync's own
-            // doc comment.
-            batch = await _payrollComputationService.SeedContributionsForBatchAsync(
-                employees, start, end, batch, cancellationToken);
-
-            var computed = new List<PayrollResult>(employees.Count);
-            foreach (var employee in employees)
+        var chosen = await ComputeForChosenScopeAsync(
+            new PayslipScopeViewModel(_rosterProvider)
             {
-                var (result, _) = await _payrollComputationService.ComputeOneFromBatchAsync(
-                    employee, start, end, batch, cancellationToken);
-                computed.Add(result);
-            }
+                Title = "Print Payslips",
+                Description = "Choose who to print payslips for and which period -- 4 per Letter page, cut apart along the quarter-page lines.",
+                ConfirmText = "Print…",
+                ConfirmToolTip = "Opens a preview of every checked employee's payslip for the chosen period.",
+                PeriodStart = _scope.PeriodStart,
+                PeriodEnd = _scope.PeriodEnd,
+                PresetSelection = ActiveBatch,
+            },
+            "Could not compute payroll for printing");
+        if (chosen is not var (_, results))
+            return;
 
-            results = computed;
-        },
-        onError: ex => ShowFailure(ex, "Could not compute payroll for printing"));
-
-        // A cancelled or failed run leaves results null -- nothing to preview.
-        if (results is not { Count: > 0 }) return;
-
-        var previewDialog = new PayslipPreviewDialog(results, _companyName) { Owner = Application.Current.MainWindow };
-        previewDialog.ShowDialog();
+        await ShowDialogAsync(new PayslipPreviewViewModel(results, _companyName));
     }
 
-    /// <summary>Same !_busy.IsRunning guard as PayrollSummaryViewModel's own
-    /// CanPrintCurrentPayslip/CanEditAdjustments -- unlike either of those, doesn't also
-    /// check SelectedEmployee/Result, since "Print Payslips…" is scope-independent by
-    /// design (see PayslipScopeDialog): it opens its own tree covering whichever
-    /// employees the person checks there, with no dependency on whoever happens to
-    /// be selected on the Payroll tab's own MainViewModel-shared tree right now.
-    /// </summary>
-    private bool CanPrintPayslips() => !_busy.IsRunning;
-
-    /// <summary>"Export Payroll Report…" on PayrollPage, sitting next to "Print
-    /// Payslips…" -- same scope-dialog-then-batch-compute shape as PrintPayslipsAsync
-    /// above (see that method's own doc comment for why the dialog is shown entirely
-    /// outside the _busy window and why the PrepareBatchAsync + ComputeOneFromBatchAsync
-    /// pair runs inside it),
-    /// but ending in a SaveFileDialog + PayrollExcelExporter.ExportRosterToExcel call
-    /// instead of PayslipPreviewDialog. The try/catch around the save itself mirrors
-    /// ReportViewModel.ExportSummary -- computing payroll and writing the workbook are
-    /// kept as two separate steps (batch compute inside _busy.RunAsync with its own
-    /// onError, then save in its own try/catch) so a failure in one is reported with
-    /// the right message for what actually went wrong ("could not compute" vs "could
-    /// not save"), the same split PrintPayslipsAsync already keeps between computing
-    /// and previewing.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> ExportPayrollReportCommand { get; }
-
+    /// <summary>"Export Payroll Report…" on PayrollPage: the same scope-then-compute as
+    /// <see cref="PrintPayslipsAsync"/>, ending in an Excel workbook instead of a preview.
+    /// Computing and saving are reported apart ("could not compute" vs "could not save"), so a
+    /// failure says which step actually went wrong.</summary>
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private async Task ExportPayrollReportAsync()
     {
-        var scopeDialog = new PayslipScopeDialog(
-            _rosterProvider, _scope.PeriodStart, _scope.PeriodEnd,
-            title: "Export Payroll Report",
-            description: "Choose who this payroll report covers and which period.",
-            confirmButtonText: "Export…",
-            confirmButtonTooltip: "Computes payroll for everyone checked and saves it to an Excel workbook.",
-            // Same active-group preset as PrintPayslipsAsync above -- see build-order step 11.
-            presetSelection: HasActiveBatchScope ? _scope.BatchScopeEmployees : null)
-        {
-            Owner = Application.Current.MainWindow,
-        };
-        if (scopeDialog.ShowDialog() != true) return;
-
-        var start = DateOnly.FromDateTime(scopeDialog.PeriodStart);
-        var end = DateOnly.FromDateTime(scopeDialog.PeriodEnd);
-        var employees = scopeDialog.SelectedEmployees;
-
-        List<PayrollResult>? results = null;
-
-        await _busy.RunAsync(visibly: true, async cancellationToken =>
-        {
-            // Same PrepareBatchAsync-once-then-ComputeOneFromBatchAsync-per-employee shape
-            // PrintPayslipsAsync above uses -- see that method's own doc comment.
-            var pins = employees.Select(e => e.Pin).ToHashSet();
-            var batch = await _payrollComputationService.PrepareBatchAsync(pins, start, end, cancellationToken);
-
-            // Same batch-wide seed-before-compute shape PrintPayslipsAsync above uses -- see
-            // SeedContributionsForBatchAsync's own doc comment.
-            batch = await _payrollComputationService.SeedContributionsForBatchAsync(
-                employees, start, end, batch, cancellationToken);
-
-            var computed = new List<PayrollResult>(employees.Count);
-            foreach (var employee in employees)
+        var chosen = await ComputeForChosenScopeAsync(
+            new PayslipScopeViewModel(_rosterProvider)
             {
-                var (result, _) = await _payrollComputationService.ComputeOneFromBatchAsync(
-                    employee, start, end, batch, cancellationToken);
-                computed.Add(result);
-            }
+                Title = "Export Payroll Report",
+                Description = "Choose who this payroll report covers and which period.",
+                ConfirmText = "Export…",
+                ConfirmToolTip = "Computes payroll for everyone checked and saves it to an Excel workbook.",
+                PeriodStart = _scope.PeriodStart,
+                PeriodEnd = _scope.PeriodEnd,
+                PresetSelection = ActiveBatch,
+            },
+            "Could not compute payroll for export");
+        if (chosen is not var (scope, results))
+            return;
 
-            results = computed;
-        },
-        onError: ex => ShowFailure(ex, "Could not compute payroll for export"));
-
-        // A cancelled or failed run leaves results null -- nothing to save, same guard
-        // PrintPayslipsAsync applies before opening its own preview dialog.
-        if (results is not { Count: > 0 }) return;
-
-        var saveDialog = new SaveFileDialog
+        var start = DateOnly.FromDateTime(scope.PeriodStart);
+        var end = DateOnly.FromDateTime(scope.PeriodEnd);
+        if (await PickFileToSaveAsync("Excel Workbook (*.xlsx)|*.xlsx", $"Salary_{start:MMddyy}-{end:MMddyy}.xlsx",
+                "Save Payroll Report") is not { } path)
         {
-            Title = "Save Payroll Report",
-            Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-            FileName = $"Salary_{start:MMddyy}-{end:MMddyy}.xlsx",
-        };
-        if (saveDialog.ShowDialog() != true) return;
+            return;
+        }
 
         try
         {
-            PayrollExcelExporter.ExportRosterToExcel(saveDialog.FileName, results, employees, start, end);
-            StatusBar.ShowSuccess($"Saved payroll report to {saveDialog.FileName}.");
+            PayrollExcelExporter.ExportRosterToExcel(path, results, scope.Employees, start, end);
+            StatusBar.ShowSuccess($"Saved payroll report to {path}.");
         }
         catch (Exception ex)
         {
@@ -314,9 +129,53 @@ public class PayrollPrintExportViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Same !_busy.IsRunning-only guard as CanPrintPayslips above, and for the
-    /// same reason -- "Export Payroll Report…" opens its own scope tree via
-    /// PayslipScopeDialog too, so it has no dependency on whoever's currently selected on
-    /// this tab's own MainViewModel-shared tree either.</summary>
-    private bool CanExportPayrollReport() => !_busy.IsRunning;
+    /// <summary>The active payroll group, if there is one, for a scope picker to start checked
+    /// to instead of the whole company (build-order step 11) -- still just a starting point,
+    /// every box stays editable.</summary>
+    private IReadOnlyCollection<Employee>? ActiveBatch =>
+        _scope.BatchScopeEmployees.Count > 0 ? _scope.BatchScopeEmployees : null;
+
+    /// <summary>
+    /// Shows <paramref name="scopePicker"/>, then computes a PayrollResult for everyone it comes back
+    /// with. Null if the picker was cancelled, the computation failed (reported under
+    /// <paramref name="failureTitle"/>) or was cancelled, or it produced nothing.
+    ///
+    /// The picker is shown outside the _busy window, so cancelling it never touches
+    /// _busy.IsRunning. The computation runs inside it: one PrepareBatchAsync for every checked
+    /// pin, a batch-wide contribution seed, then ComputeOneFromBatchAsync per employee -- see
+    /// PayrollBatchContext's own doc comment for why looping ComputeOneAsync instead repeated a
+    /// company-wide attendance fetch per employee.
+    /// </summary>
+    private async Task<(PayslipScope Scope, List<PayrollResult> Results)?> ComputeForChosenScopeAsync(
+        PayslipScopeViewModel scopePicker, string failureTitle)
+    {
+        if (!await ShowDialogAsync(scopePicker) || scopePicker.AcceptedScope is not { } scope)
+            return null;
+
+        var start = DateOnly.FromDateTime(scope.PeriodStart);
+        var end = DateOnly.FromDateTime(scope.PeriodEnd);
+        var employees = scope.Employees;
+        List<PayrollResult>? results = null;
+
+        await _busy.RunAsync(visibly: true, async cancellationToken =>
+        {
+            var pins = employees.Select(e => e.Pin).ToHashSet();
+            var batch = await _payrollComputationService.PrepareBatchAsync(pins, start, end, cancellationToken);
+            batch = await _payrollComputationService.SeedContributionsForBatchAsync(
+                employees, start, end, batch, cancellationToken);
+
+            var computed = new List<PayrollResult>(employees.Count);
+            foreach (var employee in employees)
+            {
+                var (result, _) = await _payrollComputationService.ComputeOneFromBatchAsync(
+                    employee, start, end, batch, cancellationToken);
+                computed.Add(result);
+            }
+
+            results = computed;
+        },
+        onError: ex => ShowFailure(ex, failureTitle));
+
+        return results is { Count: > 0 } ? (scope, results) : null;
+    }
 }

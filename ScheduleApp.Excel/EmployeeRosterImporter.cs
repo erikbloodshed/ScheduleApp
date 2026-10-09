@@ -61,10 +61,10 @@ public static class EmployeeRosterImporter
             .ToList();
         if (missingRequired.Count > 0)
         {
-            throw new EmployeeImportException(new[]
-            {
+            throw new EmployeeImportException(
+            [
                 $"The workbook is missing required column(s): {string.Join(", ", missingRequired)}."
-            });
+            ]);
         }
 
         var employeeIdCol = headerMap[EmployeeIdHeader];

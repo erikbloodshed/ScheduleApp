@@ -1,11 +1,12 @@
-using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using ScheduleApp.Data.Repositories;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
-using ScheduleApp.Desktop.ViewModels.Attendance;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -23,31 +24,42 @@ namespace ScheduleApp.Desktop.Views;
 /// past its validation -- the two Preview handlers below only keep the selection pinned to
 /// the row being edited and route Enter/Escape to the validated Save/Cancel paths.
 /// </summary>
-public partial class ManageHolidaysDialog : Controls.AppWindow
+public partial class ManageHolidaysDialog
 {
-    private readonly ManageHolidaysViewModel _viewModel;
-
-    public ManageHolidaysDialog(IHolidayRepository holidayRepository, AttendanceDataVersion dataVersion)
+    /// <summary>Shown for a ManageHolidaysViewModel its opener builds (MainWindow.
+    /// OpenManageHolidays); the view locator can also create it through this constructor.</summary>
+    public ManageHolidaysDialog()
     {
         InitializeComponent();
 
-        _viewModel = new ManageHolidaysViewModel(holidayRepository, dataVersion);
-        DataContext = _viewModel;
-        MessageBoxInteractions.Register(_viewModel, this);
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            // Set by whoever opened the dialog, before showing it.
+            var viewModel = ViewModel!;
+            ViewInteractions.Register(viewModel, this).DisposeWith(d);
 
-        // Add selects the row it appends; bring it into view.
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            this.OneWayBind(ViewModel, vm => vm.Rows, v => v.HolidaysList.ItemsSource).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.SelectedRow, v => v.HolidaysList.SelectedItem).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.ErrorMessage, v => v.ErrorText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.ErrorMessage, v => v.ErrorText.Visibility,
+                message => message is null ? Visibility.Collapsed : Visibility.Visible).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.EditButtonText, v => v.EditButton.Label).DisposeWith(d);
 
-        Loaded += async (_, _) => await _viewModel.LoadCommand.Execute();
+            this.BindCommand(ViewModel, vm => vm.AddCommand, v => v.AddButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.EditOrSaveCommand, v => v.EditButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.DeleteCommand, v => v.DeleteButton).DisposeWith(d);
+
+            // Add selects the row it appends; bring it into view.
+            this.WhenAnyValue(v => v.ViewModel!.SelectedRow)
+                .Where(row => row is not null)
+                .Subscribe(row => HolidaysList.ScrollIntoView(row))
+                .DisposeWith(d);
+
+            viewModel.LoadCommand.Execute().Subscribe().DisposeWith(d);
+        });
     }
 
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ManageHolidaysViewModel.SelectedRow) && _viewModel.SelectedRow is { } row)
-            HolidaysList.ScrollIntoView(row);
-    }
-
-    private void HolidaysList_MouseDoubleClick(object sender, MouseButtonEventArgs e) => _viewModel.EditSelected();
+    private void HolidaysList_MouseDoubleClick(object sender, MouseButtonEventArgs e) => ViewModel?.EditSelected();
 
     /// <summary>Blocks moving the selection to a different row while one is mid-edit. The row
     /// showing the editor and the row Save/Cancel act on (SelectedRow) have to stay the same
@@ -57,11 +69,11 @@ public partial class ManageHolidaysDialog : Controls.AppWindow
     /// so isn't found under any ListViewItem) pass through untouched.</summary>
     private void HolidaysList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!_viewModel.IsEditingRow) return;
+        if (ViewModel is not { IsEditingRow: true } vm) return;
         if (e.OriginalSource is not DependencyObject source) return;
 
         var item = ItemsControl.ContainerFromElement(HolidaysList, source) as ListViewItem;
-        if (item is not null && !ReferenceEquals(item.Content, _viewModel.SelectedRow))
+        if (item is not null && !ReferenceEquals(item.Content, vm.SelectedRow))
             e.Handled = true;
     }
 
@@ -73,17 +85,17 @@ public partial class ManageHolidaysDialog : Controls.AppWindow
     /// observable.</summary>
     private void HolidaysList_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (!_viewModel.IsEditingRow) return;
+        if (ViewModel is not { IsEditingRow: true } vm) return;
 
         if (e.Key == Key.Enter)
         {
             e.Handled = true;
-            ((ICommand)_viewModel.EditOrSaveCommand).Execute(null);
+            ((ICommand)vm.EditOrSaveCommand).Execute(null);
         }
         else if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            ((ICommand)_viewModel.CancelEditCommand).Execute(null);
+            ((ICommand)vm.CancelEditCommand).Execute(null);
         }
     }
 

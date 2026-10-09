@@ -221,7 +221,7 @@ public class PayrollComputationService(
         // value type from the start avoids that mismatch without a second copy.
         Dictionary<int, IReadOnlyList<PayrollAdjustment>> adjustmentsByPin = adjustments
             .GroupBy(a => a.EmployeeId)
-            .ToDictionary(g => g.Key, IReadOnlyList<PayrollAdjustment> (g) => g.ToList());
+            .ToDictionary(g => g.Key, IReadOnlyList<PayrollAdjustment> (g) => [.. g]);
 
         return new PayrollBatchContext
         {
@@ -695,7 +695,7 @@ public class PayrollComputationService(
         // instead of one employee's own adjustments list.
         var updatedById = toUpdate.ToDictionary(a => a.Id);
         var addedByPin = added.GroupBy(a => a.EmployeeId)
-            .ToDictionary(g => g.Key, IReadOnlyList<PayrollAdjustment> (g) => g.ToList());
+            .ToDictionary(g => g.Key, IReadOnlyList<PayrollAdjustment> (g) => [.. g]);
 
         // GroupBy-then-ToDictionary rather than a plain ToDictionary keyed on e.Pin --
         // collapses safely if employees ever contains more than one Employee for the same pin

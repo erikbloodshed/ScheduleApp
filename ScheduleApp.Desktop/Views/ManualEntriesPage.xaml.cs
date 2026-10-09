@@ -1,4 +1,6 @@
-using System.Windows.Controls;
+using ReactiveUI;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
 
 namespace ScheduleApp.Desktop.Views;
@@ -6,26 +8,27 @@ namespace ScheduleApp.Desktop.Views;
 /// <summary>One of the three pages the "Attendance" drawer item's submenu navigates
 /// between -- see AttendanceSummaryPage's own doc comment for the shared
 /// AttendanceViewModel story all three follow.</summary>
-public partial class ManualEntriesPage : Page, INavigationAware
+public partial class ManualEntriesPage : INavigationAware
 {
-    private readonly AttendanceViewModel _viewModel;
-
     public ManualEntriesPage(AttendanceViewModel viewModel)
     {
-        _viewModel = viewModel;
-        DataContext = viewModel;
         InitializeComponent();
+        ViewModel = viewModel;
+        EntriesView.ViewModel = viewModel;
 
-        // Deleting a manual entry asks first, and an import can have a list of problems to
-        // show -- the ViewModels' Confirm/Notify.
-        MessageBoxInteractions.Register(viewModel.ManualEntryEditor, this);
-        MessageBoxInteractions.Register(viewModel.ManualEntriesTab, this);
+        // Deleting a manual entry asks first, Add/Edit open the entry dialog, and an import
+        // can have a list of problems to show.
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            ViewInteractions.Register(viewModel.ManualEntryEditor, this).DisposeWith(d);
+            ViewInteractions.Register(viewModel.ManualEntriesTab, this).DisposeWith(d);
+        });
     }
 
     public async Task OnNavigatedToAsync()
     {
-        await _viewModel.EnsureInitializedAsync();
-        _viewModel.ActivateManualEntriesTab();
+        await ViewModel!.EnsureInitializedAsync();
+        ViewModel.ActivateManualEntriesTab();
     }
 
     public Task OnNavigatedFromAsync() => Task.CompletedTask;

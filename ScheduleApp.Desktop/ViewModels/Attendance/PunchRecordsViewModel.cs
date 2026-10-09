@@ -1,15 +1,13 @@
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Windows.Data;
-using Microsoft.Win32;
 using System.Globalization;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Excel;
 using ScheduleApp.Desktop.Services;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -26,8 +24,10 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// generation is the one place the two sources are still combined (see
 /// AttendanceWorkflowService), since a manual entry should still be able to fill a gap in
 /// the calculated result even though it's never shown alongside device punches here.</summary>
-public class PunchRecordsViewModel : ViewModelBase
+public partial class PunchRecordsViewModel : ViewModelBase
 {
+    private const int MaxSuggestions = 8;
+
     private readonly IAttendanceLogRepository _attendanceLogRepository;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
@@ -35,13 +35,23 @@ public class PunchRecordsViewModel : ViewModelBase
     private readonly Action _saveViewState;
     private readonly AttendanceTabActivationGate _tabActivationGate;
 
-    /// <summary>The date range/DeviceLogsVersion combination StoredLogs was actually
-    /// loaded for, as of the last successful load -- null until the first one. See
-    /// ShouldAutoReload, the only reader. Deliberately doesn't include LogViewSearchText
-    /// -- unlike the date range, the search box no longer needs a database round trip to
-    /// take effect at all (see StoredLogsView/FilterStoredLogRow), so it has nothing to
-    /// do with whether a *reload* is needed.</summary>
+    /// <summary>The date range/DeviceLogsVersion combination StoredLogs was loaded for, as of
+    /// the last successful load -- null until the first one (see ShouldAutoReload). Not the
+    /// search text: that filters what's already loaded, with no reload.</summary>
     private (DateTime? Start, DateTime? End, int DeviceLogsVersion)? _loadedSnapshot;
+
+    /// <summary>What the grid is actually filtered on -- separate from LogViewSearchText, and
+    /// only updated when a suggestion is picked or the box is cleared: re-filtering every
+    /// loaded row on every keystroke ("C", "Cr", "Cru"…) was wasted work for a search the person
+    /// is about to settle by picking who they meant.</summary>
+    private string _appliedSearchValue;
+
+    /// <summary>Guards against an older keystroke's suggestions arriving after a newer one's
+    /// and clobbering what should be on screen.</summary>
+    private int _logViewSuggestionRequestId;
+
+    private readonly IObservable<bool> _notBusy;
+    private readonly IObservable<bool> _canRefreshOrCancel;
 
     public PunchRecordsViewModel(
         IAttendanceLogRepository attendanceLogRepository,
@@ -64,270 +74,133 @@ public class PunchRecordsViewModel : ViewModelBase
         _saveViewState = saveViewState;
         _tabActivationGate = tabActivationGate;
 
-        _logViewStart = initialLogViewStart;
-        _logViewEnd = initialLogViewEnd;
-        _logViewSearchText = initialLogViewSearchText;
-        _isPunchRecordsTabSelected = initialIsPunchRecordsTabSelected;
+        LogViewStart = initialLogViewStart;
+        LogViewEnd = initialLogViewEnd;
+        IsPunchRecordsTabSelected = initialIsPunchRecordsTabSelected;
 
-        // Assigned directly (bypassing ApplySearchValue) for the same reason
-        // logViewSearchText above is assigned to its backing field rather than through
-        // the property -- StoredLogsView doesn't exist yet at this point in the
-        // constructor, so there'd be nothing for a Refresh() to even run against. Set to
-        // match initialLogViewSearchText rather than left blank, though: restoring a
-        // search box with leftover text that isn't actually applied to the grid would be
-        // a worse first impression on relaunch than either fully restoring or fully not
-        // restoring.
+        // Restored applied, not just typed: a box showing leftover text that isn't actually
+        // filtering the grid would be a worse first impression than either.
+        LogViewSearchText = initialLogViewSearchText;
         _appliedSearchValue = initialLogViewSearchText;
 
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
-            {
-                RequeryCanExecute();
+        // The grid shows StoredLogs narrowed by the applied search value -- without touching
+        // StoredLogs itself, which Export always writes whole.
+        StoredLogsView = new FilteredCollection<StoredPunchLogRow>(StoredLogs) { Filter = MatchesAppliedSearch };
 
-                // A keystroke that arrived while busy never got a suggestion fetch (see
-                // OnLogViewSearchTextChanged below) -- catch up now that the shared
-                // ScheduleDbContext is free again, rather than leaving the dropdown
-                // empty until the next keystroke.
-                if (!_busy.IsRunning && LogViewSearchText.Trim().Length > 0)
-                    _ = UpdateLogViewSuggestionsAsync(LogViewSearchText);
-            }
-            else if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
-            {
-                // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
-                // this is what flips the toolbar's "Load" button between Load and Cancel,
-                // same mechanism ReportViewModel's own analogous handler uses for the
-                // Attendance Summary tab's Refresh/Cancel button.
-                this.RaisePropertyChanged(nameof(RefreshOrCancelContent));
-                this.RaisePropertyChanged(nameof(RefreshOrCancelIcon));
-                this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
-                RequeryCanExecute();
-            }
-        };
+        // The Period row's labeled button: Cancel while anything's visibly running, Reload
+        // otherwise -- same as ReportViewModel's, but with a text label beside its glyph,
+        // among this row's other labeled buttons.
+        var visiblyRunning = _busy.WhenAnyValue(b => b.IsVisiblyRunning);
+        _refreshOrCancelContentHelper = visiblyRunning.Select(running => running ? "Cancel" : "Reload")
+            .ToProperty(this, x => x.RefreshOrCancelContent);
+        _refreshOrCancelIconHelper = visiblyRunning.Select(running => running ? "" : "")
+            .ToProperty(this, x => x.RefreshOrCancelIcon);
+        _refreshOrCancelToolTipHelper = visiblyRunning
+            .Select(running => running ? "Stop whatever's currently running." : "Reload stored punches for this period.")
+            .ToProperty(this, x => x.RefreshOrCancelToolTip);
 
-        // Mirrors ReportViewModel's SummaryRowsView setup -- see StoredLogsView's own
-        // doc comment.
-        StoredLogsView = new FilteredCollection<StoredPunchLogRow>(StoredLogs) { Filter = FilterStoredLogRow };
+        _notBusy = _busy.WhenAnyValue(b => b.IsRunning).Select(running => !running);
+        _canRefreshOrCancel = Observable.CombineLatest(visiblyRunning, _notBusy, (running, idle) => running || idle);
 
-        PreviousPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(PreviousPeriodAsync), CanExecuteFrom(CanLoad));
-        NextPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(NextPeriodAsync), CanExecuteFrom(CanLoad));
-        SelectLogViewSuggestionCommand = ReactiveCommand.Create<PunchSearchSuggestion?>(SelectLogViewSuggestion);
-        LoadStoredLogsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(LoadStoredLogsAsync), CanExecuteFrom(CanLoad));
-        RefreshOrCancelStoredLogsCommand = ReactiveCommand.Create(RefreshOrCancelStoredLogs, CanExecuteFrom(CanRefreshOrCancelStoredLogs));
-        ExportStoredLogsCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportStoredLogsAsync), CanExecuteFrom(CanExportStoredLogs));
+        ReportFailuresOf(PreviousPeriodCommand, NextPeriodCommand, SelectLogViewSuggestionCommand, LoadStoredLogsCommand,
+            RefreshOrCancelStoredLogsCommand, ExportStoredLogsCommand);
+
+        this.WhenAnyValue(x => x.LogViewStart, x => x.LogViewEnd).Skip(1).Subscribe(_ => _saveViewState());
+        this.WhenAnyValue(x => x.IsPunchRecordsTabSelected).Skip(1).Subscribe(OnIsPunchRecordsTabSelectedChanged);
+        this.WhenAnyValue(x => x.LogViewSearchText).Skip(1).Subscribe(OnLogViewSearchTextChanged);
+
+        // A keystroke that arrived while busy got no suggestion fetch (see
+        // OnLogViewSearchTextChanged) -- catch up once the shared ScheduleDbContext is free,
+        // rather than leaving the dropdown empty until the next keystroke.
+        _busy.WhenAnyValue(b => b.IsRunning)
+            .Skip(1)
+            .Where(running => !running && LogViewSearchText.Trim().Length > 0)
+            .Subscribe(running => _ = UpdateLogViewSuggestionsAsync(LogViewSearchText));
     }
 
-    /// <summary>Bound to the Punch Records TabItem's IsSelected -- OnIsPunchRecordsTabSelectedChanged
-    /// below auto-runs Load whenever this flips to true, so switching to the tab shows
-    /// current data without having to press Load by hand first. Flips back to false when
-    /// the person leaves the tab, same as any other TabItem. Set via the backing field in
-    /// the constructor above (not the property) so the initial value from saved view
-    /// state doesn't trigger the auto-load/save logic below before the tab-activation
-    /// gate is even open.</summary>
-    public bool IsPunchRecordsTabSelected
-    {
-        get => _isPunchRecordsTabSelected;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isPunchRecordsTabSelected, value)) return;
-            this.RaisePropertyChanging();
-            _isPunchRecordsTabSelected = value;
-            OnIsPunchRecordsTabSelectedChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
+    /// <summary>Whether the Punch Records page is the one showing -- switching to it reloads
+    /// the grid, silently, if anything it shows has changed (see ShouldAutoReload).</summary>
+    [Reactive]
+    public partial bool IsPunchRecordsTabSelected { get; set; }
 
-    private bool _isPunchRecordsTabSelected;
-
-    private void OnIsPunchRecordsTabSelectedChanged(bool value)
+    private void OnIsPunchRecordsTabSelectedChanged(bool selected)
     {
         if (!_tabActivationGate.IsReady) return;
 
-        if (value && CanLoad() && ShouldAutoReload())
+        if (selected && CanLoad() && ShouldAutoReload())
             _ = LoadStoredLogsCoreAsync(showFeedback: false);
 
         _saveViewState();
     }
 
-    /// <summary>True when nothing this tab's own silent auto-reload cares about has
-    /// changed since StoredLogs was last successfully loaded (see _loadedSnapshot) --
-    /// the date range, or AttendanceDataVersion.DeviceLogsVersion (this grid is
-    /// device-only, so ManualLogsVersion changing is irrelevant here -- see this class's
-    /// own doc comment). Deliberately does not consider LogViewSearchText -- see
-    /// _loadedSnapshot's own doc comment for why a search-text change alone never needs
-    /// a reload. Checked only by OnIsPunchRecordsTabSelectedChanged's silent auto-reload
-    /// above -- LoadStoredLogsAsync (the explicit Load/↻ Refresh click) always runs
-    /// regardless. Mirrors ReportViewModel.ShouldAutoReload; see that method's doc
-    /// comment for why this is what actually stops the grid's scroll position resetting
-    /// on an ordinary tab revisit, not just the Clear/rebuild shape inside
-    /// LoadStoredLogsCoreAsync.
-    ///
-    /// True (i.e. "go ahead and reload") whenever nothing has successfully loaded yet, or
-    /// LogViewStart/LogViewEnd aren't validly set -- ValidateLogViewRange's own check
-    /// inside LoadStoredLogsCoreAsync handles an invalid range correctly either way.</summary>
+    /// <summary>Whether a reload would show anything new: the range, or the device punches
+    /// (this grid is device-only), changed since the last load -- or nothing has loaded yet.
+    /// Only the silent revisit reload asks; Load always runs. Skipping the needless reload is
+    /// what keeps the grid's scroll position on an ordinary revisit.</summary>
     private bool ShouldAutoReload() =>
         _loadedSnapshot != (LogViewStart, LogViewEnd, _dataVersion.DeviceLogsVersion);
 
-    public DateTime? LogViewStart
+    /// <summary>The range shown -- remembered across sessions.</summary>
+    [Reactive]
+    public partial DateTime? LogViewStart { get; set; }
+
+    [Reactive]
+    public partial DateTime? LogViewEnd { get; set; }
+
+    /// <summary>The Period row's ◀: steps to the previous semi-monthly cut-off and reloads --
+    /// a date edit here doesn't load on its own (Load is always an explicit action), so this
+    /// does, with feedback like a Load click.</summary>
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
+    private Task PreviousPeriodAsync() => StepPeriodAsync(forward: false);
+
+    /// <summary>The ▶ button -- see PreviousPeriodAsync.</summary>
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
+    private Task NextPeriodAsync() => StepPeriodAsync(forward: true);
+
+    private Task StepPeriodAsync(bool forward)
     {
-        get => _logViewStart;
-        set
-        {
-            if (EqualityComparer<DateTime?>.Default.Equals(_logViewStart, value)) return;
-            this.RaisePropertyChanging();
-            _logViewStart = value;
-            OnLogViewStartChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private DateTime? _logViewStart;
-
-    private void OnLogViewStartChanged(DateTime? value) => _saveViewState();
-
-    public DateTime? LogViewEnd
-    {
-        get => _logViewEnd;
-        set
-        {
-            if (EqualityComparer<DateTime?>.Default.Equals(_logViewEnd, value)) return;
-            this.RaisePropertyChanging();
-            _logViewEnd = value;
-            OnLogViewEndChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private DateTime? _logViewEnd;
-
-    private void OnLogViewEndChanged(DateTime? value) => _saveViewState();
-
-    /// <summary>Backs the Punch Records tab's own "◀"/"▶" period-nav buttons -- same
-    /// AttendancePeriodNavigation.AdjacentCutoffPeriod step ReportViewModel's Summary tab
-    /// buttons use, just against LogViewStart/LogViewEnd instead of PeriodStart/
-    /// PeriodEnd. Unlike the Summary tab, a date edit here doesn't auto-run anything on
-    /// its own (see this class's doc comment -- Load is always an explicit action), so
-    /// this command reloads directly afterward rather than relying on a property-changed
-    /// handler to notice; showFeedback: true, same as a direct Load click, since stepping
-    /// the period is just as much an explicit action as pressing Load.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand { get; }
-
-    private Task PreviousPeriodAsync()
-    {
-        var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(LogViewStart ?? LogViewEnd ?? DateTime.Today, forward: false);
+        var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(LogViewStart ?? LogViewEnd ?? DateTime.Today, forward);
         LogViewStart = start;
         LogViewEnd = end;
         return LoadStoredLogsCoreAsync(showFeedback: true);
     }
 
-    /// <summary>See PreviousPeriodCommand's doc comment -- same step, the other
-    /// direction.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand { get; }
-
-    private Task NextPeriodAsync()
-    {
-        var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(LogViewStart ?? LogViewEnd ?? DateTime.Today, forward: true);
-        LogViewStart = start;
-        LogViewEnd = end;
-        return LoadStoredLogsCoreAsync(showFeedback: true);
-    }
-
-    /// <summary>Free-text filter for the grid below -- one value at a time (an Employee
-    /// ID, an employee name, or a department; see FilterStoredLogRow), not a
-    /// comma-separated list. Purely a *display* filter, the same role TreeSearchText
-    /// plays over on the Report Scope tree (see ReportScopeViewModel/
-    /// EmployeeTreeSearchFilter, which does still support comma-separated terms -- this
-    /// box deliberately doesn't). Live only in the sense that LogViewSuggestions
-    /// recomputes on every keystroke -- it does *not* re-filter StoredLogsView itself on
-    /// every keystroke; see _appliedSearchValue's own doc comment for why that's a
-    /// separate, more deliberately-triggered step. Never re-queries the database either
-    /// way, and never touches what Load/Export actually fetch (see
-    /// QueryStoredLogsInRangeAsync).</summary>
-    public string LogViewSearchText
-    {
-        get => _logViewSearchText;
-        set
-        {
-            if (EqualityComparer<string>.Default.Equals(_logViewSearchText, value)) return;
-            this.RaisePropertyChanging();
-            _logViewSearchText = value;
-            OnLogViewSearchTextChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private string _logViewSearchText = string.Empty;
-
-    /// <summary>What FilterStoredLogRow actually filters StoredLogsView against --
-    /// deliberately a separate field from LogViewSearchText above, updated only by
-    /// ApplySearchValue below, rather than the grid re-filtering itself on every single
-    /// keystroke the way it briefly did. Re-running the filter across every loaded row
-    /// on every keystroke was wasted work for most of what's typed -- a person narrowing
-    /// down to one person by typing "Cruz" character by character doesn't need (or want)
-    /// four separate re-filters against partial fragments "C", "Cr", "Cru" along the way,
-    /// only the one search they're actually about to run once they've picked who they
-    /// meant from LogViewSuggestions. Clearing the box back to empty is the one exception
-    /// -- see OnLogViewSearchTextChanged.</summary>
-    private string _appliedSearchValue = string.Empty;
+    /// <summary>The search box -- one value at a time (an Employee ID, a name, or a
+    /// department), not a comma-separated list. Recomputes LogViewSuggestions on every
+    /// keystroke, but the grid only re-filters on a picked suggestion or a cleared box (see
+    /// _appliedSearchValue). A display filter only: never re-queries, never changes what
+    /// Load/Export fetch.</summary>
+    [Reactive]
+    public partial string LogViewSearchText { get; set; } = string.Empty;
 
     private void OnLogViewSearchTextChanged(string value)
     {
-        // Skipped while _busy.IsRunning -- UpdateLogViewSuggestionsAsync falls through to
-        // AttendanceEmployeeDirectory.GetAllAsync() (a real query) whenever the
-        // suggestion cache hasn't been warmed yet, and every other command in Attendance
-        // already treats _busy.IsRunning as "something is using the shared, app-lifetime-
-        // scoped ScheduleDbContext right now, don't start another operation" (see
-        // AttendanceBusyState's doc comment and AttendanceViewModel.InitializeAsync).
-        // This fires from a keystroke rather than a command, so it used to be the one
-        // path that ignored that guard. Caught up automatically once busy clears -- see
-        // the _busy.PropertyChanged handler above -- so typing during, say, a Generate
-        // Reports run just delays the dropdown rather than silently dropping it.
+        // Not while busy: the suggestion fetch can fall through to a real query when the cache
+        // is cold, and every other operation already treats busy as "the shared
+        // ScheduleDbContext is in use". Caught up once busy clears (see the constructor).
         if (!_busy.IsRunning)
             _ = UpdateLogViewSuggestionsAsync(value);
 
-        // Deliberately does *not* call ApplySearchValue for most edits anymore -- see
-        // _appliedSearchValue's own doc comment. Clearing the box back to empty is the
-        // one exception: that's an unambiguous "show everyone again" action in its own
-        // right, not a still-narrowing-down-to-one-person keystroke, so it takes effect
-        // immediately rather than sitting there filtered on a search term that's no
-        // longer even in the box, waiting for a suggestion pick that will never come.
+        // Clearing the box is an unambiguous "show everyone again" -- applied at once rather
+        // than left filtering on a term that's no longer in the box.
         if (value.Trim().Length == 0)
             ApplySearchValue(string.Empty);
     }
 
-    /// <summary>The one place that actually changes what StoredLogsView shows -- called
-    /// from SelectLogViewSuggestion when a suggestion is picked, and from
-    /// OnLogViewSearchTextChanged for the one case (clearing the box) that applies
-    /// itself without waiting for a pick.</summary>
     private void ApplySearchValue(string value)
     {
         _appliedSearchValue = value;
         StoredLogsView.Refresh();
     }
 
-    /// <summary>Autosuggestion candidates for whatever's currently typed in
-    /// LogViewSearchText -- see UpdateLogViewSuggestionsAsync. Bound to a Popup's
-    /// ListBox in AttendanceView.xaml; SelectLogViewSuggestion below is what runs when
-    /// one is chosen.</summary>
-    public ObservableCollection<PunchSearchSuggestion> LogViewSuggestions { get; } = new();
+    /// <summary>Autosuggestion candidates for the search box's current text.</summary>
+    public RangeObservableCollection<PunchSearchSuggestion> LogViewSuggestions { get; } = [];
 
-    public bool IsLogViewSuggestionsOpen
-    {
-        get => _isLogViewSuggestionsOpen;
-        set => this.RaiseAndSetIfChanged(ref _isLogViewSuggestionsOpen, value);
-    }
+    [Reactive]
+    public partial bool IsLogViewSuggestionsOpen { get; set; }
 
-    private bool _isLogViewSuggestionsOpen;
-
-    /// <summary>Guards against an older keystroke's suggestions arriving after a newer
-    /// one's (both awaiting the same employee fetch) and clobbering what should be on
-    /// screen.</summary>
-    private int _logViewSuggestionRequestId;
-
-    /// <summary>Recomputes LogViewSuggestions for whatever's currently in the search box
-    /// (trimmed), the same term FilterStoredLogRow will match against live. Closes the
-    /// suggestion list while the box is empty rather than dumping the entire employee
-    /// roster on screen.</summary>
+    /// <summary>Recomputes LogViewSuggestions for <paramref name="text"/>, trimmed -- closed
+    /// while the box is empty rather than dumping the whole roster on screen.</summary>
     private async Task UpdateLogViewSuggestionsAsync(string text)
     {
         var term = text.Trim();
@@ -338,90 +211,55 @@ public class PunchRecordsViewModel : ViewModelBase
             return;
         }
 
-        int requestId = ++_logViewSuggestionRequestId;
+        var requestId = ++_logViewSuggestionRequestId;
 
         List<Employee> employees;
         try
         {
             employees = await _employeeDirectory.GetForSuggestionsAsync();
         }
-        catch
+        catch (Exception)
         {
-            // Swallow -- suggestions are a convenience, not the source of truth.
-            // Load/Export will surface the real error against the same failure.
+            // Suggestions are a convenience; Load/Export surface the real error.
             return;
         }
 
         if (requestId != _logViewSuggestionRequestId)
-            return; // A newer keystroke already superseded this request.
+            return;
 
-        LogViewSuggestions.Clear();
-        foreach (var match in BuildSuggestionMatches(term, employees))
-            LogViewSuggestions.Add(match);
-
+        LogViewSuggestions.ReplaceAll(BuildSuggestionMatches(term, employees));
         IsLogViewSuggestionsOpen = LogViewSuggestions.Count > 0;
     }
 
-    /// <summary>One suggestion per matching department, plus one per matching employee --
-    /// deliberately not one per matching *field* the way this used to work (a separate
-    /// entry for a first name, a last name, and a department, all as bare fragments). A
-    /// department candidate's Display/InsertValue are the same (its name is already the
-    /// one, complete, unambiguous thing to search for); an employee candidate's Display
-    /// adds their department for context/disambiguation, but InsertValue is just their
-    /// DisplayName alone -- see PunchSearchSuggestion.InsertValue's own remarks for why
-    /// picking one specific person needs a different inserted term than what's shown.
-    ///
-    /// Employees without an Employee ID (Pin) are skipped entirely, not just from
-    /// the ID-match check -- unlike ReportScopeViewModel's tree search, which
-    /// deliberately does still surface them (see EmployeeTreeSearchFilter's own
-    /// remarks), a punch log can never contain a row for someone who has no ID to punch
-    /// in under, so suggesting them here would just be a dead end.
-    ///
-    /// Capped and alphabetized (departments and employees together) for a manageable,
-    /// predictable dropdown.</summary>
+    /// <summary>One suggestion per matching department, plus one per matching employee -- not
+    /// one per matching field. A department's shown and inserted text are its name; an
+    /// employee's shown text adds their department for context, but inserts just their name
+    /// (see PunchSearchSuggestion.InsertValue). Employees without a department are only
+    /// matched as employees. Capped and alphabetized, departments and employees
+    /// together.</summary>
     private static List<PunchSearchSuggestion> BuildSuggestionMatches(string term, IReadOnlyList<Employee> employees)
     {
-        var suggestions = new List<PunchSearchSuggestion>();
-        var seenDepartments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var departments = employees
+            .Select(e => e.Department?.Name)
+            .OfType<string>()
+            .Where(name => !string.IsNullOrWhiteSpace(name) && name.Contains(term, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(name => new PunchSearchSuggestion($"{name} (Department)", name));
 
-        foreach (var e in employees)
-        {
-            var departmentName = e.Department?.Name;
-            if (string.IsNullOrWhiteSpace(departmentName)) continue;
-            if (!departmentName.Contains(term, StringComparison.OrdinalIgnoreCase)) continue;
-            if (!seenDepartments.Add(departmentName)) continue;
-
-            suggestions.Add(new PunchSearchSuggestion($"{departmentName} (Department)", departmentName));
-        }
-
-        foreach (var e in employees)
-        {
-            var pin = e.Pin;
-
-            bool matches = pin.ToString(CultureInfo.InvariantCulture).Contains(term, StringComparison.OrdinalIgnoreCase)
+        var people = employees
+            .Where(e => e.Pin.ToString(CultureInfo.InvariantCulture).Contains(term, StringComparison.OrdinalIgnoreCase)
                 || e.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase)
-                || e.LastName.Contains(term, StringComparison.OrdinalIgnoreCase);
-            if (!matches) continue;
+                || e.LastName.Contains(term, StringComparison.OrdinalIgnoreCase))
+            .Select(e => new PunchSearchSuggestion($"{e.DisplayName} — {e.Department?.Name ?? "(Unassigned)"}", e.DisplayName));
 
-            var departmentLabel = e.Department?.Name ?? "(Unassigned)";
-            suggestions.Add(new PunchSearchSuggestion($"{e.DisplayName} \u2014 {departmentLabel}", e.DisplayName));
-        }
-
-        return suggestions
+        return [.. departments.Concat(people)
             .OrderBy(s => s.Display, StringComparer.OrdinalIgnoreCase)
-            .Take(8)
-            .ToList();
+            .Take(MaxSuggestions)];
     }
 
-    /// <summary>Runs when the person picks a suggestion from the dropdown -- this is the
-    /// moment the grid actually updates (see ApplySearchValue/_appliedSearchValue's own
-    /// doc comments for why that's deferred to here rather than happening on every
-    /// keystroke). Also writes the same value into LogViewSearchText, so the box itself
-    /// shows what's now applied rather than whatever fragment was last typed, and closes
-    /// the dropdown -- there's nothing left to pick once the one thing being searched
-    /// for has just been chosen.</summary>
-    public ReactiveCommand<PunchSearchSuggestion?, RxVoid> SelectLogViewSuggestionCommand { get; }
-
+    /// <summary>A picked suggestion: the moment the grid actually filters. The box shows what's
+    /// now applied, and the dropdown closes.</summary>
+    [ReactiveCommand]
     private void SelectLogViewSuggestion(PunchSearchSuggestion? suggestion)
     {
         if (suggestion is null) return;
@@ -431,79 +269,40 @@ public class PunchRecordsViewModel : ViewModelBase
         IsLogViewSuggestionsOpen = false;
     }
 
-    public int StoredLogsCount
-    {
-        get => _storedLogsCount;
-        set => this.RaiseAndSetIfChanged(ref _storedLogsCount, value);
-    }
+    [Reactive]
+    public partial int StoredLogsCount { get; private set; }
 
-    private int _storedLogsCount;
+    [Reactive]
+    public partial bool HasLoadedStoredLogs { get; private set; }
 
-    public bool HasLoadedStoredLogs
-    {
-        get => _hasLoadedStoredLogs;
-        set => this.RaiseAndSetIfChanged(ref _hasLoadedStoredLogs, value);
-    }
+    /// <summary>Replaced in one change per load.</summary>
+    public RangeObservableCollection<StoredPunchLogRow> StoredLogs { get; } = [];
 
-    private bool _hasLoadedStoredLogs;
-
-    public ObservableCollection<StoredPunchLogRow> StoredLogs { get; } = new();
-
-    /// <summary>The DataGrid binds to this instead of StoredLogs directly, so picking a
-    /// search suggestion (or clearing the box -- see ApplySearchValue) hides non-matching
-    /// rows without touching the underlying data (needed intact for Export…, which --
-    /// like ReportViewModel's Export Summary… -- always exports every punch actually in
-    /// range regardless of what's currently filtered on-screen; see
-    /// QueryStoredLogsInRangeAsync). Follows StoredLogs, so rows Load adds/clears show up
-    /// here automatically with whatever filter is currently active already applied (see
-    /// FilteredCollection).</summary>
+    /// <summary>What the grid binds to -- see the constructor.</summary>
     public FilteredCollection<StoredPunchLogRow> StoredLogsView { get; }
 
-    /// <summary>_appliedSearchValue's blank-means-everyone / numeric-means-exact-
-    /// Employee-ID / otherwise-substring-against-name-or-department rules, applied to one
-    /// already-loaded row. Mirrors EmployeeTreeSearchFilter.EmployeeMatchesSearchTerm's
-    /// per-term shape, just for exactly one term instead of several OR'd together -- see
-    /// LogViewSearchText's own doc comment for why this box only ever searches one value
-    /// at a time. Reads _appliedSearchValue, not LogViewSearchText directly -- see the
-    /// former's own doc comment for why those two can briefly disagree while someone's
-    /// still typing.</summary>
-    private bool FilterStoredLogRow(object obj)
+    /// <summary>The applied search value: blank shows everyone, a number is an exact Employee
+    /// ID, anything else a substring of the name or department.</summary>
+    private bool MatchesAppliedSearch(object item)
     {
-        if (obj is not StoredPunchLogRow row) return false;
+        if (item is not StoredPunchLogRow row) return false;
 
         var term = _appliedSearchValue;
         if (term.Length == 0) return true;
 
-        if (int.TryParse(term, out var id))
-            return row.EmployeeId == id;
-
-        return row.EmployeeName.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || row.DepartmentName.Contains(term, StringComparison.OrdinalIgnoreCase);
+        return int.TryParse(term, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+            ? row.EmployeeId == id
+            : row.EmployeeName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || row.DepartmentName.Contains(term, StringComparison.OrdinalIgnoreCase);
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> LoadStoredLogsCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private Task LoadStoredLogsAsync() => LoadStoredLogsCoreAsync(showFeedback: true);
 
-    /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
-    /// ReportViewModel.RefreshOrCancelSummary's own doc comment for the fuller reasoning.
-    /// This replaces the separate "Cancel" button that used to sit in this page's own
-    /// CardBorder toolbar row (alongside Import…/Fetch from Device), visible only while
-    /// _busy.IsVisiblyRunning -- inline in that same row rather than its own, so it never
-    /// pushed anything down the way Attendance Summary's old Cancel bar did, but it was
-    /// still a second button appearing and disappearing next to Import…/Fetch. One button
-    /// per row, toggling in place, is simpler still -- and this one now doubles as the
-    /// page's Cancel for Import…/Fetch too, not just its own Load.
-    ///
-    /// CanExecute is IsVisiblyRunning (always fine to try to cancel) OR CanLoad() -- needed
-    /// because CanLoad() alone would leave the button disabled during a run it didn't
-    /// itself start (an Import…/Fetch from Device here, or an Import/Fetch/manual entry
-    /// action started from another Attendance page) at exactly the moment IsVisiblyRunning
-    /// makes it look like a live Cancel button.</summary>
-    private bool CanRefreshOrCancelStoredLogs() => _busy.IsVisiblyRunning || CanLoad();
-
-    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelStoredLogsCommand { get; }
-
+    /// <summary>The Period row's Reload button, toggling in place to Cancel while anything on
+    /// the Attendance page is visibly running -- this page's Cancel for Import…/Fetch too.
+    /// Synchronous, so it stays enabled, as Cancel, while the load it starts runs.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canRefreshOrCancel))]
     private void RefreshOrCancelStoredLogs()
     {
         if (_busy.IsVisiblyRunning)
@@ -512,59 +311,39 @@ public class PunchRecordsViewModel : ViewModelBase
             _ = LoadStoredLogsCoreAsync(showFeedback: true);
     }
 
-    /// <summary>Split into a text Content and a separate Icon -- unlike
-    /// ReportViewModel.RefreshOrCancelGlyph/ManualEntriesViewModel.RefreshOrCancelGlyph,
-    /// each a single Segoe Fluent Icons glyph that *is* an icon-only button's whole
-    /// face -- because this button is a labeled ButtonAdv (Label, plus the glyph as its
-    /// Tag) showing a short label and an icon side by side, sitting among the
-    /// other labeled buttons (◀/▶/Export/Import/Fetch from Device) in this same Period
-    /// row rather than standing alone the way the other two pages' buttons do.</summary>
-    public string RefreshOrCancelContent => _busy.IsVisiblyRunning ? "Cancel" : "Reload";
+    [ObservableAsProperty(InitialValue = "Reload")]
+    public partial string RefreshOrCancelContent { get; }
 
-    public string RefreshOrCancelIcon => _busy.IsVisiblyRunning ? "\uE711" : "\uE72C"; // Segoe Fluent Icons: Cancel / Refresh
+    /// <summary>Segoe Fluent Icons Cancel/Refresh.</summary>
+    [ObservableAsProperty(InitialValue = "")]
+    public partial string RefreshOrCancelIcon { get; }
 
-    /// <summary>Generic on purpose, not "Stop this load" -- same reasoning as the old
-    /// Cancel button's own ToolTip, which this replaces: IsVisiblyRunning can be true
-    /// because of literally anything on the Attendance page (Import…/Fetch from Device
-    /// here, or an Import/Fetch/manual entry action started from another Attendance
-    /// page), not only a click on this same button.</summary>
-    public string RefreshOrCancelToolTip => _busy.IsVisiblyRunning
-        ? "Stop whatever's currently running."
-        : "Reload stored punches for this period.";
+    /// <summary>Generic on purpose: IsVisiblyRunning can be true because of anything on the
+    /// Attendance page, not only this button.</summary>
+    [ObservableAsProperty]
+    public partial string RefreshOrCancelToolTip { get; }
 
-    /// <summary>Does the actual load; showFeedback controls whether the
-    /// validation-error/success/error status bar messages fire. The Load button always wants that
-    /// feedback -- it's an explicit action the person just took. The auto-load on
-    /// switching to this tab (see OnIsPunchRecordsTabSelectedChanged) passes false
-    /// instead, since a status bar message popping up on every tab switch is just noise -- the
-    /// refreshed grid and "N punch(es) found in range" line are feedback enough.</summary>
+    /// <summary>The load; feedback (validation, success and error messages) for a click only,
+    /// not for the silent reload on a revisit, where the refreshed grid is feedback
+    /// enough.</summary>
     private async Task LoadStoredLogsCoreAsync(bool showFeedback)
     {
-        var validationError = ValidateLogViewRange();
-        if (validationError is not null)
+        if (ValidateLogViewRange() is { } validationError)
         {
             if (showFeedback)
                 StatusBar.ShowCaution(validationError);
             return;
         }
 
-        // See AttendanceBusyState.IsVisiblyRunning's doc comment -- only the explicit
-        // Load click should read as "busy" to the person; the silent re-run that fires
-        // every time this tab is (re)selected shouldn't visibly flicker anything.
         await _busy.RunAsync(visibly: showFeedback, async cancellationToken =>
         {
-            // Blacklisted employees included -- these are pre-existing punches, not a
-            // picker, so a blacklisted employee's own history still needs a resolvable
-            // name here (see AttendanceEmployeeDirectory.GetAllIncludingBlacklistedAsync's
-            // own doc comment).
+            // Blacklisted employees included -- these are existing punches, and a blacklisted
+            // employee's own history still needs a name.
             var employees = await _employeeDirectory.GetAllIncludingBlacklistedAsync(cancellationToken);
             var logs = await QueryStoredLogsInRangeAsync(cancellationToken);
             var employeeInfo = StoredPunchLogRowFactory.BuildEmployeeInfoByPin(employees);
 
-            StoredLogs.Clear();
-            foreach (var log in logs)
-                StoredLogs.Add(StoredPunchLogRowFactory.BuildRow(log, employeeInfo));
-
+            StoredLogs.ReplaceAll(logs.Select(log => StoredPunchLogRowFactory.BuildRow(log, employeeInfo)));
             StoredLogsCount = StoredLogs.Count;
             HasLoadedStoredLogs = true;
             _loadedSnapshot = (LogViewStart, LogViewEnd, _dataVersion.DeviceLogsVersion);
@@ -580,57 +359,43 @@ public class PunchRecordsViewModel : ViewModelBase
         });
     }
 
-    /// <summary>Internal (not private) so both LoadStoredLogsCommand's CanExecute wiring
-    /// and AttendanceViewModel.ActivateInitialTabAsync's initial-tab check can share the
-    /// one implementation.</summary>
+    /// <summary>Whether a load could start now -- AttendanceViewModel's initial-page check
+    /// reads it too.</summary>
     internal bool CanLoad() => !_busy.IsRunning;
 
-    public ReactiveCommand<RxVoid, RxVoid> ExportStoredLogsCommand { get; }
-
+    /// <summary>Saves every punch in range to Excel -- regardless of the search box, which finds
+    /// things on screen rather than scoping what's saved -- then opens it.</summary>
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private async Task ExportStoredLogsAsync()
     {
-        var validationError = ValidateLogViewRange();
-        if (validationError is not null)
+        if (ValidateLogViewRange() is { } validationError)
         {
             StatusBar.ShowCaution(validationError);
             return;
         }
 
-        var dialog = new SaveFileDialog
+        if (await PickFileToSaveAsync("Excel Workbook (*.xlsx)|*.xlsx",
+                $"Punch_Logs_{LogViewStart!.Value:MMddyy}_{LogViewEnd!.Value:MMddyy}.xlsx", "Save Punch Logs") is not { } path)
         {
-            Title = "Save Punch Logs",
-            Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-            FileName = $"Punch_Logs_{LogViewStart!.Value:MMddyy}_{LogViewEnd!.Value:MMddyy}.xlsx",
-        };
-
-        if (dialog.ShowDialog() != true)
             return;
+        }
 
-        // visibly: true -- always an explicit click, never a silent auto-load.
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
-            // Blacklisted employees included -- same reasoning as LoadStoredLogsCoreAsync's
-            // own GetAllIncludingBlacklistedAsync call above: an exported workbook should
-            // still show who a blacklisted employee's own punches belong to.
             var employees = await _employeeDirectory.GetAllIncludingBlacklistedAsync(cancellationToken);
             var logs = await QueryStoredLogsInRangeAsync(cancellationToken);
 
-            // Everything above is cancellable; ExportLogsToExcel itself is not, so a
-            // Cancel click always lands before any file is written, never partway
-            // through one.
-            AttendanceExcelExporter.ExportLogsToExcel(dialog.FileName, logs, employees);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
+            // Everything above is cancellable; writing the file isn't, so a Cancel always lands
+            // before any file is written, never partway through one.
+            AttendanceExcelExporter.ExportLogsToExcel(path, logs, employees);
+            await OpenFileAsync(path);
             _saveViewState();
-            StatusBar.ShowSuccess($"Saved {logs.Count} punch(es) to {dialog.FileName}.");
+            StatusBar.ShowSuccess($"Saved {logs.Count} punch(es) to {path}.");
         },
         onError: ex => ShowFailure(ex));
     }
 
-    private bool CanExportStoredLogs() => !_busy.IsRunning;
-
-    /// <summary>Cheap, synchronous checks only -- deliberately doesn't touch the
-    /// database, so both Load and Export can call it before setting IsRunning, the same
-    /// way Validate() works for Generate Reports.</summary>
+    /// <summary>Cheap and synchronous -- checked before going busy.</summary>
     private string? ValidateLogViewRange()
     {
         if (LogViewStart is null || LogViewEnd is null)
@@ -642,27 +407,10 @@ public class PunchRecordsViewModel : ViewModelBase
         return null;
     }
 
-    /// <summary>Shared by Load and Export -- both need exactly the same "every punch in
-    /// [LogViewStart, LogViewEnd]" query, so there's one place that can go stale rather
-    /// than two copies drifting apart. Callers must check ValidateLogViewRange() first --
-    /// this assumes LogViewStart/LogViewEnd are already known non-null.
-    ///
-    /// Deliberately unfiltered by LogViewSearchText -- like ReportViewModel's Export
-    /// Summary… always exporting every row regardless of the on-screen status/scope
-    /// filter, Export… here always saves every punch actually in range regardless of
-    /// whatever's currently narrowing the grid (see StoredLogsView/FilterStoredLogRow);
-    /// the search box is a way to *find* something on screen, not a way to scope what
-    /// gets saved to disk. Load reads from here too, but then applies StoredLogsView's
-    /// live filter on top for display, same as it always could.
-    ///
-    /// Device punches only -- deliberately does not merge in ManualAttendanceLogs (see
-    /// this class's doc comment). Both the grid and Export… read from this one method, so
-    /// they naturally stay in sync with each other.</summary>
-    private async Task<List<AttendanceLog>> QueryStoredLogsInRangeAsync(CancellationToken cancellationToken = default)
-    {
-        var rangeStart = LogViewStart!.Value.Date;
-        var rangeEnd = LogViewEnd!.Value.Date.AddDays(1).AddTicks(-1); // inclusive of the whole end day
-
-        return await _attendanceLogRepository.GetLogsAsync(rangeStart, rangeEnd, cancellationToken: cancellationToken);
-    }
+    /// <summary>Every device punch in [LogViewStart, LogViewEnd], the whole end day included --
+    /// shared by Load and Export so the two stay in step. Never merges in manual entries (see
+    /// this class's own doc comment).</summary>
+    private async Task<List<AttendanceLog>> QueryStoredLogsInRangeAsync(CancellationToken cancellationToken = default) =>
+        await _attendanceLogRepository.GetLogsAsync(
+            LogViewStart!.Value.Date, LogViewEnd!.Value.Date.AddDays(1).AddTicks(-1), cancellationToken: cancellationToken);
 }

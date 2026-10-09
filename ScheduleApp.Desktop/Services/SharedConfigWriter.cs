@@ -46,7 +46,7 @@ public record DeviceDefaults(string? DeviceIp, int DevicePort, uint DeviceCommKe
 /// See SettingsDialog's change-tracking (comparing against what the dialog was opened
 /// with) for how the null-vs-non-null decision gets made.
 /// </summary>
-public class SharedConfigWriter
+public class SharedConfigWriter : ISharedConfigWriter
 {
     private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true };
 
@@ -59,17 +59,17 @@ public class SharedConfigWriter
     {
         var path = SharedConfigFile.ResolvePath();
         if (!File.Exists(path))
-            return new JsonObject();
+            return [];
 
         var text = File.ReadAllText(path);
         if (string.IsNullOrWhiteSpace(text))
-            return new JsonObject();
+            return [];
 
         return JsonNode.Parse(text, documentOptions: new JsonDocumentOptions
         {
             CommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true
-        }) as JsonObject ?? new JsonObject();
+        }) as JsonObject ?? [];
     }
 
     /// <summary>Merges whichever of these groups are non-null into whatever's already in
@@ -146,14 +146,14 @@ public class SharedConfigWriter
 
         if (connectionString is not null)
         {
-            var connectionStrings = root["ConnectionStrings"] as JsonObject ?? new JsonObject();
+            var connectionStrings = root["ConnectionStrings"] as JsonObject ?? [];
             connectionStrings["ScheduleDb"] = connectionString;
             root["ConnectionStrings"] = connectionStrings;
         }
 
         if (device is not null)
         {
-            var attendance = root["Attendance"] as JsonObject ?? new JsonObject();
+            var attendance = root["Attendance"] as JsonObject ?? [];
             attendance["DeviceIp"] = device.DeviceIp;
             attendance["DevicePort"] = device.DevicePort;
             attendance["DeviceCommKey"] = device.DeviceCommKey;
@@ -163,14 +163,14 @@ public class SharedConfigWriter
 
         if (defaultWorkTimeHours is not null)
         {
-            var attendance = root["Attendance"] as JsonObject ?? new JsonObject();
+            var attendance = root["Attendance"] as JsonObject ?? [];
             attendance["DefaultWorkTimeHours"] = defaultWorkTimeHours;
             root["Attendance"] = attendance;
         }
 
         if (policy is not null)
         {
-            var attendance = root["Attendance"] as JsonObject ?? new JsonObject();
+            var attendance = root["Attendance"] as JsonObject ?? [];
 
             // AttendancePolicy has exactly these 14 properties, so -- unlike the
             // Attendance/ConnectionStrings objects above -- this one's fully replaced
@@ -203,7 +203,7 @@ public class SharedConfigWriter
 
         if (payrollPolicy is not null)
         {
-            var payroll = root["Payroll"] as JsonObject ?? new JsonObject();
+            var payroll = root["Payroll"] as JsonObject ?? [];
 
             // PayrollPolicy has exactly these 4 properties, so -- same as
             // Attendance:Policy above -- this replaces Payroll:Policy wholesale
@@ -221,7 +221,7 @@ public class SharedConfigWriter
 
         if (companyName is not null)
         {
-            var payroll = root["Payroll"] as JsonObject ?? new JsonObject();
+            var payroll = root["Payroll"] as JsonObject ?? [];
 
             // Empty string ("reset to default") removes the key instead of writing
             // an empty value -- see this parameter's own doc comment on Save.
@@ -235,7 +235,7 @@ public class SharedConfigWriter
 
         if (signInLogoSourcePath is not null && !string.IsNullOrEmpty(directory))
         {
-            var signIn = root["SignIn"] as JsonObject ?? new JsonObject();
+            var signIn = root["SignIn"] as JsonObject ?? [];
 
             // Resolve the copy target before cleaning up old files, so the loop below
             // can skip it if the newly picked file happens to already be that exact
@@ -298,4 +298,20 @@ public class SharedConfigWriter
         File.WriteAllText(path, root.ToJsonString(WriteOptions));
         return path;
     }
+}
+
+/// <summary>Writes changed settings groups to the shared, machine-wide config file.</summary>
+public interface ISharedConfigWriter
+{
+    /// <summary>Writes the non-null groups, leaving the rest as they are; the file's path, or
+    /// null when there was nothing to write.</summary>
+    string? Save(
+        string? connectionString = null,
+        DeviceDefaults? device = null,
+        double? defaultWorkTimeHours = null,
+        AttendancePolicy? policy = null,
+        PayrollPolicy? payrollPolicy = null,
+        string? signInLogoSourcePath = null,
+        string? companyName = null,
+        IReadOnlyList<ConnectionProfile>? connectionProfiles = null);
 }

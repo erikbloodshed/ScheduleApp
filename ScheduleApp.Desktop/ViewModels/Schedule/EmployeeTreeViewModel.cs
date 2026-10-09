@@ -1,99 +1,67 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Reactive.Linq;
-using System.Windows;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
-using ScheduleApp.Desktop;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
-using ScheduleApp.Desktop.Views;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
 /// <summary>
 /// Backs the Schedule tab's left-hand Department/Employee tree (see
-/// MainViewModel-Split-Plan.md's component list) -- the checkbox-driven
-/// multi-select tree, plus everything that adds, edits, removes, or navigates the
-/// employees/departments shown in it. Same tree shape as the Attendance tab's
-/// report-scope tree (see ReportScopeViewModel, the direct precedent this class
-/// follows), but its own separate instance/selection state: checking a box here
-/// marks someone for a bulk schedule assignment, not for scoping a report, and
-/// unlike that tree, every employee here starts *unchecked* (bulk-assigning a
-/// schedule to the whole company by default would be a footgun the report tab
-/// doesn't have to worry about).
+/// MainViewModel-Split-Plan.md's component list) -- the checkbox-driven multi-select tree,
+/// plus everything that adds, edits, removes, or navigates the employees/departments shown in
+/// it. Same tree shape as the Attendance tab's report-scope tree (ReportScopeViewModel), but its
+/// own selection state: checking a box here marks someone for a bulk schedule assignment, not
+/// for scoping a report, and every employee starts *unchecked* (bulk-assigning a schedule to the
+/// whole company by default would be a footgun).
 ///
-/// SelectedEmployee/SelectedDepartment (the tree's or the Employees grid's selection,
-/// not the per-row checkboxes) drive the single-employee calendar view on the rest of
-/// the Schedule tab, and are also what EmployeesPage's editor buttons and
-/// PayrollViewModel's own reactivity (it filters PropertyChanged on
-/// nameof(SelectedEmployee)) key off of. Sibling ViewModels react to them for themselves
-/// -- ScheduleCalendarViewModel subscribes to SelectedEmployee, ScheduleAssignmentViewModel
-/// to SelectedEmployeeCount -- rather than this class reaching out to them.
-///
-/// A ReactiveUI ViewModel (ViewModelBase): each command's CanExecute follows the
-/// selection it depends on through WhenAnyValue, a failure is shown on the status bar
-/// and logged rather than escaping a command, and the Yes/No questions go through
-/// Confirm, which EmployeesPage answers with a MessageBox. ReactiveObject raises
-/// PropertyChanged as before, so the siblings' subscriptions are unchanged.
+/// SelectedEmployee/SelectedDepartment (the tree's or the Employees grid's selection, not the
+/// checkboxes) drive the single-employee calendar on the rest of the Schedule tab and are the
+/// app-wide selection the Payroll tab follows (IEmployeeSelection). Sibling ViewModels react to
+/// them for themselves -- ScheduleCalendarViewModel to SelectedEmployee,
+/// ScheduleAssignmentViewModel to SelectedEmployeeCount.
 /// </summary>
-public class EmployeeTreeViewModel : ViewModelBase
+public partial class EmployeeTreeViewModel : ViewModelBase
 {
     private readonly IScheduleRepository _repository;
     private readonly ViewStateStore _viewStateStore;
 
-    /// <summary>Bumped after every command below that adds, edits, removes, or
-    /// (un)blacklists an employee, or adds/deletes a department (BumpRoster) -- the cache
-    /// ActiveRosterProvider keeps for ReportScopeViewModel/PayslipScopeViewModel/
-    /// PayrollWizardViewModel/PayrollRunViewModel/PayrollGroupViewModel's Active-only
-    /// roster reads (see that class's own doc comment). This class is the only place any
-    /// of those seven mutations happen, so it's the only place RosterVersion needs bumping
-    /// from -- see ScheduleImportExportViewModel.ImportEmployeesAsync for the one
-    /// roster-mutating write that happens outside this class entirely.
-    ///
-    /// DeleteEmployeeAsync also bumps the deleted employee's schedule
-    /// (BumpScheduleForEmployees with their Pin), since the cascade-deleted schedule
-    /// entries move that employee's payroll figures, and the Attendance Summary tab's own
-    /// auto-reload-on-tab-select (see ReportViewModel.ShouldAutoReload) needs to see that
-    /// -- see AttendanceDataVersion's own doc comment, which documents this exact call
-    /// site by name.</summary>
+    /// <summary>Bumped after every add, edit, removal, or (un)blacklisting of an employee, and
+    /// every department added or deleted (BumpRoster) -- the cache ActiveRosterProvider keeps
+    /// for the Active-only roster reads elsewhere. This class is where all of those happen
+    /// (Import Employees aside). Deleting an employee also bumps their schedule, since the
+    /// cascade-deleted entries move their payroll figures.</summary>
     private readonly AttendanceDataVersion _dataVersion;
 
-    /// <summary>MainViewModel's own SaveViewState, passed in as a delegate rather than
-    /// this class reaching back out to its facade -- same shape as
-    /// ManualEntriesViewModel/PunchRecordsViewModel's own _saveViewState (see either's
-    /// constructor). Called after SelectedEmployee/SelectedDepartment change so a
-    /// revisit reopens on the same selection; NOT called from LoadAsync itself, since
-    /// that already runs during the facade's own constructor-time DisplayedMonth
-    /// assignment on the very first load, before HasRestoredSelection has had a chance
-    /// to flip true (see that property's own doc comment, and MainViewModel.SaveViewState's,
-    /// for the guard this mirrors).</summary>
+    /// <summary>MainViewModel's SaveViewState, called after the selection changes so a revisit
+    /// reopens on it.</summary>
     private readonly Action _saveViewState;
 
-    /// <summary>The *same* instance MainViewModel receives (see App.xaml.cs's registration
-    /// and ScheduleCalendarViewModel._busy's own doc comment) -- shared across Schedule/
-    /// Payroll/Attendance since they all read/write the one shared, app-lifetime-scoped
-    /// ScheduleDbContext. LoadAsync below is the one DB-touching call in this class that
-    /// runs on its own (the commands' writes are each followed by it) -- see LoadAsync's
-    /// own doc comment for the concurrent-DbContext crash going around this guard could
-    /// produce against the Attendance/Payroll tabs during the first second or two after
-    /// sign-in, while this method is still running.</summary>
+    /// <summary>The app-wide busy state -- the tree load is the Schedule tab's first database
+    /// access each run, and goes through it like everything else touching the shared
+    /// ScheduleDbContext.</summary>
     private readonly AttendanceBusyState _busy;
 
-    /// <summary>Read only for RestDayPremiumPercentage/HolidayPremiumPercentage, handed
-    /// straight to EmployeeDialog so its per-employee override boxes can show the
-    /// company's current default as a live placeholder -- see EmployeeDialog's own
-    /// constructor doc comment.</summary>
+    /// <summary>Only for the Rest Day/Holiday premiums, shown as the Employee dialog's override
+    /// placeholders.</summary>
     private readonly PayrollPolicy _payrollPolicy;
 
-    /// <summary>Read only for DefaultWorkTimeHours, handed straight to EmployeeDialog so
-    /// its own DefaultWorkTimeHoursBox can show the company's current default as a live
-    /// placeholder -- same reasoning as _payrollPolicy just above.</summary>
+    /// <summary>Only for DefaultWorkTimeHours, shown as the Employee dialog's
+    /// placeholder.</summary>
     private readonly AttendanceSettings _attendanceSettings;
+
+    private readonly IObservable<bool> _hasDepartment;
+    private readonly IObservable<bool> _hasEmployee;
+    private readonly IObservable<bool> _canBlacklist;
+    private readonly IObservable<bool> _canUnblacklist;
+    private readonly IObservable<bool> _hasCheckedEmployees;
 
     public EmployeeTreeViewModel(
         IScheduleRepository repository,
@@ -114,159 +82,111 @@ public class EmployeeTreeViewModel : ViewModelBase
         _payrollPolicy = payrollPolicy;
         _attendanceSettings = attendanceSettings;
 
-        var hasEmployee = this.WhenAnyValue(x => x.SelectedEmployee).Select(e => e is not null);
+        // Every checkbox change across the current tree, recounted -- a newly loaded tree
+        // starts with nobody checked.
+        _selectedEmployeeCountHelper = Observable.Switch(this.WhenAnyValue(x => x.LoadedTree)
+                .Select(tree => EmployeeTreeBuilder.SelectionChanges(tree).StartWith(RxVoid.Default)))
+            .Select(_ => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected))
+            .ToProperty(this, x => x.SelectedEmployeeCount);
 
-        LoadCommand = ReactiveCommand.CreateFromTask(LoadAsync);
-        AddDepartmentCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(AddDepartmentAsync));
-        DeleteDepartmentCommand = ReactiveCommand.CreateFromTask(
-            () => RunSafelyAsync(DeleteDepartmentAsync),
-            this.WhenAnyValue(x => x.SelectedDepartment).Select(d => d is not null));
-        AddEmployeeCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(AddEmployeeAsync));
-        EditEmployeeCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(EditEmployeeAsync), hasEmployee);
-        DeleteEmployeeCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(DeleteEmployeeAsync), hasEmployee);
-        BlacklistEmployeeCommand = ReactiveCommand.CreateFromTask(
-            () => RunSafelyAsync(BlacklistEmployeeAsync),
-            this.WhenAnyValue(x => x.SelectedEmployee).Select(e => e is { IsBlacklisted: false }));
-        UnblacklistEmployeeCommand = ReactiveCommand.CreateFromTask(
-            () => RunSafelyAsync(UnblacklistEmployeeAsync),
-            this.WhenAnyValue(x => x.SelectedEmployee).Select(e => e is { IsBlacklisted: true }));
-        ClearEmployeeSelectionCommand = ReactiveCommand.Create(
-            ClearEmployeeSelection,
-            this.WhenAnyValue(x => x.SelectedEmployeeCount).Select(count => count > 0));
+        _hasDepartment = this.WhenAnyValue(x => x.SelectedDepartment).Select(d => d is not null);
+        _hasEmployee = this.WhenAnyValue(x => x.SelectedEmployee).Select(e => e is not null);
+        _canBlacklist = this.WhenAnyValue(x => x.SelectedEmployee).Select(e => e is { IsBlacklisted: false });
+        _canUnblacklist = this.WhenAnyValue(x => x.SelectedEmployee).Select(e => e is { IsBlacklisted: true });
+        _hasCheckedEmployees = this.WhenAnyValue(x => x.SelectedEmployeeCount).Select(count => count > 0);
 
-        // Skip(1): WhenAnyValue starts with the current values, and there's nothing to save
-        // before anything's been selected.
+        ReportFailuresOf(LoadCommand, AddDepartmentCommand, DeleteDepartmentCommand, AddEmployeeCommand, EditEmployeeCommand,
+            DeleteEmployeeCommand, BlacklistEmployeeCommand, UnblacklistEmployeeCommand, ClearEmployeeSelectionCommand);
+
+        // Skip(1): nothing to save before anything's been selected.
         this.WhenAnyValue(x => x.SelectedEmployee, x => x.SelectedDepartment)
             .Skip(1)
             .Subscribe(_ => _saveViewState());
+        this.WhenAnyValue(x => x.SearchText).Skip(1).Subscribe(_ => ApplySearchFilter());
     }
 
-    public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
+    /// <summary>Replaced in one change per load.</summary>
+    public RangeObservableCollection<DepartmentGroupViewModel> Departments { get; } = [];
 
     /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
     /// what the Schedule tab's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).
     /// EmployeesPage deliberately binds to Departments instead, ignoring the filter.</summary>
-    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = [];
 
-    public Employee? SelectedEmployee
+    /// <summary>The tree the last load built -- what the checked count follows.</summary>
+    [Reactive]
+    internal partial IReadOnlyList<DepartmentGroupViewModel> LoadedTree { get; private set; } = [];
+
+    [Reactive]
+    public partial Employee? SelectedEmployee { get; set; }
+
+    [Reactive]
+    public partial Department? SelectedDepartment { get; set; }
+
+    /// <summary>A row picked in the Schedule tree or the Employees page: an employee selects
+    /// them and their department; a department selects it alone (none for the "(Unassigned)"
+    /// bucket); nothing -- the Employees grid's row cleared -- just drops the employee.</summary>
+    [ReactiveCommand]
+    public void SelectNode(object? node)
     {
-        get => _selectedEmployee;
-        set => this.RaiseAndSetIfChanged(ref _selectedEmployee, value);
-    }
-
-    private Employee? _selectedEmployee;
-
-    public Department? SelectedDepartment
-    {
-        get => _selectedDepartment;
-        set => this.RaiseAndSetIfChanged(ref _selectedDepartment, value);
-    }
-
-    private Department? _selectedDepartment;
-
-    /// <summary>Reloads the tree -- see LoadAsync. SchedulePage.OnNavigatedToAsync
-    /// executes it on every visit.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> LoadCommand { get; }
-
-    public ReactiveCommand<RxVoid, RxVoid> AddDepartmentCommand { get; }
-
-    /// <summary>Enabled while a real department (not the "(Unassigned)" bucket) is selected.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> DeleteDepartmentCommand { get; }
-
-    public ReactiveCommand<RxVoid, RxVoid> AddEmployeeCommand { get; }
-
-    /// <summary>Enabled while an employee is selected, as are Delete below.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> EditEmployeeCommand { get; }
-
-    public ReactiveCommand<RxVoid, RxVoid> DeleteEmployeeCommand { get; }
-
-    /// <summary>Enabled only for a selected employee who isn't blacklisted yet --
-    /// UnblacklistEmployeeCommand the other way round, so of the two buttons only the one
-    /// that applies is enabled.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> BlacklistEmployeeCommand { get; }
-
-    public ReactiveCommand<RxVoid, RxVoid> UnblacklistEmployeeCommand { get; }
-
-    /// <summary>Unchecks every employee. Enabled while at least one is checked.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> ClearEmployeeSelectionCommand { get; }
-
-    /// <summary>Free-text filter for the tree, comma-separated same as the Attendance
-    /// tab's report-scope search box (see ReportScopeViewModel.SearchText) and its
-    /// Punch Records search box -- each term is matched against Employee ID, first
-    /// name, last name, or department name, and terms are OR'd together (see the
-    /// shared EmployeeTreeSearchFilter). Narrows which nodes are visible
-    /// (EmployeeNodeViewModel.IsVisible, DepartmentGroupViewModel.IsVisible) rather
-    /// than which are checked, so typing here never changes what multi-select mode
-    /// would actually assign a schedule to.
-    ///
-    /// Named plainly "SearchText" here, matching ReportScopeViewModel's own internal
-    /// name; MainViewModel forwards it back out under the EmployeeTreeSearchText name
-    /// SchedulePage.xaml binds to, the same way AttendanceViewModel.ReportScopeSearchText
-    /// forwards ReportScope.SearchText.</summary>
-    public string SearchText
-    {
-        get => _searchText;
-        set
+        switch (node)
         {
-            if (_searchText == value) return;
-            this.RaiseAndSetIfChanged(ref _searchText, value);
-            ApplySearchFilter();
+            case EmployeeNodeViewModel employeeNode:
+                SelectedEmployee = employeeNode.Employee;
+                SelectedDepartment = employeeNode.Employee.Department;
+                break;
+
+            case DepartmentGroupViewModel group:
+                SelectedDepartment = group.RealDepartment;
+                SelectedEmployee = null;
+                break;
+
+            default:
+                SelectedEmployee = null;
+                break;
         }
     }
 
-    private string _searchText = string.Empty;
+    /// <summary>Free-text filter for the tree, comma-separated like the Attendance tab's search
+    /// boxes -- each term matched against Employee ID, first name, last name, or department,
+    /// terms OR'd together (EmployeeTreeSearchFilter). Narrows which nodes are visible, never
+    /// which are checked, so typing never changes what a bulk assignment would cover.</summary>
+    [Reactive]
+    public partial string SearchText { get; set; } = string.Empty;
 
     private void ApplySearchFilter() => EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
 
-    /// <summary>Set once LoadAsync has applied the saved employee/department selection
-    /// for the first time this run -- guards against a later reload (e.g. after Import
-    /// Employees/Import Schedule, both of which call LoadAsync again) silently
-    /// overwriting whatever the person has selected *this session* with the saved value.
-    /// Public with a private setter, same shape as ReportScopeViewModel.HasRestoredScope,
-    /// so MainViewModel.SaveViewState can check Tree.HasRestoredSelection before writing,
-    /// the same way AttendanceViewModel.SaveViewState checks ReportScope.HasRestoredScope.</summary>
+    /// <summary>Set once the saved employee/department selection has been applied, the first
+    /// load this run -- so a later reload (after an import) doesn't overwrite what the person
+    /// has selected since. MainViewModel.SaveViewState checks it before writing.</summary>
     public bool HasRestoredSelection { get; private set; }
 
-    /// <summary>Rebuilds the tree from the database. Public because
-    /// ScheduleImportExportViewModel calls it after Import Schedule and Import Employees,
-    /// and the commands below call it after their own writes.
-    ///
-    /// Routed through _busy.RunAsync -- this is the Schedule tab's own first-ever
-    /// database access each run (SchedulePage.OnNavigatedToAsync executes LoadCommand
-    /// before anything else on the page happens), and without the wrap it would be the
-    /// one place in the app that touched the shared, app-lifetime-scoped
-    /// ScheduleDbContext without going through this guard -- compare
-    /// AttendanceViewModel.InitializeAsync, which wraps its own equivalent (the
-    /// Attendance tab's tree load) for exactly the reason given there: "a keystroke ...
-    /// during that window could fire a second, concurrent operation against the same
-    /// DbContext." The same is true here for a person switching to Attendance, Payroll,
-    /// or Employees in the second or so this method is still running.
-    ///
-    /// visibly: false, same reasoning InitializeAsync gives for its own wrap -- this is
-    /// the page's own initial population, not something with a progress bar. A failure
-    /// is shown and logged (ShowFailure) rather than swallowed.</summary>
+    /// <summary>Employees checked in the tree, across every department (Unassigned
+    /// included).</summary>
+    [ObservableAsProperty]
+    public partial int SelectedEmployeeCount { get; }
+
+    /// <summary>Real departments only -- for pickers where "Unassigned" isn't a choice.</summary>
+    public IEnumerable<Department> RealDepartments =>
+        Departments.Where(g => g.RealDepartment is not null).Select(g => g.RealDepartment!);
+
+    /// <summary>
+    /// Rebuilds the tree from the database -- on every visit to the Schedule page, after an
+    /// import, and after each command below writes. Under the app-wide busy state (silently):
+    /// without it, switching tabs in the second this runs could start a concurrent operation on
+    /// the shared ScheduleDbContext.
+    /// </summary>
+    [ReactiveCommand]
     public async Task LoadAsync()
     {
         await _busy.RunAsync(visibly: false, async cancellationToken =>
         {
-            Departments.Clear();
-
             var departments = await _repository.GetDepartmentsWithEmployeesAsync(cancellationToken);
             var unassigned = await _repository.GetUnassignedEmployeesAsync(cancellationToken);
 
-            // Wraps each Employee in an EmployeeNodeViewModel (for the tree's per-employee
-            // checkbox) and wires up notifications both ways: employee checkbox changes
-            // update the department's tri-state checkbox and this class's own
-            // SelectedEmployeeCount; the department checkbox pushes back down to its
-            // employees.
-            foreach (var group in EmployeeTreeBuilder.Build(departments, unassigned, OnEmployeeNodeSelectionChanged))
-                Departments.Add(group);
-
-            // Every node above starts unchecked, so anything checked before this reload is
-            // gone -- make sure the count (and so ClearEmployeeSelectionCommand, and
-            // ScheduleAssignmentViewModel's own multi-select commands, which follow it)
-            // reflects that.
-            RecountSelectedEmployees();
+            var tree = EmployeeTreeBuilder.Build(departments, unassigned);
+            Departments.ReplaceAll(tree);
+            LoadedTree = tree;
 
             if (!HasRestoredSelection)
             {
@@ -274,275 +194,199 @@ public class EmployeeTreeViewModel : ViewModelBase
                 RestoreSelectionFromViewState();
             }
 
-            // Freshly-built nodes all default to IsVisible = true, so a reload (e.g. after
-            // Import Employees/Import Schedule) under an already-typed search term needs
-            // this to re-hide whatever still doesn't match, rather than briefly showing
-            // everyone until the next keystroke.
+            // Fresh nodes all start visible, so a reload under a typed search term re-hides
+            // whatever doesn't match rather than briefly showing everyone.
             ApplySearchFilter();
         }, onError: ex => ShowFailure(ex, "Couldn't load employees"));
     }
 
-    /// <summary>Re-applies whichever employee or department is currently in the shared,
-    /// in-memory ViewStateStore (see its own doc comment -- session-only, so this is
-    /// always empty on a fresh launch and the tree simply opens with nothing selected),
-    /// once the tree has just been built for the first time this run. Silently does
-    /// nothing if that employee/department no longer exists -- reopening where you left
-    /// off is a convenience, not a guarantee.</summary>
+    /// <summary>Re-applies the employee or department in the session-only ViewStateStore, the
+    /// first time the tree is built this run. Silently nothing if it no longer exists --
+    /// reopening where you left off is a convenience, not a guarantee.</summary>
     private void RestoreSelectionFromViewState()
     {
         var state = _viewStateStore.Schedule;
 
-        if (state.SelectedEmployeeId is int employeeId)
+        if (state.SelectedEmployeeId is int employeeId
+            && Departments.SelectMany(d => d.Employees).FirstOrDefault(n => n.Employee.Id == employeeId) is { } node)
         {
-            var node = Departments.SelectMany(d => d.Employees)
-                .FirstOrDefault(n => n.Employee.Id == employeeId);
-            if (node is not null)
-            {
-                SelectedEmployee = node.Employee;
-                SelectedDepartment = node.Employee.Department;
-                return;
-            }
+            SelectedEmployee = node.Employee;
+            SelectedDepartment = node.Employee.Department;
+            return;
         }
 
-        if (state.SelectedDepartmentId is int departmentId)
-        {
-            var department = RealDepartments.FirstOrDefault(d => d.Id == departmentId);
-            if (department is not null)
-                SelectedDepartment = department;
-        }
+        if (state.SelectedDepartmentId is int departmentId && RealDepartments.FirstOrDefault(d => d.Id == departmentId) is { } department)
+            SelectedDepartment = department;
     }
 
-    private void OnEmployeeNodeSelectionChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(EmployeeNodeViewModel.IsSelected)) return;
-
-        RecountSelectedEmployees();
-    }
-
-    /// <summary>Employees currently checked in the tree, across every department
-    /// (including Unassigned) -- the target list for bulk schedule assignment (see
-    /// GetCheckedEmployees below). A stored value, recounted whenever a checkbox or the
-    /// whole tree changes, so ClearEmployeeSelectionCommand and
-    /// ScheduleAssignmentViewModel can follow it through change notification.</summary>
-    public int SelectedEmployeeCount
-    {
-        get => _selectedEmployeeCount;
-        private set => this.RaiseAndSetIfChanged(ref _selectedEmployeeCount, value);
-    }
-
-    private int _selectedEmployeeCount;
-
-    private void RecountSelectedEmployees() =>
-        SelectedEmployeeCount = Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
-
-    /// <summary>Employees currently checked in the tree, across every department
-    /// (including Unassigned) -- excludes any blacklisted employee even if their node
-    /// is somehow still checked (their checkbox is hidden along with the rest of their
-    /// row once blacklisted -- see EmployeeTreeSearchFilter -- but this guards the
-    /// actual bulk-assignment target list directly rather than relying on the UI alone
-    /// to keep one in sync with the other). ScheduleAssignmentViewModel's bulk
-    /// assignments are the callers.</summary>
+    /// <summary>The checked employees -- the bulk-assignment target list -- leaving out a
+    /// blacklisted one even if their node is somehow still checked (their row is hidden, but
+    /// the list itself guards it rather than relying on the UI).</summary>
     public List<Employee> GetCheckedEmployees() =>
-        Departments.SelectMany(d => d.Employees)
+        [.. Departments.SelectMany(d => d.Employees)
             .Where(n => n.IsSelected && !n.Employee.IsBlacklisted)
-            .Select(n => n.Employee)
-            .ToList();
+            .Select(n => n.Employee)];
 
-    /// <summary>Real departments only -- for combo boxes where "Unassigned" isn't a valid choice.</summary>
-    public IEnumerable<Department> RealDepartments =>
-        Departments.Where(g => g.RealDepartment is not null).Select(g => g.RealDepartment!);
-
+    [ReactiveCommand]
     private async Task AddDepartmentAsync()
     {
-        var dialog = new InputDialog("New Department", "Department name:") { Owner = Application.Current.MainWindow };
-        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.Value)) return;
+        var prompt = new TextPromptViewModel("New Department", "Department name:");
+        if (!await ShowDialogAsync(prompt)) return;
 
-        await _repository.AddDepartmentAsync(dialog.Value.Trim());
-        _dataVersion.BumpRoster(); // see this class's own _dataVersion doc comment
+        await _repository.AddDepartmentAsync(prompt.Value);
+        _dataVersion.BumpRoster();
         await LoadAsync();
     }
 
+    /// <summary>Enabled while a real department (not the "(Unassigned)" bucket) is
+    /// selected.</summary>
+    [ReactiveCommand(CanExecute = nameof(_hasDepartment))]
     private async Task DeleteDepartmentAsync()
     {
-        if (SelectedDepartment is null) return;
+        if (SelectedDepartment is not { } department) return;
 
-        var confirmed = await ConfirmAsync(
-            $"Delete department \"{SelectedDepartment.Name}\"?\n\nIts employees will become unassigned, not deleted -- " +
-            "their schedules are kept.",
-            "Confirm delete", isWarning: true);
+        if (!await ConfirmAsync(
+                $"Delete department \"{department.Name}\"?\n\nIts employees will become unassigned, not deleted -- " +
+                "their schedules are kept.",
+                "Confirm delete", isWarning: true))
+            return;
 
-        if (!confirmed) return;
-
-        await _repository.DeleteDepartmentAsync(SelectedDepartment.Id);
-        _dataVersion.BumpRoster(); // see this class's own _dataVersion doc comment
+        await _repository.DeleteDepartmentAsync(department.Id);
+        _dataVersion.BumpRoster();
         SelectedDepartment = null;
         SelectedEmployee = null;
         await LoadAsync();
     }
 
-    private async Task AddEmployeeAsync()
+    [ReactiveCommand]
+    private Task AddEmployeeAsync() =>
+        SaveEmployeeAsync(
+            new EmployeeEditorViewModel([.. RealDepartments], SelectedEmployee?.DepartmentId ?? SelectedDepartment?.Id,
+                _payrollPolicy, _attendanceSettings.DefaultWorkTimeHours, takenPins: TakenPins()),
+            details => _repository.AddEmployeeAsync(details.LastName, details.FirstName, details.DepartmentId, details.Pin,
+                details.QualifiesForOvertime, details.QualifiesForNightDiff, details.DailyRate, details.DefaultLeaveIsPaid,
+                details.ApplyOvertimeRatePercentageByDefault,
+                details.DefaultSss, details.DefaultPhilHealth, details.DefaultPagIbig,
+                details.DefaultPremiumPay, details.DefaultAllowance, details.DefaultCashAdvance,
+                details.EmployeeType, details.MonthlyRate, details.RestDayWorkPremiumPercentage,
+                details.QualifiesForRestDayPay, details.QualifiesForPremiumPay,
+                details.ClockInBufferBeforeHours, details.ClockInBufferAfterHours,
+                details.ClockOutBufferBeforeHours, details.ClockOutBufferAfterHours,
+                details.HolidayPremiumPercentage, details.DefaultWorkTimeHours, details.ExemptFromUndertimeDeduction));
+
+    /// <summary>Enabled while an employee is selected, as is Delete.</summary>
+    [ReactiveCommand(CanExecute = nameof(_hasEmployee))]
+    private Task EditEmployeeAsync()
     {
-        var dialog = new EmployeeDialog(
-            RealDepartments, SelectedEmployee?.DepartmentId ?? SelectedDepartment?.Id, _payrollPolicy,
-            _attendanceSettings.DefaultWorkTimeHours,
-            takenEmployeeIds: GetTakenPins())
-        { Owner = Application.Current.MainWindow };
-        if (dialog.ShowDialog() != true) return;
+        if (SelectedEmployee is not { } employee) return Task.CompletedTask;
+
+        return SaveEmployeeAsync(
+            new EmployeeEditorViewModel([.. RealDepartments], employee.DepartmentId, _payrollPolicy,
+                _attendanceSettings.DefaultWorkTimeHours, employee, TakenPins(excludingEmployeeId: employee.Id)),
+            details => _repository.UpdateEmployeeAsync(
+                employee.Id, details.LastName, details.FirstName, details.DepartmentId, details.Pin,
+                details.QualifiesForOvertime, details.QualifiesForNightDiff, details.DailyRate, details.DefaultLeaveIsPaid,
+                details.ApplyOvertimeRatePercentageByDefault,
+                details.DefaultSss, details.DefaultPhilHealth, details.DefaultPagIbig,
+                details.DefaultPremiumPay, details.DefaultAllowance, details.DefaultCashAdvance,
+                details.EmployeeType, details.MonthlyRate, details.RestDayWorkPremiumPercentage,
+                details.QualifiesForRestDayPay, details.QualifiesForPremiumPay,
+                details.ClockInBufferBeforeHours, details.ClockInBufferAfterHours,
+                details.ClockOutBufferBeforeHours, details.ClockOutBufferAfterHours,
+                details.HolidayPremiumPercentage, details.DefaultWorkTimeHours, details.ExemptFromUndertimeDeduction));
+    }
+
+    /// <summary>Shows the Employee dialog, and writes what it settles on.</summary>
+    private async Task SaveEmployeeAsync(EmployeeEditorViewModel editor, Func<EmployeeDetails, Task> save)
+    {
+        if (!await ShowDialogAsync(editor) || editor.AcceptedDetails is not { } details) return;
 
         try
         {
-            await _repository.AddEmployeeAsync(dialog.LastName, dialog.FirstName, dialog.DepartmentId, dialog.EmployeeId,
-                dialog.QualifiesForOvertime, dialog.QualifiesForNightDiff, dialog.DailyRate, dialog.DefaultLeaveIsPaid,
-                dialog.ApplyOvertimeRatePercentageByDefault,
-                dialog.DefaultSss, dialog.DefaultPhilHealth, dialog.DefaultPagIbig,
-                dialog.DefaultPremiumPay, dialog.DefaultAllowance, dialog.DefaultCashAdvance,
-                dialog.EmployeeType, dialog.MonthlyRate, dialog.RestDayWorkPremiumPercentage,
-                dialog.QualifiesForRestDayPay, dialog.QualifiesForPremiumPay,
-                dialog.ClockInBufferBeforeHours, dialog.ClockInBufferAfterHours,
-                dialog.ClockOutBufferBeforeHours, dialog.ClockOutBufferAfterHours,
-                dialog.HolidayPremiumPercentage,
-                dialog.DefaultWorkTimeHours, dialog.ExemptFromUndertimeDeduction);
+            await save(details);
         }
         catch (DuplicateEmployeeIdException ex)
         {
-            // The dialog already checks this against what was loaded when it opened --
-            // this only fires if someone else added that same ID in the meantime.
+            // The dialog already checks against what was loaded when it opened -- this only
+            // fires if someone else took that ID in the meantime.
             StatusBar.ShowCaution(ex.Message, "Duplicate Employee ID");
             return;
         }
 
-        _dataVersion.BumpRoster(); // see this class's own _dataVersion doc comment
+        _dataVersion.BumpRoster();
         await LoadAsync();
     }
 
-    private async Task EditEmployeeAsync()
-    {
-        if (SelectedEmployee is null) return;
-
-        var dialog = new EmployeeDialog(
-            RealDepartments, SelectedEmployee.DepartmentId, _payrollPolicy,
-            _attendanceSettings.DefaultWorkTimeHours, SelectedEmployee,
-            takenEmployeeIds: GetTakenPins(excludingEmployeeId: SelectedEmployee.Id))
-        { Owner = Application.Current.MainWindow };
-        if (dialog.ShowDialog() != true) return;
-
-        try
-        {
-            await _repository.UpdateEmployeeAsync(
-                SelectedEmployee.Id, dialog.LastName, dialog.FirstName, dialog.DepartmentId, dialog.EmployeeId,
-                dialog.QualifiesForOvertime, dialog.QualifiesForNightDiff, dialog.DailyRate, dialog.DefaultLeaveIsPaid,
-                dialog.ApplyOvertimeRatePercentageByDefault,
-                dialog.DefaultSss, dialog.DefaultPhilHealth, dialog.DefaultPagIbig,
-                dialog.DefaultPremiumPay, dialog.DefaultAllowance, dialog.DefaultCashAdvance,
-                dialog.EmployeeType, dialog.MonthlyRate, dialog.RestDayWorkPremiumPercentage,
-                dialog.QualifiesForRestDayPay, dialog.QualifiesForPremiumPay,
-                dialog.ClockInBufferBeforeHours, dialog.ClockInBufferAfterHours,
-                dialog.ClockOutBufferBeforeHours, dialog.ClockOutBufferAfterHours,
-                dialog.HolidayPremiumPercentage,
-                dialog.DefaultWorkTimeHours, dialog.ExemptFromUndertimeDeduction);
-        }
-        catch (DuplicateEmployeeIdException ex)
-        {
-            StatusBar.ShowCaution(ex.Message, "Duplicate Employee ID");
-            return;
-        }
-
-        _dataVersion.BumpRoster(); // see this class's own _dataVersion doc comment
-        await LoadAsync();
-    }
-
-    /// <summary>Employee IDs (Pin) currently in use, optionally excluding one employee
-    /// (their own current ID shouldn't count as "taken" while editing them).</summary>
-    private HashSet<int> GetTakenPins(int? excludingEmployeeId = null) =>
-        Departments.SelectMany(d => d.Employees)
+    /// <summary>Employee IDs in use, optionally not counting one employee's own (while editing
+    /// them).</summary>
+    private HashSet<int> TakenPins(int? excludingEmployeeId = null) =>
+        [.. Departments.SelectMany(d => d.Employees)
             .Select(n => n.Employee)
-            .Where(emp => emp.Id != excludingEmployeeId)
-            .Select(emp => emp.Pin)
-            .ToHashSet();
+            .Where(e => e.Id != excludingEmployeeId)
+            .Select(e => e.Pin)];
 
+    [ReactiveCommand(CanExecute = nameof(_hasEmployee))]
     private async Task DeleteEmployeeAsync()
     {
-        if (SelectedEmployee is null) return;
+        if (SelectedEmployee is not { } employee) return;
 
-        var confirmed = await ConfirmAsync(
-            $"Delete employee \"{SelectedEmployee.DisplayName}\" and all of their schedule entries? This cannot be undone.",
-            "Confirm delete", isWarning: true);
-
-        if (!confirmed) return;
-
-        var employeeId = SelectedEmployee.Id;
-
-        // Captured before SelectedEmployee is nulled out below -- the per-employee schedule bump
-        // needs the Pin, and by the time the delete has finished there's nothing left to read it
-        // from. Pin rather than Id: _lastScheduleChangeVersionByPin is keyed by Pin like
-        // everything else on the payroll side (see BumpScheduleForEmployees' own doc comment).
-        var employeePin = SelectedEmployee.Pin;
+        if (!await ConfirmAsync(
+                $"Delete employee \"{employee.DisplayName}\" and all of their schedule entries? This cannot be undone.",
+                "Confirm delete", isWarning: true))
+            return;
 
         SelectedEmployee = null;
-        await _repository.DeleteEmployeeAsync(employeeId);
+        await _repository.DeleteEmployeeAsync(employee.Id);
 
-        // Per-employee, not a plain BumpSchedule(): deleting an employee cascades their
-        // ScheduleEntries away, which moves that employee's payroll numbers to zero -- and a
-        // bump with no per-pin entry is invisible to AnyScheduleChangeSince, so an
-        // already-loaded payroll group containing this employee would have gone on showing their
-        // pre-delete figures until something else forced a recompute. See
-        // BumpScheduleForEmployees' own doc comment for why the wiped date range doesn't need
-        // reporting alongside the Pin.
-        _dataVersion.BumpScheduleForEmployees([employeePin]);
-        _dataVersion.BumpRoster(); // and removes them from the roster itself -- see this field's own doc comment
+        // Per-employee, not a plain BumpSchedule(): the cascade-deleted schedule entries move
+        // this employee's payroll to zero, and a bump with no per-pin entry is invisible to a
+        // loaded payroll group's AnyScheduleChangeSince check.
+        _dataVersion.BumpScheduleForEmployees([employee.Pin]);
+        _dataVersion.BumpRoster();
         await LoadAsync();
     }
 
-    /// <summary>Hides the employee from the Schedule/Attendance trees and active-only
-    /// pickers (report scope, payroll rosters/wizard) going forward, without touching
-    /// any of their existing schedule/attendance/payroll history -- see
-    /// Employee.IsBlacklisted's own doc comment. Reversible via UnblacklistEmployeeAsync.</summary>
+    /// <summary>Hides the employee from the Schedule/Attendance trees and active-only pickers
+    /// going forward, keeping all their history -- see Employee.IsBlacklisted. Enabled only
+    /// for one who isn't blacklisted yet; Unblacklist the other way round.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canBlacklist))]
     private async Task BlacklistEmployeeAsync()
     {
-        if (SelectedEmployee is null) return;
+        if (SelectedEmployee is not { } employee) return;
 
-        var confirmed = await ConfirmAsync(
-            $"Blacklist employee \"{SelectedEmployee.DisplayName}\"? " +
-            "They'll be hidden from the Schedule and Attendance trees and left out of new payroll rosters, " +
-            "but their existing records are kept, and they'll still appear here so they can be unblacklisted later.",
-            "Confirm blacklist", isWarning: true);
+        if (!await ConfirmAsync(
+                $"Blacklist employee \"{employee.DisplayName}\"? " +
+                "They'll be hidden from the Schedule and Attendance trees and left out of new payroll rosters, " +
+                "but their existing records are kept, and they'll still appear here so they can be unblacklisted later.",
+                "Confirm blacklist", isWarning: true))
+            return;
 
-        if (!confirmed) return;
-
-        var employeeId = SelectedEmployee.Id;
-        await _repository.SetEmployeeBlacklistAsync(employeeId, true);
-        _dataVersion.BumpRoster(); // see this class's own _dataVersion doc comment
-        await LoadAsync();
-        ReselectEmployee(employeeId);
+        await SetBlacklistedAsync(employee.Id, blacklisted: true);
     }
 
+    [ReactiveCommand(CanExecute = nameof(_canUnblacklist))]
     private async Task UnblacklistEmployeeAsync()
     {
-        if (SelectedEmployee is null) return;
-
-        var employeeId = SelectedEmployee.Id;
-        await _repository.SetEmployeeBlacklistAsync(employeeId, false);
-        _dataVersion.BumpRoster(); // see this class's own _dataVersion doc comment
-        await LoadAsync();
-        ReselectEmployee(employeeId);
+        if (SelectedEmployee is { } employee)
+            await SetBlacklistedAsync(employee.Id, blacklisted: false);
     }
 
-    /// <summary>Re-points SelectedEmployee at the freshly-loaded node for this Id after
-    /// a LoadAsync rebuild. Needed specifically after Blacklist/Unblacklist (unlike
-    /// Edit/Delete, which either clear SelectedEmployee first or don't depend on
-    /// CanExecute reflecting a just-changed property): LoadAsync only restores
-    /// selection from ViewState on the very first load, so without this, SelectedEmployee
-    /// would keep pointing at the pre-toggle Employee instance, and Blacklist/Unblacklist's
-    /// CanExecute would keep following its old IsBlacklisted value until something else
-    /// re-selected them.</summary>
-    private void ReselectEmployee(int employeeId)
+    /// <summary>Re-points SelectedEmployee at the reloaded node afterwards -- otherwise it
+    /// would keep the pre-toggle Employee, and the two commands' CanExecute its old
+    /// IsBlacklisted.</summary>
+    private async Task SetBlacklistedAsync(int employeeId, bool blacklisted)
     {
-        var node = Departments.SelectMany(d => d.Employees).FirstOrDefault(n => n.Employee.Id == employeeId);
-        if (node is not null) SelectedEmployee = node.Employee;
+        await _repository.SetEmployeeBlacklistAsync(employeeId, blacklisted);
+        _dataVersion.BumpRoster();
+        await LoadAsync();
+
+        if (Departments.SelectMany(d => d.Employees).FirstOrDefault(n => n.Employee.Id == employeeId) is { } node)
+            SelectedEmployee = node.Employee;
     }
 
-    /// <summary>Unchecks every employee -- ClearEmployeeSelectionCommand, and MainViewModel
-    /// directly whenever multi-select mode ends.</summary>
+    /// <summary>Unchecks every employee -- also called by MainViewModel whenever multi-select
+    /// mode ends. Enabled while anyone is checked.</summary>
+    [ReactiveCommand(CanExecute = nameof(_hasCheckedEmployees))]
     public void ClearEmployeeSelection()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))

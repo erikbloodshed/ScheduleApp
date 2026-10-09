@@ -1,0 +1,103 @@
+<ResourceDictionary
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
+        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls">
+
+    <!--
+        The app's defaults for the controls every view uses, as implicit styles, so a view
+        writes only what differs.
+
+        Size: every single-line field, every button and every SfDataGrid row and header is
+        ControlHeight (24px) tall, so a form's boxes, its buttons and the grid beside them all
+        line up. A multi-line box sets its own Height. A field's vertical Padding has to stay
+        at 0 or 1 for a 14px line to fit.
+
+        These styles only add to the Windows11Light theme. SfSkinManager applies the theme as
+        every control's default style (App.xaml.cs), beneath any Style a control is given, so
+        no style here or in a view needs BasedOn a theme style to keep the theme's look - nor
+        to keep an SfDataGrid's selection highlight in a RowStyle or HeaderStyle. A view's
+        own Style for one of these controls does replace the implicit one, so it is based on
+        it, to keep the defaults:
+
+            <Style x:Key="ToolbarButton" TargetType="syncfusion:ButtonAdv"
+                   BasedOn="{StaticResource {x:Type syncfusion:ButtonAdv}}">
+
+        Native Button is left out on purpose: no view uses a plain boxed one (the Button-typed
+        ones are templated links and title-bar glyphs), and an application-level Button style
+        would also reach the buttons inside other controls' templates.
+    -->
+
+    <sys:Double x:Key="ControlHeight">24</sys:Double>
+
+    <Style TargetType="TextBox">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <!-- An implicit style is looked up by an element's exact type, so the TextBox one above
+         doesn't reach this subclass by itself. -->
+    <Style TargetType="controls:NumericTextBox" BasedOn="{StaticResource {x:Type TextBox}}" />
+
+    <Style TargetType="PasswordBox">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <!-- The theme top-aligns SfTextBoxExt's text, the one field that does; centred, it sits on
+         the same line as the others' at this height. A multi-line one sets Top back. -->
+    <Style TargetType="syncfusion:SfTextBoxExt">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style TargetType="syncfusion:CurrencyTextBox">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <Style TargetType="syncfusion:PercentTextBox">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <Style TargetType="syncfusion:DoubleTextBox">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <Style TargetType="syncfusion:IntegerTextBox">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <!-- A date: "October 1, 2026", typed or picked from the drop-down calendar. Blank is a
+         real state - "not filled in yet" - so it shows nothing rather than a placeholder
+         date. TimeInput sets its own time pattern over this. -->
+    <Style TargetType="syncfusion:DateTimeEdit">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+        <Setter Property="Pattern" Value="CustomPattern" />
+        <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
+        <Setter Property="IsEmptyDateEnabled" Value="True" />
+        <Setter Property="NullValue" Value="{x:Null}" />
+        <Setter Property="ShowMaskOnNullValue" Value="False" />
+    </Style>
+
+    <Style TargetType="syncfusion:ComboBoxAdv">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <!-- Normal: the icon beside the label. An icon-only button sets SizeMode="Small". -->
+    <Style TargetType="syncfusion:ButtonAdv">
+        <Setter Property="Height" Value="{StaticResource ControlHeight}" />
+        <Setter Property="SizeMode" Value="Normal" />
+    </Style>
+
+    <Style TargetType="syncfusion:SfDataGrid">
+        <Setter Property="RowHeight" Value="{StaticResource ControlHeight}" />
+        <Setter Property="HeaderRowHeight" Value="{StaticResource ControlHeight}" />
+    </Style>
+
+    <!-- A numeric column's header (HeaderStyle), right-aligned over cells that right-align
+         through the column's TextAlignment, so the digits line up column to column the way
+         they would in a spreadsheet. -->
+    <Style x:Key="RightAlignedHeader" TargetType="syncfusion:GridHeaderCellControl">
+        <Setter Property="HorizontalContentAlignment" Value="Right" />
+    </Style>
+
+</ResourceDictionary>

@@ -15,8 +15,12 @@ namespace ScheduleApp.Desktop.Converters;
 /// </summary>
 public class NumberConverter : IValueConverter
 {
+    /// <summary>An amount as the app shows money: "1,234.56". What a code binding uses where a
+    /// XAML binding uses this converter.</summary>
+    public static string Format(decimal amount) => amount.ToString("N2", CultureInfo.CurrentCulture);
+
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is decimal amount ? amount.ToString("N2", CultureInfo.CurrentCulture) : value?.ToString() ?? string.Empty;
+        value is decimal amount ? Format(amount) : value?.ToString() ?? string.Empty;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

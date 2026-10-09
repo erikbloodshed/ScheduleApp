@@ -55,12 +55,10 @@ public static class GridAutoFit
 
         public void Watch(object? itemsSource)
         {
-            if (_watched is not null)
-                _watched.CollectionChanged -= OnCollectionChanged;
+            _watched?.CollectionChanged -= OnCollectionChanged;
 
             _watched = itemsSource as INotifyCollectionChanged;
-            if (_watched is not null)
-                _watched.CollectionChanged += OnCollectionChanged;
+            _watched?.CollectionChanged += OnCollectionChanged;
 
             Schedule();
         }

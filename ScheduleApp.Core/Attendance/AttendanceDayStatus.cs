@@ -35,7 +35,7 @@ public static class AttendanceDayStatus
     /// </summary>
     public static PunchStatus Resolve(IEnumerable<PunchStatus> statuses)
     {
-        var list = statuses as ICollection<PunchStatus> ?? statuses.ToList();
+        var list = statuses as ICollection<PunchStatus> ?? [.. statuses];
 
         if (list.Count == 0) return PunchStatus.Absent; // defensive; every real day has >=1 row
         if (list.All(s => s == PunchStatus.Complete)) return PunchStatus.Complete;

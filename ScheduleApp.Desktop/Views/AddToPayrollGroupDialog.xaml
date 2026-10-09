@@ -1,4 +1,5 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.AddToPayrollGroupDialog" ShowMinimizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.AddToPayrollGroupDialog" ShowMinimizeButton="False"
+        x:TypeArguments="vm:AddToPayrollGroupViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
@@ -10,9 +11,6 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
 >
-    <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -39,12 +37,11 @@
         <syncfusion:SfTextBoxExt Grid.Row="1"
                                  x:Name="SearchBox"
                                  Watermark="ID, name or department"
-                                 TextChanged="SearchBox_OnTextChanged"
                                  ToolTip="Comma-separated ID, name, or department terms."
                                  Margin="0,0,0,8" />
 
         <!-- Department/employee checkbox tree - same shape as wizard Step 2. Its items are
-             the search's visible departments, set in code-behind. -->
+             the search's visible departments (AddToPayrollGroupViewModel.VisibleDepartments). -->
         <Border BorderThickness="1"
                 BorderBrush="{DynamicResource CardBorderBrush}"
                 Grid.Row="2">
@@ -132,16 +129,13 @@
                     HorizontalAlignment="Right">
             <syncfusion:ButtonAdv Label="Cancel"
                                   IconTemplate="{StaticResource CancelIconTemplate}"
-                                  SizeMode="Normal"
                                   IsCancel="True"
                                   Margin="0,0,8,0" />
             <syncfusion:ButtonAdv x:Name="AddButton"
                                   Label="Add Selected"
                                   IconTemplate="{StaticResource AddIconTemplate}"
-                                  SizeMode="Normal"
-                                  IsDefault="True"
-                                  Click="AddButton_Click" />
+                                  IsDefault="True" />
         </StackPanel>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

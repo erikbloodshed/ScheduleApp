@@ -18,7 +18,7 @@ namespace ScheduleApp.Desktop.Services;
 /// failed save just means the next launch forgets the pin. Neither is worth interrupting
 /// startup or a single click over.
 /// </summary>
-public sealed class NavigationDrawerStateStore
+public sealed class NavigationDrawerStateStore : INavigationDrawerStateStore
 {
     private static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -63,4 +63,12 @@ public sealed class NavigationDrawerStateStore
     {
         public bool Pinned { get; set; }
     }
+}
+
+/// <summary>Whether the navigation drawer stays pinned open, kept between launches.</summary>
+public interface INavigationDrawerStateStore
+{
+    bool LoadPinned();
+
+    void SavePinned(bool pinned);
 }

@@ -3,17 +3,6 @@ using System.Windows.Controls;
 
 namespace ScheduleApp.Desktop.Controls;
 
-/// <summary>How much room a <see cref="TimeInput"/> takes up.</summary>
-public enum TimeInputDensity
-{
-    /// <summary>A roomy field with larger text, for where a time is the point of the screen.</summary>
-    Comfortable,
-
-    /// <summary>One ordinary form-field line, which is what fits in a dense dialog like
-    /// ApplyScheduleDialog (two of these on a row).</summary>
-    Compact,
-}
-
 /// <summary>
 /// Time-of-day entry: a Syncfusion DateTimeEdit holding only a time, as "9:30 AM". Each part
 /// (hour, minute, AM/PM) is typed into or stepped with Up/Down, and the drop-down clock picks a
@@ -26,7 +15,8 @@ public enum TimeInputDensity
 ///     yet", which is what those dialogs test for before saving, and setting null clears the
 ///     field. Any minute can be entered -- values loaded from the database show as they are.
 ///   - <see cref="SelectedTimeChanged"/> fires once per actual change, typed or assigned.
-///   - <see cref="Density"/>, <see cref="Use24HourClock"/> and <see cref="FocusHour"/>.
+///   - <see cref="Use24HourClock"/> and <see cref="FocusHour"/>.
+/// It is one ordinary form field, sized like every other (Themes/ControlDefaults.xaml).
 /// </summary>
 public partial class TimeInput : UserControl
 {
@@ -37,7 +27,6 @@ public partial class TimeInput : UserControl
     public TimeInput()
     {
         InitializeComponent();
-        ApplyDensity();
         ApplyClockConvention();
     }
 
@@ -59,19 +48,6 @@ public partial class TimeInput : UserControl
     {
         get => (TimeOnly?)GetValue(SelectedTimeProperty);
         set => SetValue(SelectedTimeProperty, value);
-    }
-
-    public static readonly DependencyProperty DensityProperty = DependencyProperty.Register(
-        nameof(Density),
-        typeof(TimeInputDensity),
-        typeof(TimeInput),
-        new PropertyMetadata(TimeInputDensity.Comfortable, (d, _) => ((TimeInput)d).ApplyDensity()));
-
-    /// <summary>Comfortable (the default) or Compact -- see <see cref="TimeInputDensity"/>.</summary>
-    public TimeInputDensity Density
-    {
-        get => (TimeInputDensity)GetValue(DensityProperty);
-        set => SetValue(DensityProperty, value);
     }
 
     public static readonly DependencyProperty Use24HourClockProperty = DependencyProperty.Register(
@@ -127,14 +103,6 @@ public partial class TimeInput : UserControl
     /// too (today's), which a time field ignores.</summary>
     private static TimeOnly? TimeOf(DateTime? value) =>
         value is { } dateTime ? new TimeOnly(dateTime.Hour, dateTime.Minute) : null;
-
-    private void ApplyDensity()
-    {
-        var compact = Density == TimeInputDensity.Compact;
-        Editor.MinWidth = compact ? 120 : 160;
-        Editor.FontSize = compact ? 14 : 18;
-        Editor.MinHeight = compact ? 28 : 40;
-    }
 
     private void ApplyClockConvention() => Editor.CustomPattern = Use24HourClock ? "HH:mm" : "h:mm tt";
 }

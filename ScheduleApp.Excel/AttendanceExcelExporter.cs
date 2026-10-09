@@ -878,17 +878,11 @@ public static class AttendanceExcelExporter
     /// report and key their own downstream sheets off them, so they are a published
     /// format rather than an internal name, and they stay as they are.
     /// </summary>
-    private sealed class SummaryColumns
+    private sealed class SummaryColumns(bool includeDepartment)
     {
-        private readonly int _offset;
+        private readonly int _offset = includeDepartment ? 1 : 0;
 
-        public SummaryColumns(bool includeDepartment)
-        {
-            IncludeDepartment = includeDepartment;
-            _offset = includeDepartment ? 1 : 0;
-        }
-
-        public bool IncludeDepartment { get; }
+        public bool IncludeDepartment { get; } = includeDepartment;
 
         // CA1822 (mark as static) is suppressed here deliberately: these three are
         // constant only because they sit at or left of the Department insertion point,

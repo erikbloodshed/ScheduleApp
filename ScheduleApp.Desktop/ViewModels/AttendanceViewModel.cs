@@ -1,107 +1,55 @@
-﻿using ScheduleApp.Attendance;
 using System.Reactive.Linq;
+using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
-using ScheduleApp.Data.Repositories;
+using ScheduleApp.Data.Attendance;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels.Attendance;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
 /// <summary>
-/// Backs the Attendance section -- Summary, Punch Records, and Manual Entries, the three
-/// pages the "Attendance" drawer item's submenu navigates between (AttendanceSummaryPage/
-/// PunchRecordsPage/ManualEntriesPage; see MainWindow.xaml), formerly three TabItems
-/// inside one AttendancePage. Composes seven single-purpose child ViewModels (see
-/// ViewModels/Attendance/) rather than implementing the tab's eight concerns itself:
+/// The Attendance section -- Summary, Punch Records, and Manual Entries, the three pages the
+/// "Attendance" drawer item's submenu navigates between (AttendanceSummaryPage/PunchRecordsPage/
+/// ManualEntriesPage). Builds seven single-purpose children (see ViewModels/Attendance/), which
+/// the pages bind to directly:
 ///
 ///  - Import      -- AttendanceImportViewModel: reads a ZKTeco .dat file into AttendanceLogs.
 ///  - DeviceFetch -- DeviceFetchViewModel: pulls the same data over the network instead.
 ///  - ReportScope -- ReportScopeViewModel: the report-scope Department/Employee tree.
-///  - Report      -- ReportViewModel: Generate Reports / Export Summary…, scoped by ReportScope.
-///  - PunchRecords    -- PunchRecordsViewModel: the date-ranged, device-only punch-log
-///    viewer/exporter -- deliberately never shows ManualAttendanceLogs (see that class's
-///    doc comment).
-///  - ManualEntriesTab -- ManualEntriesViewModel: the date-ranged, manual-only viewer,
-///    plus its own Export…/Import… (bulk-add many rows from an Excel workbook at once).
-///  - ManualEntryEditor -- ManualEntryEditorViewModel: Add/Edit/Delete on a manual entry,
-///    which refreshes ManualEntriesTab afterward if it's loaded.
+///  - Report      -- ReportViewModel: the attendance summary and its export, scoped by ReportScope.
+///  - PunchRecords     -- PunchRecordsViewModel: the date-ranged, device-only punch-log viewer and
+///    exporter -- deliberately never shows ManualAttendanceLogs.
+///  - ManualEntriesTab -- ManualEntriesViewModel: the date-ranged, manual-only viewer, with its
+///    own Export…/Import….
+///  - ManualEntryEditor -- ManualEntryEditorViewModel: Add/Edit/Delete on a manual entry.
 ///
-/// This class's own job is just the two concerns that are inherently cross-cutting rather
-/// than any one tab's:
+/// This class's own job is the two concerns no one child owns:
 ///
-///  - View-state persistence (SaveViewState) -- a period, a tree selection, a date range,
-///    a search box, and a section choice all need to be captured as one consistent
-///    snapshot, which only something above all of them can do.
-///  - Section-activation orchestration (EnsureInitializedAsync/ActivateSummaryTab/
-///    ActivatePunchRecordsTab/ActivateManualEntriesTab, in the "Section activation" region
-///    below) -- the one-time employee-tree load, and marking whichever of the three pages
-///    was just navigated to as the active one so its own auto-reload-if-stale logic fires.
+///  - View-state persistence (SaveViewState) -- a period, a tree selection, a date range, a
+///    search box, and the page showing captured as one consistent snapshot.
+///  - Section activation (EnsureInitializedAsync and the Activate…Tab methods) -- the one-time
+///    employee-tree load, and marking which of the three pages was just navigated to, so its
+///    own reload-if-stale logic fires.
 ///
-/// Everything else -- the actual bindable properties and commands XAML uses -- is forwarded
-/// from whichever child owns it (see the "Forwarded members" region below) so
-/// AttendanceSummaryView.xaml/PunchRecordsView.xaml/ManualEntriesView.xaml's bindings
-/// don't need to differ from what one shared AttendanceView.xaml used to bind to,
-/// just backed by seven smaller, independently-testable objects instead of one 1,400+
-/// line one.
+/// Shares the one app-wide AttendanceBusyState with the Schedule and Payroll tabs: every one of
+/// them reads and writes the one app-lifetime ScheduleDbContext, and a separate gate per tab
+/// serialized nothing against the others -- leaving this section mid-import doesn't cancel the
+/// import, so another tab could otherwise start a concurrent operation on that context.
 /// </summary>
-public class AttendanceViewModel : ReactiveObject, IDisposable
+public sealed class AttendanceViewModel : ReactiveObject, IDisposable
 {
     private readonly ViewStateStore _viewStateStore;
     private readonly AttendanceTabActivationGate _tabActivationGate = new();
-
-    /// <summary>The *same* instance MainViewModel/PayrollViewModel/ScheduleCalendarViewModel/
-    /// ScheduleAssignmentViewModel already share (see App.xaml.cs's registration) -- NOT a
-    /// separate `new AttendanceBusyState(...)` of this class's own, which is what this field
-    /// used to be constructed from.
-    ///
-    /// That separate instance was the actual remaining half of the "second operation started
-    /// on this context" crash: every one of those classes agrees the single, app-lifetime-
-    /// scoped ScheduleDbContext (see App.xaml.cs's AddDbContext/CreateScope comments) needs a
-    /// gate around it, but a *different* gate serializes nothing against the other one.
-    /// AttendancePage.OnNavigatedFromAsync is a no-op -- leaving the Attendance tab mid-Import/
-    /// mid-Fetch/mid-Generate-Reports doesn't cancel it, it just keeps running in the
-    /// background under this class's own busy state -- so switching to the Schedule tab and
-    /// selecting an employee (or setting/clearing a schedule) could, and did, start a second,
-    /// genuinely concurrent operation against that same shared DbContext instance while the
-    /// Attendance-side one was still in flight: two unrelated gates, each individually correct,
-    /// guarding one context they don't actually share knowledge of. Constructor-injecting the
-    /// one DI-registered instance instead closes that gap the same way the Schedule/Payroll
-    /// sharing already did for each other -- see this class's own constructor for where that
-    /// used to be wired up differently, and AttendanceBusyState's own RunAsync doc comment for
-    /// the rest of this class's race-closing history.</summary>
     private readonly AttendanceBusyState _busy;
-
-    /// <summary>Injected (not `new()`'d here) so MainViewModel gets the exact same
-    /// instance -- see this type's own doc comment and App.xaml.cs's registration of
-    /// it -- rather than each ViewModel silently tracking its own, disconnected set of
-    /// counters.</summary>
-    private readonly AttendanceDataVersion _dataVersion;
     private readonly AttendanceEmployeeDirectory _employeeDirectory;
-
-    public AttendanceImportViewModel Import { get; }
-    public DeviceFetchViewModel DeviceFetch { get; }
-    public ReportScopeViewModel ReportScope { get; }
-    public ReportViewModel Report { get; }
-    public PunchRecordsViewModel PunchRecords { get; }
-
-    /// <summary>Named "…Tab", not "ManualEntries", so it doesn't collide with the
-    /// forwarded ManualEntries collection property below (the grid rows) -- the original
-    /// class had exactly one thing called ManualEntries; splitting it into "the
-    /// sub-ViewModel that owns it" and "the collection itself" needs two different
-    /// names.</summary>
-    public ManualEntriesViewModel ManualEntriesTab { get; }
-
-    public ManualEntryEditorViewModel ManualEntryEditor { get; }
+    private bool _initialized;
 
     public AttendanceViewModel(
         IAttendanceRunner attendanceRunner,
         IAttendanceLogRepository attendanceLogRepository,
         IManualAttendanceLogRepository manualAttendanceLogRepository,
-        IScheduleRepository scheduleRepository,
+        Data.Repositories.IScheduleRepository scheduleRepository,
         IStatusBarService statusBarService,
         AttendanceSettings settings,
         ViewStateStore viewStateStore,
@@ -111,362 +59,62 @@ public class AttendanceViewModel : ReactiveObject, IDisposable
         IDayPunchPairingEditorLauncher pairingLauncher)
     {
         _viewStateStore = viewStateStore;
-        _dataVersion = dataVersion;
-
-        // Injected, not `new AttendanceBusyState(shutdownSignal.Token)` -- see this field's
-        // own doc comment above for the cross-page race that separate instance left open.
-        // AppShutdownSignal still reaches this gate the same as before (Phase 5 of the
-        // cancellation rollout); it's just wired up once, in App.xaml.cs's registration of
-        // the shared instance, instead of a second time here.
         _busy = busy;
-
         _employeeDirectory = new AttendanceEmployeeDirectory(scheduleRepository);
 
-        // ViewStateStore is in-memory/session-only (see its own doc comment), so savedState
-        // here is always blank on a fresh launch -- every one of PeriodStart/PeriodEnd/
-        // LogView*/ManualEntries*/the tab-selected flags below falls through to its ??
-        // default every time the app starts, not just the first time it's ever run.
+        // In-memory, session-only state (see ViewStateStore): blank on every launch, so each
+        // falls through to its default -- the current half-month pay period, the most likely
+        // thing a person is looking at, for all three pages alike.
         var savedState = viewStateStore.Attendance;
+        var today = DateTime.Today;
+        var (startDay, endDay) = today.Day < 16 ? (1, 15) : (16, DateTime.DaysInMonth(today.Year, today.Month));
+        var initialPeriodStart = savedState.PeriodStart ?? new DateTime(today.Year, today.Month, startDay);
+        var initialPeriodEnd = savedState.PeriodEnd ?? new DateTime(today.Year, today.Month, endDay);
 
-        DateTime today = DateTime.Today;
-        int daysInMonth = DateTime.DaysInMonth(today.Year, today.Month);
-        (int startDay, int endDay) = today.Day < 16 ? (1, 15) : (16, daysInMonth);
-        DateTime initialPeriodStart = savedState.PeriodStart ?? new DateTime(today.Year, today.Month, startDay);
-        DateTime initialPeriodEnd = savedState.PeriodEnd ?? new DateTime(today.Year, today.Month, endDay);
-
-        // Punch Records and Manual Entries default to this exact same cutoff period, not
-        // their own separate range -- previously "last 7 days" (DateTime.Today.AddDays(-6)
-        // through DateTime.Today), now the current half-month, same reasoning as Report's
-        // own PeriodStart/PeriodEnd just above and Payroll's own period default (see
-        // PayrollScopeState's doc comment): the person's most likely task on any of these
-        // three sub-tabs is "the current pay period," so all three should open already
-        // scoped to it rather than each guessing a different range.
-
-        Import = new AttendanceImportViewModel(attendanceLogRepository, statusBarService, _busy, _dataVersion, settings.LogDatFile);
-
+        Import = new AttendanceImportViewModel(attendanceLogRepository, statusBarService, _busy, dataVersion, settings.LogDatFile);
         DeviceFetch = new DeviceFetchViewModel(
-            attendanceLogRepository, statusBarService, _busy, _dataVersion,
+            attendanceLogRepository, statusBarService, _busy, dataVersion,
             settings.DeviceIp, settings.DevicePort, settings.DeviceCommKey, settings.DeviceTransport);
-
-        // activeRosterProvider replaces the raw scheduleRepository ReportScopeViewModel's own
-        // tree load used to read through directly -- see ActiveRosterProvider's own doc
-        // comment. scheduleRepository itself stays a constructor parameter here regardless,
-        // for _employeeDirectory just above.
         ReportScope = new ReportScopeViewModel(activeRosterProvider, viewStateStore);
-
         PunchRecords = new PunchRecordsViewModel(
-            attendanceLogRepository, statusBarService, _busy, _dataVersion, _employeeDirectory,
+            attendanceLogRepository, statusBarService, _busy, dataVersion, _employeeDirectory,
             savedState.LogViewStart ?? initialPeriodStart,
             savedState.LogViewEnd ?? initialPeriodEnd,
             savedState.LogViewSearchText ?? string.Empty,
             savedState.IsPunchRecordsTabSelected,
             SaveViewState, _tabActivationGate);
-
         ManualEntriesTab = new ManualEntriesViewModel(
-            manualAttendanceLogRepository, statusBarService, _busy, _dataVersion, _employeeDirectory,
+            manualAttendanceLogRepository, statusBarService, _busy, dataVersion, _employeeDirectory,
             savedState.ManualEntriesStart ?? initialPeriodStart,
             savedState.ManualEntriesEnd ?? initialPeriodEnd,
             savedState.IsManualEntriesTabSelected, SaveViewState, _tabActivationGate);
 
-        // Constructed before Report (moved up from its old spot just below Report) --
-        // Report now takes ManualEntryEditor itself as a constructor dependency (see
-        // ReportViewModel._manualEntryEditor's own doc comment for why: the Summary
-        // grid's own right-click "Add Manual Entry…" needs it), so it has to exist
-        // first.
+        // Before Report, which takes it for the Summary grid's own "Add Manual Entry…".
         ManualEntryEditor = new ManualEntryEditorViewModel(
-            manualAttendanceLogRepository, attendanceLogRepository, statusBarService, _busy, _dataVersion, _employeeDirectory,
+            manualAttendanceLogRepository, attendanceLogRepository, statusBarService, _busy, dataVersion, _employeeDirectory,
             ManualEntriesTab);
-
         Report = new ReportViewModel(
-            attendanceRunner, statusBarService, settings.Policy, _busy, _dataVersion, ReportScope,
+            attendanceRunner, statusBarService, settings.Policy, _busy, dataVersion, ReportScope,
             initialPeriodStart, initialPeriodEnd, SaveViewState, _tabActivationGate, ManualEntryEditor,
             pairingLauncher);
-
-        // Relays each child's own PropertyChanged onto this class under the same
-        // property name, so a two-way XAML binding on (say) AttendanceViewModel.PeriodStart
-        // -- which reads/writes through the forwarding property below -- still refreshes
-        // when Report.PeriodStart changes for a reason other than that same binding
-        // setting it (e.g. after LoadEmployeeTreeAsync). Most forwarded properties keep
-        // the child's own name, so the blanket relay reaches their bindings directly.
-        // The exceptions are the three pages' Refresh/Cancel button-state properties,
-        // which are forwarded under *prefixed* names (SummaryRefreshOrCancelGlyph etc.)
-        // because the child property name would otherwise collide across all three -- the
-        // blanket relay re-raises the child's own (unprefixed) name, which no binding
-        // listens for, so those are re-raised explicitly in the _busy handler below off
-        // the one flag all three derive from. PunchRecords' pair is named
-        // RefreshOrCancelContent/RefreshOrCancelIcon (split so its labeled button can show a
-        // text label and a glyph as two separate things), while Report's and
-        // ManualEntriesTab's stay the older single RefreshOrCancelGlyph (an icon-only button
-        // whose face *is* the glyph) -- see PunchRecordsViewModel.RefreshOrCancelContent's
-        // own doc comment for why that one page's button looks different.
-        Report.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
-        PunchRecords.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
-        ManualEntriesTab.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
-        ReportScope.PropertyChanged += (_, e) => this.RaisePropertyChanged(e.PropertyName);
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(AttendanceBusyState.IsVisiblyRunning)) return;
-
-            this.RaisePropertyChanged(nameof(IsVisiblyRunning));
-
-            this.RaisePropertyChanged(nameof(SummaryRefreshOrCancelGlyph));
-            this.RaisePropertyChanged(nameof(SummaryRefreshOrCancelToolTip));
-            this.RaisePropertyChanged(nameof(PunchRecordsRefreshOrCancelContent));
-            this.RaisePropertyChanged(nameof(PunchRecordsRefreshOrCancelIcon));
-            this.RaisePropertyChanged(nameof(PunchRecordsRefreshOrCancelToolTip));
-            this.RaisePropertyChanged(nameof(ManualEntriesRefreshOrCancelGlyph));
-            this.RaisePropertyChanged(nameof(ManualEntriesRefreshOrCancelToolTip));
-        };
     }
 
-    // ---- Forwarded members ----
-    //
-    // Every property/command AttendanceView.xaml binds to, forwarded from whichever
-    // child ViewModel actually owns it. Nothing here has its own logic -- it's here so
-    // the XAML (and AttendancePage.xaml.cs/AttendanceView.xaml.cs's code-behind) didn't
-    // need to change as part of the split.
+    public AttendanceImportViewModel Import { get; }
 
-    /// <summary>Drives the Summary tab's inline progress-bar in AttendanceView.xaml
-    /// (there's no button to swap out anymore -- see ReportViewModel.TryAutoRun) --
-    /// deliberately sourced from AttendanceBusyState.IsVisiblyRunning, not IsRunning, so
-    /// a tab's own silent auto-load-on-select doesn't flicker this just because the
-    /// person switched tabs. See that property's doc comment for the full story.</summary>
-    public bool IsVisiblyRunning => _busy.IsVisiblyRunning;
+    public DeviceFetchViewModel DeviceFetch { get; }
 
-    /// <summary>Backs the global Cancel button in AttendanceView.xaml's toolbar (above
-    /// the TabControl, so it's visible regardless of which tab is active) -- same
-    /// forwarded-command pattern as every other one here, just sourced from
-    /// AttendanceBusyState instead of a tab-specific child ViewModel, since whatever's
-    /// running could be Load/Export/Generate Reports on any tab, an Import/Fetch, or a
-    /// Manual Entry Add/Edit/Delete dialog. See AttendanceBusyState.Cancel's own doc
-    /// comment for why CanExecute is tied to IsVisiblyRunning rather than IsRunning.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> CancelCommand => _busy.CancelCommand;
+    public ReportScopeViewModel ReportScope { get; }
 
-    public ObservableCollection<DepartmentGroupViewModel> Departments => ReportScope.Departments;
-    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments => ReportScope.VisibleDepartments;
-    public string SelectionScopeText => ReportScope.SelectionScopeText;
-    public ReactiveCommand<RxVoid, RxVoid> LoadEmployeeTreeCommand => ReportScope.LoadEmployeeTreeCommand;
-    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand => ReportScope.SelectAllTreeCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand => ReportScope.ClearTreeSelectionCommand;
+    public ReportViewModel Report { get; }
 
-    /// <summary>Named with the "ReportScope" prefix (unlike this tab's other forwarded
-    /// members) specifically to stay distinct from PunchRecords.LogViewSearchText below --
-    /// both are free-text search boxes on this same tab, just scoping different
-    /// things.</summary>
-    public string ReportScopeSearchText
-    {
-        get => ReportScope.SearchText;
-        set => ReportScope.SearchText = value;
-    }
+    public PunchRecordsViewModel PunchRecords { get; }
 
-    public ReactiveCommand<RxVoid, RxVoid> ImportPunchLogCommand => Import.ImportPunchLogCommand;
+    public ManualEntriesViewModel ManualEntriesTab { get; }
 
-    public ReactiveCommand<RxVoid, RxVoid> FetchFromDeviceCommand => DeviceFetch.FetchFromDeviceCommand;
+    /// <summary>Also handed to MainViewModel (see App.xaml.cs), so the calendar's "Add Manual
+    /// Entry…" goes through the same editor and the same busy bookkeeping.</summary>
+    public ManualEntryEditorViewModel ManualEntryEditor { get; }
 
-    public DateTime? PeriodStart
-    {
-        get => Report.PeriodStart;
-        set => Report.PeriodStart = value;
-    }
-
-    public DateTime? PeriodEnd
-    {
-        get => Report.PeriodEnd;
-        set => Report.PeriodEnd = value;
-    }
-
-    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand => Report.PreviousPeriodCommand;
-    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand => Report.NextPeriodCommand;
-
-    public bool HasResults => Report.HasResults;
-    public bool HasSummaryRows => Report.HasSummaryRows;
-    public int TotalLogs => Report.TotalLogs;
-    public int CompleteCount => Report.CompleteCount;
-    public int PartialCount => Report.PartialCount;
-    public int AbsentCount => Report.AbsentCount;
-    public int LeaveCount => Report.LeaveCount;
-    public int OfficialBusinessCount => Report.OfficialBusinessCount;
-
-    // Pre-existing gap: every other status count above was already forwarded, but this
-    // one wasn't, even though AttendanceView.xaml's Rest Day tile has always bound to
-    // {Binding RestDayCount} -- silently resolving to nothing (a WPF binding error, not
-    // a compile error) rather than Report.RestDayCount. Fixed here while touching this
-    // same list for SelectedStatusFilter/ClearStatusFilterCommand below.
-    public int RestDayCount => Report.RestDayCount;
-
-    public int OrphanedCount => Report.OrphanedCount;
-    public int UnscheduledCount => Report.UnscheduledCount;
-    public ObservableCollection<AttendanceSummaryRow> SummaryRows => Report.SummaryRows;
-    public FilteredCollection<AttendanceSummaryRow> SummaryRowsView => Report.SummaryRowsView;
-
-    /// <summary>Which status tile currently narrows SummaryRowsView, or null when every
-    /// status is showing -- see ReportViewModel.SelectedStatusFilter. Forwarded (not just
-    /// left to the wildcard PropertyChanged relay above) because AttendanceView.xaml's
-    /// per-tile Border.Background bindings and the Clear Filter button's Visibility both
-    /// read it directly off this class's DataContext, same as every other Report-owned
-    /// value on this page.</summary>
-    public PunchStatus? SelectedStatusFilter => Report.SelectedStatusFilter;
-
-    public bool IsSummaryTabSelected
-    {
-        get => Report.IsSummaryTabSelected;
-        set => Report.IsSummaryTabSelected = value;
-    }
-
-    public ReactiveCommand<RxVoid, RxVoid> ExportSummaryCommand => Report.ExportSummaryCommand;
-    public ReactiveCommand<PunchStatus, RxVoid> ShowStatusDetailCommand => Report.ShowStatusDetailCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ClearStatusFilterCommand => Report.ClearStatusFilterCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ShowOrphanedDetailCommand => Report.ShowOrphanedDetailCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ShowUnscheduledDetailCommand => Report.ShowUnscheduledDetailCommand;
-    public ReactiveCommand<RxVoid, RxVoid> RefreshSummaryCommand => Report.RefreshSummaryCommand;
-
-    /// <summary>What the Period row's icon button in AttendanceSummaryView.xaml is
-    /// actually wired to now -- see ReportViewModel.RefreshOrCancelSummary's own doc
-    /// comment for why this replaced a separate Cancel bar/button that used to appear
-    /// and disappear above that row.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelSummaryCommand => Report.RefreshOrCancelSummaryCommand;
-
-    /// <summary>Prefixed "Summary"/"PunchRecords"/"ManualEntries" (unlike the Payroll/
-    /// Schedule facades' plain RefreshOrCancelGlyph/RefreshOrCancelToolTip) -- this one
-    /// facade is shared by all three Attendance pages (see this class's own doc comment),
-    /// so each page's own icon/label pair needs its own name here to keep the three from
-    /// colliding on one class.</summary>
-    public string SummaryRefreshOrCancelGlyph => Report.RefreshOrCancelGlyph;
-    public string SummaryRefreshOrCancelToolTip => Report.RefreshOrCancelToolTip;
-
-    /// <summary>Backs the Summary grid's own right-click "Add Manual Entry…" (see
-    /// AttendanceView.xaml.cs's SummaryRow_MouseRightButtonDown) -- same forwarded-
-    /// command pattern as every other Report-owned command above, just parameterized
-    /// on the row that was right-clicked. See ReportViewModel.AddManualEntryForRowAsync's
-    /// own doc comment for the rest of the story.</summary>
-    public ReactiveCommand<AttendanceSummaryRow, RxVoid> AddManualEntryForRowCommand => Report.AddManualEntryForRowCommand;
-
-    /// <summary>Backs the Summary grid's own right-click "Edit Punch Pairing…" (see
-    /// AttendanceSummaryView.xaml.cs's SummaryRow_MouseRightButtonDown, which only builds
-    /// that item for a Flexible row) -- same forwarded-command pattern as
-    /// AddManualEntryForRowCommand just above. See
-    /// ReportViewModel.EditPunchPairingForRowAsync's own doc comment.</summary>
-    public ReactiveCommand<AttendanceSummaryRow, RxVoid> EditPunchPairingForRowCommand => Report.EditPunchPairingForRowCommand;
-
-    public bool IsPunchRecordsTabSelected
-    {
-        get => PunchRecords.IsPunchRecordsTabSelected;
-        set => PunchRecords.IsPunchRecordsTabSelected = value;
-    }
-
-    public DateTime? LogViewStart
-    {
-        get => PunchRecords.LogViewStart;
-        set => PunchRecords.LogViewStart = value;
-    }
-
-    public DateTime? LogViewEnd
-    {
-        get => PunchRecords.LogViewEnd;
-        set => PunchRecords.LogViewEnd = value;
-    }
-
-    public string LogViewSearchText
-    {
-        get => PunchRecords.LogViewSearchText;
-        set => PunchRecords.LogViewSearchText = value;
-    }
-
-    public ObservableCollection<PunchSearchSuggestion> LogViewSuggestions => PunchRecords.LogViewSuggestions;
-
-    public bool IsLogViewSuggestionsOpen
-    {
-        get => PunchRecords.IsLogViewSuggestionsOpen;
-        set => PunchRecords.IsLogViewSuggestionsOpen = value;
-    }
-
-    public ReactiveCommand<PunchSearchSuggestion?, RxVoid> SelectLogViewSuggestionCommand => PunchRecords.SelectLogViewSuggestionCommand;
-
-    public int StoredLogsCount => PunchRecords.StoredLogsCount;
-    public bool HasLoadedStoredLogs => PunchRecords.HasLoadedStoredLogs;
-    public ObservableCollection<StoredPunchLogRow> StoredLogs => PunchRecords.StoredLogs;
-    public FilteredCollection<StoredPunchLogRow> StoredLogsView => PunchRecords.StoredLogsView;
-    public ReactiveCommand<RxVoid, RxVoid> LoadStoredLogsCommand => PunchRecords.LoadStoredLogsCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ExportStoredLogsCommand => PunchRecords.ExportStoredLogsCommand;
-
-    /// <summary>What PunchRecordsView's "Load" button is actually wired to now -- see
-    /// PunchRecordsViewModel.RefreshOrCancelStoredLogs's own doc comment. Named with the
-    /// "PunchRecords" prefix for the same reason SummaryRefreshOrCancelGlyph is. Split into
-    /// Content/Icon rather than a single Glyph -- see
-    /// PunchRecordsViewModel.RefreshOrCancelContent's own doc comment -- since this
-    /// button, unlike Summary's/ManualEntries', carries a label as well as a glyph.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelStoredLogsCommand => PunchRecords.RefreshOrCancelStoredLogsCommand;
-    public string PunchRecordsRefreshOrCancelContent => PunchRecords.RefreshOrCancelContent;
-    public string PunchRecordsRefreshOrCancelIcon => PunchRecords.RefreshOrCancelIcon;
-    public string PunchRecordsRefreshOrCancelToolTip => PunchRecords.RefreshOrCancelToolTip;
-
-    /// <summary>Named with the "LogView" prefix (unlike PreviousPeriodCommand/
-    /// NextPeriodCommand above) for the same reason ReportScopeSearchText is -- both
-    /// PunchRecords and Report have their own period-nav pair on this same
-    /// tab.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> PreviousLogViewPeriodCommand => PunchRecords.PreviousPeriodCommand;
-    public ReactiveCommand<RxVoid, RxVoid> NextLogViewPeriodCommand => PunchRecords.NextPeriodCommand;
-
-    public bool IsManualEntriesTabSelected
-    {
-        get => ManualEntriesTab.IsManualEntriesTabSelected;
-        set => ManualEntriesTab.IsManualEntriesTabSelected = value;
-    }
-
-    public DateTime? ManualEntriesStart
-    {
-        get => ManualEntriesTab.ManualEntriesStart;
-        set => ManualEntriesTab.ManualEntriesStart = value;
-    }
-
-    public DateTime? ManualEntriesEnd
-    {
-        get => ManualEntriesTab.ManualEntriesEnd;
-        set => ManualEntriesTab.ManualEntriesEnd = value;
-    }
-
-    public int ManualEntriesCount => ManualEntriesTab.ManualEntriesCount;
-    public bool HasLoadedManualEntries => ManualEntriesTab.HasLoadedManualEntries;
-    public ObservableCollection<StoredPunchLogRow> ManualEntries => ManualEntriesTab.ManualEntries;
-    public ReactiveCommand<RxVoid, RxVoid> LoadManualEntriesCommand => ManualEntriesTab.LoadManualEntriesCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ExportManualEntriesCommand => ManualEntriesTab.ExportManualEntriesCommand;
-    public ReactiveCommand<RxVoid, RxVoid> ImportManualEntriesCommand => ManualEntriesTab.ImportManualEntriesCommand;
-
-    /// <summary>What ManualEntriesView's toolbar button is actually wired to now -- see
-    /// ManualEntriesViewModel.RefreshOrCancelManualEntries's own doc comment. Named with
-    /// the "ManualEntries" prefix for the same reason SummaryRefreshOrCancelGlyph is.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelManualEntriesCommand => ManualEntriesTab.RefreshOrCancelManualEntriesCommand;
-    public string ManualEntriesRefreshOrCancelGlyph => ManualEntriesTab.RefreshOrCancelGlyph;
-    public string ManualEntriesRefreshOrCancelToolTip => ManualEntriesTab.RefreshOrCancelToolTip;
-
-    /// <summary>Named with the "ManualEntries" prefix for the same reason
-    /// PreviousLogViewPeriodCommand/NextLogViewPeriodCommand are above -- keeps this
-    /// tab's own pair distinct from Report's and PunchRecords'.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> PreviousManualEntriesPeriodCommand => ManualEntriesTab.PreviousPeriodCommand;
-    public ReactiveCommand<RxVoid, RxVoid> NextManualEntriesPeriodCommand => ManualEntriesTab.NextPeriodCommand;
-
-    public ReactiveCommand<RxVoid, RxVoid> AddManualEntryCommand => ManualEntryEditor.AddManualEntryCommand;
-    public ReactiveCommand<StoredPunchLogRow, RxVoid> EditManualEntryCommand => ManualEntryEditor.EditManualEntryCommand;
-    public ReactiveCommand<StoredPunchLogRow, RxVoid> DeleteManualEntryCommand => ManualEntryEditor.DeleteManualEntryCommand;
-
-    // ---- View-state persistence ----
-
-    /// <summary>Writes the whole Attendance view-state snapshot in one go and saves it --
-    /// deliberately one method reading current values off every child, rather than each
-    /// child persisting its own slice independently, so a restart always sees a
-    /// consistent combination (e.g. a punch-log date range that matches the search text
-    /// that was actually in the box next to it) instead of whichever fields happened to
-    /// save last. Passed into ReportViewModel/PunchRecordsViewModel/ManualEntriesViewModel
-    /// as a plain Action so those children can trigger a save at their own
-    /// property-changed/tab-changed/successful-load moments without needing to know this
-    /// class exists.
-    ///
-    /// Skips saving before the report-scope tree has been restored at least once this
-    /// run (see ReportScopeViewModel.HasRestoredScope) -- without this, PeriodStart/
-    /// PeriodEnd's constructor-time assignment (which fires before the tree even exists
-    /// yet) would write "everyone" over a previously saved narrowed scope, since
-    /// GetSelectedPins() can't tell "no employees loaded yet" apart from "nothing
-    /// narrowed".</summary>
     private void SaveViewState()
     {
         if (!ReportScope.HasRestoredScope) return;
@@ -486,50 +134,19 @@ public class AttendanceViewModel : ReactiveObject, IDisposable
         _viewStateStore.Save();
     }
 
-    // ---- Section activation (drawer submenu navigation) ----
-    //
-    // Summary/Punch Records/Manual Entries used to be three TabItems inside one
-    // AttendancePage; they're now three separate pages the "Attendance" drawer item's
-    // submenu navigates between (AttendanceSummaryPage/PunchRecordsPage/ManualEntriesPage
-    // -- see MainWindow.xaml), each calling EnsureInitializedAsync then its own
-    // ActivateXTab below from OnNavigatedToAsync. IsSummaryTabSelected/
-    // IsPunchRecordsTabSelected/IsManualEntriesTabSelected (see the "Forwarded members"
-    // region above) keep their old names and their old job -- each child's own
-    // OnIsXTabSelectedChanged still auto-reloads when its flag flips false-to-true, and
-    // _saveViewState still needs exactly one of the three meaning "the section currently
-    // showing" -- only *what flips them* changed, from a TabControl's own selection
-    // binding to these methods.
-
-    private bool _initialized;
-
-    /// <summary>Loads the report-scope employee tree and warms the shared employee-
-    /// directory cache, then opens the tab-activation gate so each section's own
-    /// OnIsXTabSelectedChanged can start driving its "load if stale" logic. Idempotent
-    /// (_initialized) and called from all three pages' OnNavigatedToAsync -- whichever of
-    /// Summary/Punch Records/Manual Entries the person navigates to first is the one that
-    /// actually pays for this; the other two's own calls are then no-ops, same as
-    /// revisiting an already-open page.
+    /// <summary>
+    /// Loads the report-scope tree and warms the employee directory's cache, then opens the
+    /// tab-activation gate so each page's "load if stale" logic can start. Idempotent, and
+    /// called from all three pages' OnNavigatedToAsync -- whichever is visited first pays for
+    /// it.
     ///
-    /// Wraps the tree load + cache warm in _busy.IsRunning (not IsVisiblyRunning -- this
-    /// is exactly the near-instant background work IsVisiblyRunning exists to stay silent
-    /// for, see AttendanceBusyState) for the same reason the old InitializeAsync did:
-    /// neither the tree load nor SeedCache otherwise participates in the "something is
-    /// using the shared, app-lifetime-scoped ScheduleDbContext right now" guard every
-    /// other command already respects, so a keystroke in the Punch Records search box
-    /// landing during this window could fire a second, concurrent operation against that
-    /// same DbContext (see PunchRecordsViewModel.OnLogViewSearchTextChanged, which checks
-    /// _busy.IsRunning for exactly this reason).
-    ///
-    /// SeedCache is seeded from ReportScope.LoadedEmployees rather than a second
-    /// _employeeDirectory.GetAllAsync() call -- LoadEmployeeTreeCommand just above already
-    /// ran the exact same Active-only departments+unassigned query GetAllAsync would run,
-    /// and SeedCache's own doc comment covers why re-reading isn't needed. This also warms
-    /// the cache for whichever of Punch Records/Manual Entries the person visits next,
-    /// covering the one case their own tab-activation load doesn't already handle as a
-    /// side effect: if the tree load is the only thing that's run so far (person opened
-    /// Summary first, which never touches AttendanceEmployeeDirectory directly), the cache
-    /// would otherwise stay cold until whatever they first type into the Punch Records
-    /// search box, once they get there.</summary>
+    /// Held under IsRunning (not IsVisiblyRunning -- this is the near-instant background work
+    /// that stays silent): neither the tree load nor the cache warm otherwise counts as using
+    /// the shared ScheduleDbContext, so a keystroke in the Punch Records search box during it
+    /// could start a concurrent operation. The cache is seeded from the tree's own employees
+    /// rather than queried again -- it's the same Active-only roster -- so whichever of Punch
+    /// Records/Manual Entries is visited next starts warm.
+    /// </summary>
     public async Task EnsureInitializedAsync()
     {
         if (_initialized) return;
@@ -549,59 +166,35 @@ public class AttendanceViewModel : ReactiveObject, IDisposable
         _tabActivationGate.IsReady = true;
     }
 
-    /// <summary>Marks Summary as the active section and lets Report's own
-    /// OnIsSummaryTabSelectedChanged auto-reload if anything's stale -- covers navigating
-    /// here from a sibling section (Punch Records/Manual Entries), the same false-to-true
-    /// flip a TabControl selection used to cause. RecheckOnPageRevisit afterward covers
-    /// the one case that flip can't: navigating back to Summary when it was *already* the
-    /// active section (IsSummaryTabSelected never changed, so no change notification
-    /// fired) after visiting a completely different top-level page (Schedule) that may
-    /// have edited something a report depends on -- see that method's own doc comment.
-    /// Safe to call even when the line above just started its own run: RunCoreAsync's
-    /// CanRun() check (!_busy.IsRunning) is already true by this point if so, since
-    /// nothing awaits between here and there, so RecheckOnPageRevisit's identical guard
-    /// simply no-ops. Only Summary needs this -- see PunchRecords/ManualEntriesTab's own
-    /// ShouldAutoReload doc comments for why their data can only ever change from this
-    /// same page-family's own actions, not a totally unrelated page.</summary>
+    // Exactly one of the three is "the page showing" at a time -- what view-state persistence
+    // records, and what each page's own reload-if-stale logic fires on.
+
+    /// <summary>Selecting the Summary already checks whether it needs reloading; revisiting it
+    /// while it was already the page showing (a trip to another section and back) checks
+    /// explicitly -- once either way.</summary>
     public void ActivateSummaryTab()
     {
-        IsPunchRecordsTabSelected = false;
-        IsManualEntriesTabSelected = false;
-        IsSummaryTabSelected = true;
-        Report.RecheckOnPageRevisit();
+        PunchRecords.IsPunchRecordsTabSelected = false;
+        ManualEntriesTab.IsManualEntriesTabSelected = false;
+        if (Report.IsSummaryTabSelected)
+            Report.RecheckOnPageRevisit();
+        else
+            Report.IsSummaryTabSelected = true;
     }
 
-    /// <summary>Marks Punch Records as the active section -- see ActivateSummaryTab's own
-    /// doc comment for the shared false-to-true-flip mechanics. No RecheckOnPageRevisit
-    /// equivalent needed here: DeviceLogsVersion only ever changes via Import…/Fetch from
-    /// Device, both of which now live on this same page (see PunchRecordsView.xaml), so
-    /// there's no route for it to change while this page wasn't the one showing.</summary>
     public void ActivatePunchRecordsTab()
     {
-        IsSummaryTabSelected = false;
-        IsManualEntriesTabSelected = false;
-        IsPunchRecordsTabSelected = true;
+        Report.IsSummaryTabSelected = false;
+        ManualEntriesTab.IsManualEntriesTabSelected = false;
+        PunchRecords.IsPunchRecordsTabSelected = true;
     }
 
-    /// <summary>Marks Manual Entries as the active section -- see ActivateSummaryTab's own
-    /// doc comment for the shared false-to-true-flip mechanics. No RecheckOnPageRevisit
-    /// equivalent needed here, same reasoning as ActivatePunchRecordsTab: ManualLogsVersion
-    /// only ever changes via this page's own Add/Edit/Delete/Import….</summary>
     public void ActivateManualEntriesTab()
     {
-        IsSummaryTabSelected = false;
-        IsPunchRecordsTabSelected = false;
-        IsManualEntriesTabSelected = true;
+        Report.IsSummaryTabSelected = false;
+        PunchRecords.IsPunchRecordsTabSelected = false;
+        ManualEntriesTab.IsManualEntriesTabSelected = true;
     }
 
-    /// <summary>Disposes the one collaborator this class constructs itself rather than
-    /// taking from the container (_employeeDirectory, see the constructor) -- everything
-    /// else here is injected and therefore owned and disposed by the scope. Registered
-    /// AddScoped, and App only ever creates the one scope, so this runs when that scope
-    /// is disposed at app exit.</summary>
-    public void Dispose()
-    {
-        _employeeDirectory.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => _employeeDirectory.Dispose();
 }

@@ -1,16 +1,15 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.ManageHolidaysDialog" ShowMinimizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.ManageHolidaysDialog" ShowMinimizeButton="False"
+        x:TypeArguments="vm:ManageHolidaysViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-        xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
+        xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
         Title="Manage Holidays" Width="540" Height="480"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
 >
     <Window.Resources>
-        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
-
         <!-- One row = one HolidayRow. Each of the two cells stacks a read-only
              display element and an editor in the same grid slot and shows one at a
              time: the IsEditing DataTrigger (flipped only by ManageHolidaysViewModel's
@@ -36,11 +35,6 @@
                     <!-- "September 15, 2026", the same as the display text beside it. -->
                     <syncfusion:DateTimeEdit x:Name="DateEditor"
                                              DateTime="{Binding EditDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             Pattern="CustomPattern"
-                                             CustomPattern="MMMM d, yyyy"
-                                             IsEmptyDateEnabled="True"
-                                             NullValue="{x:Null}"
-                                             ShowMaskOnNullValue="False"
                                              HorizontalAlignment="Stretch"
                                              VerticalAlignment="Center"
                                              Visibility="Collapsed" />
@@ -110,8 +104,6 @@
 
         <ListView x:Name="HolidaysList"
                   Grid.Row="2"
-                  ItemsSource="{Binding Rows}"
-                  SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                   ItemTemplate="{StaticResource HolidayRowTemplate}"
                   SelectionMode="Single"
                   MouseDoubleClick="HolidaysList_MouseDoubleClick"
@@ -171,24 +163,19 @@
             </ListView.ItemContainerStyle>
         </ListView>
 
-        <TextBlock Grid.Row="3" Foreground="{DynamicResource ErrorForegroundBrush}" TextWrapping="Wrap"
-                   Text="{Binding ErrorMessage}"
-                   Visibility="{Binding ErrorMessage, Converter={StaticResource NotNullToVisibility}}"
+        <TextBlock x:Name="ErrorText" Grid.Row="3" Foreground="{DynamicResource ErrorForegroundBrush}" TextWrapping="Wrap"
                    Margin="0,8,0,0" />
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
-            <syncfusion:ButtonAdv Label="Add Holiday…" SizeMode="Normal" Margin="0,0,8,0"
-                                  IconTemplate="{StaticResource AddIconTemplate}"
-                                  Command="{Binding AddCommand}" />
-            <syncfusion:ButtonAdv Label="{Binding EditButtonText}" SizeMode="Normal" Margin="0,0,8,0"
-                                  IconTemplate="{StaticResource EditIconTemplate}"
-                                  Command="{Binding EditOrSaveCommand}" />
-            <syncfusion:ButtonAdv Label="Delete" SizeMode="Normal" Margin="0,0,8,0"
-                                  IconTemplate="{StaticResource DeleteIconTemplate}"
-                                  Command="{Binding DeleteCommand}" />
-            <syncfusion:ButtonAdv Label="Close" SizeMode="Normal" IsCancel="True" IsDefault="True"
+            <syncfusion:ButtonAdv x:Name="AddButton" Label="Add Holiday…" Margin="0,0,8,0"
+                                  IconTemplate="{StaticResource AddIconTemplate}" />
+            <syncfusion:ButtonAdv x:Name="EditButton" Margin="0,0,8,0"
+                                  IconTemplate="{StaticResource EditIconTemplate}" />
+            <syncfusion:ButtonAdv x:Name="DeleteButton" Label="Delete" Margin="0,0,8,0"
+                                  IconTemplate="{StaticResource DeleteIconTemplate}" />
+            <syncfusion:ButtonAdv Label="Close" IsCancel="True" IsDefault="True"
                                   IconTemplate="{StaticResource CancelIconTemplate}" />
         </StackPanel>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

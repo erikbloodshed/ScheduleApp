@@ -1,36 +1,36 @@
-using System.Collections.ObjectModel;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
 
 namespace ScheduleApp.Desktop.Controls;
 
-public partial class MonthCalendarControl : UserControl
+/// <summary>The Schedule tab's month grid: click, Shift+click, Ctrl+click and drag select
+/// days, and a right-click menu reaches the same schedule, holiday and punch commands as the
+/// page's buttons -- for the calendar and assignment of the <see cref="MainViewModel"/> it's
+/// given.</summary>
+public partial class MonthCalendarControl
 {
-    public static readonly DependencyProperty DaysProperty = DependencyProperty.Register(
-        nameof(Days),
-        typeof(ObservableCollection<CalendarDayViewModel>),
-        typeof(MonthCalendarControl),
-        new PropertyMetadata(null));
-
-    public ObservableCollection<CalendarDayViewModel> Days
-    {
-        get => (ObservableCollection<CalendarDayViewModel>)GetValue(DaysProperty);
-        set => SetValue(DaysProperty, value);
-    }
-
     private bool _isDragging;
     private CalendarDayViewModel? _dragAnchor;
 
     public MonthCalendarControl()
     {
         InitializeComponent();
+
+        this.WhenActivated((MultipleDisposable d) =>
+            this.OneWayBind(ViewModel, vm => vm.Calendar.CalendarDays, v => v.DaysList.ItemsSource).DisposeWith(d));
     }
+
+    /// <summary>The cells showing.</summary>
+    private IReadOnlyList<CalendarDayViewModel>? Days => ViewModel?.Calendar.CalendarDays;
 
     // Click on a specific day cell: plain click selects just that day, Ctrl+click
     // toggles it in/out of the current selection, Shift+click extends a range from
@@ -83,17 +83,14 @@ public partial class MonthCalendarControl : UserControl
 
     // Right-click brings up a menu for setting/editing/removing the schedule on
     // whatever's currently selected, same as the buttons above the calendar --
-    // this is just a faster path to the same MainViewModel commands, not a
-    // separate feature. Built in code rather than declared in XAML: a XAML
-    // ContextMenu on a per-day DataTemplate would need its DataContext to reach
-    // past the individual CalendarDayViewModel up to MainViewModel, which is
-    // exactly the kind of binding ContextMenu (a separate visual tree) makes
-    // awkward -- reading MainViewModel directly off this control's own
-    // DataContext here is simpler and doesn't depend on any WPF NameScope quirks.
+    // a faster path to the same commands, not a separate feature. Built in code
+    // rather than declared in XAML: a ContextMenu (a separate visual tree) on a
+    // per-day template can't easily reach past the CalendarDayViewModel to the
+    // page's ViewModel.
     private void DayBorder_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: CalendarDayViewModel day } border) return;
-        if (DataContext is not MainViewModel viewModel) return;
+        if (ViewModel is not { } viewModel) return;
 
         // Right-clicking a day outside the current selection replaces the
         // selection with just that day, matching plain left-click -- so the menu
@@ -115,10 +112,10 @@ public partial class MonthCalendarControl : UserControl
 
     /// <summary>
     /// "Set Schedule As" submenu (one item per ScheduleType, each pre-selecting
-    /// that type in ApplyScheduleDialog -- see MainViewModel.SetScheduleForSelectionAsync's
+    /// that type in ApplyScheduleDialog -- see ScheduleAssignmentViewModel.SetScheduleForSelectionAsync's
     /// presetType), then the same Set/Edit and Remove actions as the buttons above
     /// the calendar, and finally -- only for a single Partial/Absent tile -- "Add
-    /// Manual Entry…" (see MainViewModel.AddManualEntryForDayCommand). Rebuilt fresh on
+    /// Manual Entry…". Rebuilt fresh on
     /// every right-click rather than cached, so SetScheduleButtonText's "Set..."/
     /// "Edit..." wording and every item's enabled state (via each command's own
     /// CanExecute) are always current for whatever's selected right now.
@@ -132,6 +129,7 @@ public partial class MonthCalendarControl : UserControl
     /// </summary>
     private ContextMenu BuildDayContextMenu(MainViewModel viewModel, CalendarDayViewModel day)
     {
+        var assignment = viewModel.Assignment;
         var menu = new ContextMenu();
 
         var setAsMenu = new MenuItem { Header = "Set Schedule As" };
@@ -140,16 +138,16 @@ public partial class MonthCalendarControl : UserControl
             // Leave needs no extra data (no hours, no time-in, no segments), so
             // picking it here applies it immediately via its own dedicated command
             // instead of opening ApplyScheduleDialog just to immediately OK it with
-            // nothing filled in -- see MainViewModel.SetLeaveForSelectionAsync. The
+            // nothing filled in -- see ScheduleAssignmentViewModel.SetLeaveForSelectionAsync. The
             // other three types still need the dialog (Normal/Official Business need
             // hours + time-in, Flexible needs a required-hours total), so they keep
             // going through SetScheduleForSelectionCommand with the type as a preset.
             var item = scheduleType == ScheduleType.Leave
-                ? new MenuItem { Header = scheduleType.ToText(), Command = viewModel.SetLeaveForSelectionCommand }
+                ? new MenuItem { Header = scheduleType.ToText(), Command = assignment.SetLeaveForSelectionCommand }
                 : new MenuItem
                 {
                     Header = scheduleType.ToText(),
-                    Command = viewModel.SetScheduleForSelectionCommand,
+                    Command = assignment.SetScheduleForSelectionCommand,
                     CommandParameter = scheduleType
                 };
             setAsMenu.Items.Add(item);
@@ -160,15 +158,15 @@ public partial class MonthCalendarControl : UserControl
 
         menu.Items.Add(new MenuItem
         {
-            Header = viewModel.SetScheduleButtonText,
-            Command = viewModel.SetScheduleForSelectionCommand,
+            Header = viewModel.Calendar.SetScheduleButtonText,
+            Command = assignment.SetScheduleForSelectionCommand,
             CommandParameter = null
         });
 
         menu.Items.Add(new MenuItem
         {
             Header = "Remove Schedule for Selected Days",
-            Command = viewModel.ClearScheduleForSelectionCommand
+            Command = assignment.ClearScheduleForSelectionCommand
         });
 
         // Holiday items -- company-wide (see Holiday's own doc comment), so unlike every
@@ -193,13 +191,13 @@ public partial class MonthCalendarControl : UserControl
                 menu.Items.Add(new MenuItem
                 {
                     Header = "Mark as Holiday…",
-                    Command = viewModel.ToggleHolidayForSelectionCommand
+                    Command = assignment.ToggleHolidayForSelectionCommand
                 });
             if (canRemove)
                 menu.Items.Add(new MenuItem
                 {
                     Header = selectedHolidayCount > 1 ? "Remove Holidays for Selected Days" : "Remove Holiday",
-                    Command = viewModel.ToggleHolidayForSelectionCommand
+                    Command = assignment.ToggleHolidayForSelectionCommand
                 });
         }
 
@@ -207,7 +205,7 @@ public partial class MonthCalendarControl : UserControl
         // plan's own menu-placement decision -- only offered for a single tile (no
         // single AttendanceStatus to key off across a multi-day selection) whose
         // computed status is Partial or Absent (see
-        // MainViewModel.RefreshCalendarAttendanceStatusesAsync for how
+        // ScheduleCalendarViewModel.RefreshCalendarAttendanceStatusesAsync for how
         // AttendanceStatus gets set -- Complete/Leave/Official Business tiles, and any
         // tile before that method has run at all, leave this null, so both cases are
         // already covered by the same pattern match without listing them out).
@@ -218,7 +216,7 @@ public partial class MonthCalendarControl : UserControl
             menu.Items.Add(new MenuItem
             {
                 Header = "Add Manual Entry…",
-                Command = viewModel.AddManualEntryForDayCommand,
+                Command = assignment.AddManualEntryForDayCommand,
                 CommandParameter = day
             });
         }
@@ -265,7 +263,7 @@ public partial class MonthCalendarControl : UserControl
             menu.Items.Add(new MenuItem
             {
                 Header = punchHeader,
-                Command = viewModel.EditPunchPairingForDayCommand,
+                Command = assignment.EditPunchPairingForDayCommand,
                 CommandParameter = day
             });
         }

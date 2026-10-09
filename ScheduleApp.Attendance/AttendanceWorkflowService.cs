@@ -64,7 +64,7 @@ public class AttendanceWorkflowService(
         {
             var departments = await scheduleRepository.GetDepartmentsWithEmployeesAsync(cancellationToken);
             var unassigned = await scheduleRepository.GetUnassignedEmployeesAsync(cancellationToken);
-            allEmployees = departments.SelectMany(d => d.Employees).Concat(unassigned).ToList();
+            allEmployees = [.. departments.SelectMany(d => d.Employees), .. unassigned];
         }
         else
         {

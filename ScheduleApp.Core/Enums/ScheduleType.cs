@@ -55,11 +55,14 @@ public enum ScheduleType
 /// </summary>
 public static class ScheduleTypeLabel
 {
-    public static string ToText(this ScheduleType type) => type switch
+    extension(ScheduleType type)
     {
-        ScheduleType.OfficialBusiness => "Official Business",
-        ScheduleType.SplitShift => "Split Shift",
-        ScheduleType.RestDay => "Rest Day",
-        _ => type.ToString()
-    };
+        public string ToText() => type switch
+        {
+            ScheduleType.OfficialBusiness => "Official Business",
+            ScheduleType.SplitShift => "Split Shift",
+            ScheduleType.RestDay => "Rest Day",
+            _ => type.ToString()
+        };
+    }
 }

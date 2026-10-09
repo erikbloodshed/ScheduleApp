@@ -1,69 +1,49 @@
-<Page x:Class="ScheduleApp.Desktop.Views.SchedulePage"
-      x:Name="RootPage"
-      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
-      xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
-      xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-      ScrollViewer.CanContentScroll="False"
-      Title="Schedule">
+<rxui:ReactivePage x:Class="ScheduleApp.Desktop.Views.SchedulePage"
+                   x:TypeArguments="vm:MainViewModel"
+                   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:rxui="http://reactiveui.net"
+                   xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
+                   xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+                   xmlns:views="clr-namespace:ScheduleApp.Desktop.Views"
+                   xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
+                   ScrollViewer.CanContentScroll="False"
+                   Title="Schedule">
     <Page.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-
-        <Style x:Key="GroupLabel" TargetType="TextBlock">
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
-
-        <Style x:Key="CommandButton" TargetType="syncfusion:ButtonAdv">
-            <Setter Property="SizeMode" Value="Normal" />
+        <Style x:Key="CommandButton" TargetType="syncfusion:ButtonAdv" BasedOn="{StaticResource {x:Type syncfusion:ButtonAdv}}">
             <Setter Property="Margin" Value="0,0,8,0" />
         </Style>
     </Page.Resources>
 
     <Grid Margin="8">
-        <!-- Department/Employee management commands live on the Employees page instead (see
-             EmployeesPage.xaml), which has its own department tree (plus an employee grid)
-             reading the same MainViewModel.Departments this one does - selecting something on
-             either page updates the same shared SelectedEmployee/SelectedDepartment, so the two
-             stay in sync without one page depending on the other's tree. -->
+        <!-- Department/Employee management lives on the Employees page, over the same shared
+             tree and selection - picking someone on either page picks them on both. -->
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="280" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Left: departments (+ Unassigned bucket) and employees. Checkboxes only appear once
-             "Assign Schedule to Multiple Employees" is clicked - the tree is plain rows
-             otherwise. While that mode is on, the calendar on the right goes blank regardless of
-             which row is highlighted, since there's no single employee whose schedule it would
-             make sense to show. -->
+        <!-- Left: departments (+ Unassigned) and employees. Checkboxes appear only in
+             multi-select mode, where the calendar goes blank: there's no single employee whose
+             schedule it could show. -->
         <DockPanel Grid.Column="0" Margin="0,0,8,0">
-            <syncfusion:ButtonAdv DockPanel.Dock="Top"
-                                  Label="{Binding MultiSelectButtonText}"
+            <syncfusion:ButtonAdv x:Name="MultiSelectButton"
+                                  DockPanel.Dock="Top"
                                   IconTemplate="{StaticResource SelectAllIconTemplate}"
-                                  SizeMode="Normal"
                                   HorizontalAlignment="Stretch"
-                                  Command="{Binding ToggleMultiSelectModeCommand}"
                                   Margin="0,0,0,8" />
 
-            <!-- Live filter for the tree below, same comma-separated Employee ID/last
-                 name/first name/department matching as the Attendance tab's report-scope and
-                 Punch Records search boxes (see MainViewModel.EmployeeTreeSearchText) - narrows
-                 which nodes are visible, not which are checked, so typing here never changes
-                 what multi-select mode would actually assign a schedule to. -->
+            <!-- Narrows which rows show, never which are checked - typing here never changes
+                 what multi-select mode would assign a schedule to. -->
             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                <TextBlock Text="Search" Style="{StaticResource GroupLabel}" Margin="0,0,0,4" />
-                <syncfusion:SfTextBoxExt Text="{Binding EmployeeTreeSearchText, UpdateSourceTrigger=PropertyChanged}"
+                <TextBlock Text="Search" Style="{StaticResource GroupLabelStyle}" Margin="0,0,0,4" />
+                <syncfusion:SfTextBoxExt x:Name="TreeSearchBox"
                                          Watermark="ID, name or department"
                                          ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
             </StackPanel>
 
-            <StackPanel DockPanel.Dock="Bottom"
-                        Margin="0,8,0,0"
-                        Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{Binding SelectedEmployeeCount, StringFormat='{}{0} employee(s) checked'}"
+            <StackPanel x:Name="MultiSelectPanel" DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                <TextBlock x:Name="CheckedCountText"
                            FontSize="11"
                            Foreground="{DynamicResource MutedForegroundBrush}"
                            Margin="0,0,0,4" />
@@ -72,27 +52,22 @@
                            Foreground="{DynamicResource MutedForegroundBrush}"
                            TextWrapping="Wrap"
                            Margin="0,0,0,4" />
-                <syncfusion:ButtonAdv Label="Clear Employee Checkboxes"
+                <syncfusion:ButtonAdv x:Name="ClearCheckedButton"
+                                      Label="Clear Employee Checkboxes"
                                       IconTemplate="{StaticResource ClearSelectionIconTemplate}"
-                                      SizeMode="Normal"
-                                      HorizontalAlignment="Left"
-                                      Command="{Binding ClearEmployeeSelectionCommand}" />
+                                      HorizontalAlignment="Left" />
             </StackPanel>
 
-            <!-- Bound to VisibleDepartments and each department's VisibleEmployees, which the
-                 search box above keeps filtered (EmployeeTreeSearchFilter) - SfTreeView can't
-                 hide a row itself. Whether a department is open is kept on it
-                 (DepartmentGroupViewModel.IsExpanded), so a search can open it and it stays as
-                 it was left through a reload. Each row's template is picked by its data's type
-                 (the DataTemplates below). -->
+            <!-- Shows VisibleDepartments and each one's VisibleEmployees, which the search box
+                 keeps filtered (SfTreeView can't hide a row itself). Whether a department is
+                 open is kept on it (DepartmentGroupViewModel.IsExpanded), so it stays as left
+                 through a reload. -->
             <Border BorderThickness="1" BorderBrush="{DynamicResource CardBorderBrush}" CornerRadius="4">
                 <syncfusion:SfTreeView x:Name="EmployeeTree"
-                                       ItemsSource="{Binding VisibleDepartments}"
                                        SelectionMode="Single"
                                        FullRowSelect="True"
                                        ExpandActionTrigger="Node"
-                                       FocusVisualStyle="{x:Null}"
-                                       SelectionChanged="EmployeeTree_SelectionChanged">
+                                       FocusVisualStyle="{x:Null}">
                     <syncfusion:SfTreeView.Resources>
                         <DataTemplate DataType="{x:Type vm:DepartmentGroupViewModel}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -101,7 +76,7 @@
                                           VerticalAlignment="Center"
                                           ToolTip="Check/uncheck all employees in this department"
                                           Margin="0,0,4,0"
-                                          Visibility="{Binding DataContext.IsMultiSelectMode, RelativeSource={RelativeSource AncestorType=Page}, Converter={StaticResource BoolToVisibility}}" />
+                                          Visibility="{Binding ViewModel.IsMultiSelectMode, RelativeSource={RelativeSource AncestorType=views:SchedulePage}, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" VerticalAlignment="Center" />
                             </StackPanel>
                         </DataTemplate>
@@ -110,7 +85,7 @@
                                 <CheckBox IsChecked="{Binding IsSelected}"
                                           VerticalAlignment="Center"
                                           Margin="0,0,4,0"
-                                          Visibility="{Binding DataContext.IsMultiSelectMode, RelativeSource={RelativeSource AncestorType=Page}, Converter={StaticResource BoolToVisibility}}" />
+                                          Visibility="{Binding ViewModel.IsMultiSelectMode, RelativeSource={RelativeSource AncestorType=views:SchedulePage}, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding Employee.DisplayName}" VerticalAlignment="Center" />
                             </StackPanel>
                         </DataTemplate>
@@ -129,8 +104,7 @@
             </Border>
         </DockPanel>
 
-        <!-- Right: calendar for the selected employee - the calendar itself IS the schedule
-             view, there's no separate list. -->
+        <!-- Right: the selected employee's calendar - itself the schedule view. -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -139,77 +113,65 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Month navigation and Import/Export Schedule, plus a Refresh button pinned to
-                 the row's own right edge: the button group docks Left and takes only the width
-                 it needs, Refresh docks Right regardless, and the space between the two just
-                 stays empty. Refresh is disabled rather than hidden with no employee selected
-                 or in multi-select mode (RefreshOrCancelScheduleCommand's CanExecute), the same
-                 as every other command button on this page.
-
-                 Doubles as a Cancel button while anything's running (see
-                 RefreshOrCancelScheduleCommand/RefreshOrCancelGlyph/RefreshOrCancelToolTip) -
-                 the same in-place Refresh<->Cancel toggle as AttendanceSummaryView's own
-                 Period-row button and PayrollSummaryView's own payslip-header button. -->
+            <!-- Month navigation and Import/Export on the left; Refresh pinned to the right
+                 edge, doubling as Cancel while anything runs (the same in-place toggle as the
+                 Attendance Summary and payslip headers). -->
             <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <syncfusion:ButtonAdv SizeMode="Small"
+                    <syncfusion:ButtonAdv x:Name="PreviousMonthButton"
+                                          SizeMode="Small"
                                           Tag="&#xE76B;"
                                           IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                          ToolTip="Previous month"
-                                          Command="{Binding PreviousMonthCommand}" />
-                    <TextBlock Text="{Binding DisplayedMonthText}"
+                                          ToolTip="Previous month" />
+                    <TextBlock x:Name="DisplayedMonthText"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="12,0"
                                Width="140"
                                TextAlignment="Center" />
-                    <syncfusion:ButtonAdv SizeMode="Small"
+                    <syncfusion:ButtonAdv x:Name="NextMonthButton"
+                                          SizeMode="Small"
                                           Tag="&#xE76C;"
                                           IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                          ToolTip="Next month"
-                                          Command="{Binding NextMonthCommand}" />
-                    <syncfusion:ButtonAdv Label="Import Schedule (Excel)"
+                                          ToolTip="Next month" />
+                    <syncfusion:ButtonAdv x:Name="ImportScheduleButton"
+                                          Label="Import Schedule (Excel)"
                                           IconTemplate="{StaticResource ImportIconTemplate}"
                                           Style="{StaticResource CommandButton}"
-                                          Margin="12,0,0,0"
-                                          Command="{Binding ImportScheduleCommand}" />
-                    <syncfusion:ButtonAdv Label="Export Schedule (Excel)"
+                                          Margin="12,0,0,0" />
+                    <syncfusion:ButtonAdv x:Name="ExportScheduleButton"
+                                          Label="Export Schedule (Excel)"
                                           IconTemplate="{StaticResource ExportIconTemplate}"
                                           Style="{StaticResource CommandButton}"
-                                          Margin="6,0,0,0"
-                                          Command="{Binding ExportScheduleCommand}" />
+                                          Margin="6,0,0,0" />
                 </StackPanel>
-                <syncfusion:ButtonAdv DockPanel.Dock="Right"
+                <syncfusion:ButtonAdv x:Name="RefreshOrCancelButton"
+                                      DockPanel.Dock="Right"
                                       SizeMode="Small"
-                                      Tag="{Binding RefreshOrCancelGlyph}"
-                                      IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                      Command="{Binding RefreshOrCancelScheduleCommand}"
-                                      ToolTip="{Binding RefreshOrCancelToolTip}" />
+                                      IconTemplate="{StaticResource TagGlyphIconTemplate}" />
             </DockPanel>
 
-            <TextBlock Grid.Row="1"
+            <TextBlock x:Name="CalendarHeaderText"
+                       Grid.Row="1"
                        Margin="0,0,0,8"
                        FontSize="18"
                        FontWeight="Bold"
-                       VerticalAlignment="Center"
-                       Text="{Binding CalendarHeaderText}" />
+                       VerticalAlignment="Center" />
 
             <DockPanel Grid.Row="2" Margin="0,0,0,8">
-                <syncfusion:ButtonAdv DockPanel.Dock="Right"
-                                      Label="{Binding SetScheduleButtonText}"
-                                      IconTemplate="{StaticResource CalendarIconTemplate}"
-                                      SizeMode="Normal"
-                                      Command="{Binding SetScheduleForSelectionCommand}" />
-                <syncfusion:ButtonAdv DockPanel.Dock="Right"
+                <syncfusion:ButtonAdv x:Name="SetScheduleButton"
+                                      DockPanel.Dock="Right"
+                                      IconTemplate="{StaticResource CalendarIconTemplate}" />
+                <syncfusion:ButtonAdv x:Name="ClearScheduleButton"
+                                      DockPanel.Dock="Right"
                                       Label="Remove Schedule for Selected Days"
                                       IconTemplate="{StaticResource DeleteIconTemplate}"
-                                      Style="{StaticResource CommandButton}"
-                                      Command="{Binding ClearScheduleForSelectionCommand}" />
-                <syncfusion:ButtonAdv DockPanel.Dock="Right"
+                                      Style="{StaticResource CommandButton}" />
+                <syncfusion:ButtonAdv x:Name="ClearCalendarSelectionButton"
+                                      DockPanel.Dock="Right"
                                       Label="Clear Selection"
                                       IconTemplate="{StaticResource ClearSelectionIconTemplate}"
-                                      Style="{StaticResource CommandButton}"
-                                      Command="{Binding ClearCalendarSelectionCommand}" />
+                                      Style="{StaticResource CommandButton}" />
                 <!-- Last, so the buttons keep their width and the hint trims instead. -->
                 <TextBlock VerticalAlignment="Center"
                            Foreground="{DynamicResource MutedForegroundBrush}"
@@ -219,7 +181,7 @@
                            ToolTip="Click a day, Shift+click or drag for a range, Ctrl+click to pick several days" />
             </DockPanel>
 
-            <controls:MonthCalendarControl Grid.Row="3" Days="{Binding CalendarDays}" />
+            <controls:MonthCalendarControl x:Name="MonthCalendar" Grid.Row="3" />
         </Grid>
     </Grid>
-</Page>
+</rxui:ReactivePage>

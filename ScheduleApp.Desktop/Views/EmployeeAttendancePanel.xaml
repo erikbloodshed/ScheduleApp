@@ -1,76 +1,34 @@
-<UserControl x:Class="ScheduleApp.Desktop.Views.EmployeeAttendancePanel"
+<rxui:ReactiveUserControl x:Class="ScheduleApp.Desktop.Views.EmployeeAttendancePanel"
+             x:TypeArguments="payrollVm:PayrollSummaryViewModel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:rxui="http://reactiveui.net"
+             xmlns:payrollVm="clr-namespace:ScheduleApp.Desktop.ViewModels.Payroll"
              xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
              xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
-             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
-             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d"
-             d:DataContext="{d:DesignInstance Type=vm:PayrollViewModel}">
-    <UserControl.Resources>
-        <!-- Same "card" look as PayrollSummaryView's - see that file's own copy of this
-             style for why it's duplicated per-file rather than shared. -->
-        <Style x:Key="CardBorder"
-               TargetType="Border">
-            <Setter Property="Background"
-                    Value="#F8FAFC" />
-            <Setter Property="BorderBrush"
-                    Value="#E2E8F0" />
-            <Setter Property="BorderThickness"
-                    Value="1" />
-            <Setter Property="CornerRadius"
-                    Value="4" />
-            <Setter Property="Padding"
-                    Value="10,8" />
-        </Style>
-
-        <Style x:Key="GroupLabel"
-               TargetType="TextBlock">
-            <Setter Property="VerticalAlignment"
-                    Value="Center" />
-            <Setter Property="Margin"
-                    Value="0,0,8,0" />
-            <Setter Property="Foreground"
-                    Value="#777777" />
-            <Setter Property="FontWeight"
-                    Value="SemiBold" />
-        </Style>
-
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
-        <converters:PunchStatusToBrushConverter x:Key="StatusToBrush" />
-
-        <!-- Right-aligns the hours columns' headers, same idea (and same key name, so both
-             grids read consistently) as AttendanceSummaryView's own Summary grid; the cells
-             right-align through each column's TextAlignment. -->
-        <Style x:Key="RightAlignedHeader"
-               TargetType="syncfusion:GridHeaderCellControl"
-               BasedOn="{StaticResource GridHeaderCellStyle}">
-            <Setter Property="HorizontalContentAlignment"
-                    Value="Right" />
-        </Style>
-    </UserControl.Resources>
+             mc:Ignorable="d">
 
     <DockPanel>
         <TextBlock DockPanel.Dock="Top"
                    Text="Attendance for the period"
-                   Style="{StaticResource GroupLabel}"
+                   Style="{StaticResource GroupLabelStyle}"
                    Margin="0,0,0,4" />
 
         <!-- Empty-state placeholder and the grid occupy the same Grid cell, same
              mutually-exclusive-Visibility idea as PayrollSummaryView's own placeholder/
              breakdown pair (see that file's doc comment on its own Grid for why a Grid
              rather than separate DockPanel children). AttendanceEmptyStateMessage falls
-             through to PayrollViewModel.EmptyStateMessage first (no employee, no Pin, bad
+             through to PayrollSummaryViewModel.EmptyStateMessage first (no employee, no Pin, bad
              period) and only adds its own "no records" reason once those are all fine but
              this employee simply has nothing for the period. -->
         <Grid>
-            <Border Style="{StaticResource CardBorder}"
-                    Visibility="{Binding AttendanceEmptyStateMessage, Converter={StaticResource NotNullToVisibility}}">
-                <TextBlock Text="{Binding AttendanceEmptyStateMessage}"
-                           Foreground="#94A3B8"
+            <Border x:Name="EmptyStatePanel"
+                    Style="{StaticResource CardBorderStyle}"
+                    Margin="0">
+                <TextBlock x:Name="EmptyStateText"
+                           Foreground="{DynamicResource TertiaryForegroundBrush}"
                            TextWrapping="Wrap"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center" />
@@ -83,24 +41,22 @@
                  sense of them, not the full Attendance tab's PIN/Name/Department/Check In/
                  Check Out/Late In/Early Out set - those either don't apply (this grid is
                  already scoped to one employee) or don't bear on payroll math. -->
-            <syncfusion:SfDataGrid ItemsSource="{Binding AttendanceRows}"
+            <syncfusion:SfDataGrid x:Name="AttendanceGrid"
                                    AutoGenerateColumns="False"
                                    AllowEditing="False"
                                    AllowDraggingColumns="False"
                                    ColumnSizer="Auto"
                                    controls:GridAutoFit.IsEnabled="True"
-                                   RowHeight="25"
                                    GridLinesVisibility="Both"
                                    NavigationMode="Row"
-                                   SelectionMode="Single"
-                                   Visibility="{Binding HasAttendanceRows, Converter={StaticResource BoolToVisibility}}">
+                                   SelectionMode="Single">
                 <syncfusion:SfDataGrid.Columns>
                     <syncfusion:GridTextColumn MappingName="ShiftDate" HeaderText="Date"
                                                DisplayBinding="{Binding ShiftDate, StringFormat={}{0:MM/dd/yy ddd}}" />
                     <syncfusion:GridTextColumn MappingName="TypeText" HeaderText="Type" />
                     <syncfusion:GridTextColumn MappingName="StatusText" HeaderText="Status">
                         <syncfusion:GridTextColumn.CellStyle>
-                            <Style TargetType="syncfusion:GridCell" BasedOn="{StaticResource GridCellStyle}">
+                            <Style TargetType="syncfusion:GridCell">
                                 <Setter Property="FontWeight" Value="SemiBold" />
                                 <Setter Property="Foreground" Value="{Binding Status, Converter={StaticResource StatusToBrush}}" />
                             </Style>
@@ -120,4 +76,4 @@
             </syncfusion:SfDataGrid>
         </Grid>
     </DockPanel>
-</UserControl>
+</rxui:ReactiveUserControl>

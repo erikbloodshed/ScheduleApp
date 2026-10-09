@@ -1,5 +1,7 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.AddUserDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.AddUserDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
+        x:TypeArguments="accounts:AddUserViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:accounts="clr-namespace:ScheduleApp.Desktop.ViewModels.Accounts"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
@@ -38,19 +40,17 @@
                    Visibility="Collapsed" Margin="0,8,0,0" VerticalAlignment="Top" />
 
         <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <syncfusion:ButtonAdv Label="Add"
-                                  SizeMode="Normal"
+            <syncfusion:ButtonAdv x:Name="OkButton"
+                                  Label="Add"
                                   IconTemplate="{StaticResource AddIconTemplate}"
                                   MinWidth="80"
                                   Margin="0,0,8,0"
-                                  IsDefault="True"
-                                  Click="AddButton_Click" />
+                                  IsDefault="True" />
             <syncfusion:ButtonAdv Label="Cancel"
-                                  SizeMode="Normal"
                                   IconTemplate="{StaticResource CancelIconTemplate}"
                                   MinWidth="80"
                                   IsCancel="True" />
         </StackPanel>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

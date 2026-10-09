@@ -38,13 +38,9 @@ namespace ScheduleApp.Desktop.Controls;
 ///     than sitting empty with nothing to say what it currently inherits. Opt-in per box
 ///     (null, the default, means no placeholder); see that property's own doc comment.
 ///
-/// Styling note: WPF looks up an implicit style by the element's exact type, so the app-wide
-/// implicit TextBox style (the Windows11Light theme's) does NOT reach a derived class on
-/// its own. Every usage therefore names a style explicitly -- either one of the page's own
-/// TextBox styles (PayrollSummaryView's EditableAmountTextBox) or plain
-/// Style="{StaticResource {x:Type TextBox}}" -- which works because a Style whose TargetType
-/// is a base type still applies to a derived element. Keep doing that on new markup; a box
-/// without it renders as a bare, unstyled WPF TextBox next to its styled siblings.
+/// Styling: the theme draws it as a TextBox, and Themes/ControlDefaults.xaml gives it the
+/// TextBox defaults through its own implicit style. A page style for it is based on
+/// {x:Type TextBox} (PayrollSummaryView's EditableAmountTextBox).
 /// </summary>
 public class NumericTextBox : TextBox
 {

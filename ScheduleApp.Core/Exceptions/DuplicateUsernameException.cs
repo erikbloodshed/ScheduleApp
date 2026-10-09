@@ -7,13 +7,7 @@ namespace ScheduleApp.Core.Exceptions;
 /// the check-then-act race, e.g. two people setting up the app against the same fresh
 /// database at the same time. Same shape as DuplicateEmployeeIdException.
 /// </summary>
-public class DuplicateUsernameException : Exception
+public class DuplicateUsernameException(string username) : Exception($"The account name \"{username}\" is already taken.")
 {
-    public string Username { get; }
-
-    public DuplicateUsernameException(string username)
-        : base($"The account name \"{username}\" is already taken.")
-    {
-        Username = username;
-    }
+    public string Username { get; } = username;
 }

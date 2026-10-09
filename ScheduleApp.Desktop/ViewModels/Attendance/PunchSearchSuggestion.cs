@@ -12,19 +12,14 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// "Kitchen" as separate entries) gave no way to tell two different employees named Cruz
 /// apart, or to pick one of them specifically rather than just adding another loose
 /// fragment to the filter.</summary>
-public sealed class PunchSearchSuggestion
+public sealed class PunchSearchSuggestion(string display, string insertValue)
 {
-    public PunchSearchSuggestion(string display, string insertValue)
-    {
-        Display = display;
-        InsertValue = insertValue;
-    }
 
     /// <summary>What's shown in the dropdown. ListBox has no DataTemplate/
     /// DisplayMemberPath set for this list (see AttendanceView.xaml) -- WPF falls back to
     /// ToString() below for a plain CLR item like this one, so this is also, in effect,
     /// what actually renders.</summary>
-    public string Display { get; }
+    public string Display { get; } = display;
 
     /// <summary>What SelectLogViewSuggestion actually writes into LogViewSearchText --
     /// for a department, the department name itself; for an employee, their DisplayName
@@ -34,7 +29,7 @@ public sealed class PunchSearchSuggestion
     /// writing "Cruz; Juan -- Kitchen" in as that one value would look for literal text
     /// no row could ever contain -- DisplayName alone is what FilterStoredLogRow actually
     /// matches one employee's rows against.</summary>
-    public string InsertValue { get; }
+    public string InsertValue { get; } = insertValue;
 
     public override string ToString() => Display;
 }

@@ -1,9 +1,11 @@
 using System.Reactive.Linq;
 using System.Windows;
-using ScheduleApp.Core.Models;
-using ScheduleApp.Core.Payroll;
-using ScheduleApp.Data.Repositories;
-using ScheduleApp.Desktop.Services;
+using System.Windows.Media;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Converters;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
 
 namespace ScheduleApp.Desktop.Views;
@@ -17,76 +19,89 @@ namespace ScheduleApp.Desktop.Views;
 /// button does the real repository write that creates the PayrollRun (build-order step
 /// 8.3 -- see PayrollWizardViewModel.SavePayrollGroupCommand).
 ///
-/// Constructed directly (`new PayrollWizardDialog(...)`), not through DI -- same
-/// convention every other dialog in this app follows (see PayslipScopeDialog's own doc
-/// comment for why): PayrollWizardViewModel is built here, not resolved from the
-/// container, so there's a fresh instance -- and therefore no leftover period/label/
-/// tree-selection state -- every time this dialog is opened.
-///
-/// All navigation and validation lives on PayrollWizardViewModel; this code-behind's only
-/// job is turning its RequestClose event into an actual DialogResult/window close, so the
-/// ViewModel itself never needs to know it's backing a real Window.
+/// Shown for a PayrollWizardViewModel its opener builds, so there's a fresh one -- and
+/// therefore no leftover period/label/tree-selection state -- every time it opens. All
+/// navigation and validation lives on that ViewModel; this view binds to it, and closes
+/// itself as accepted when Next reports Finish.
 /// </summary>
-public partial class PayrollWizardDialog : Controls.AppWindow
+public partial class PayrollWizardDialog
 {
-    private readonly PayrollWizardViewModel _wizard;
-
-    /// <summary>Build-order step 9.2's own passthrough -- a live read of
-    /// PayrollWizardViewModel.SavedRun (see that property's own doc comment) rather than a
-    /// value captured on confirm the way PayslipScopeDialog.SelectedEmployees/PeriodStart/
-    /// PeriodEnd below are: Finish here doesn't itself write anything (unlike
-    /// PayslipScopeDialog's own confirm button), so whatever Step 3's "Save Payroll Group"
-    /// button (build-order step 8.3) already saved before Finish was clicked is sitting on
-    /// _wizard.SavedRun by the time a caller reads this after ShowDialog() returns -- null
-    /// if Step 3's Save was never clicked, same as the ViewModel's own property.</summary>
-    public PayrollRun? SavedRun => _wizard.SavedRun;
-
-    /// <summary>Build-order step 9.3's own passthrough -- what PayrollPage sets
-    /// BatchScopeEmployees from, so the checklist shown right after Finish matches the
-    /// actual Employee objects Step 2's tree had in hand, rather than round-tripping the
-    /// Pins on SavedRun.Employees back through the DB to resolve them -- that round trip is
-    /// step 10's job (Load Payroll Group…, reopening a run that wasn't just created in this
-    /// same session), not this one.
-    ///
-    /// Reads PayrollWizardViewModel.SavedEmployees -- the selection frozen at the moment
-    /// "Save Payroll Group" actually wrote SavedRun.Employees -- rather than a live
-    /// GetSelectedEmployees() call: Finish itself doesn't re-save, so if a person goes Back
-    /// to Step 2 and changes the tree after saving, a live read here would hand back a set
-    /// that no longer matches what's actually sitting in the PayrollRunEmployees table (see
-    /// SavedEmployees' own doc comment). Falls back to a live GetSelectedEmployees() only
-    /// when nothing's been saved yet, which the current caller (PayrollRunViewModel.
-    /// NewPayrollRun) never actually hits -- it only reads this once SavedRun is non-null,
-    /// at which point SavedEmployees is guaranteed to be set alongside it -- kept purely so
-    /// this property is never in a "nothing to return" state for some future caller.</summary>
-    public List<Employee> SelectedEmployees =>
-        _wizard.SavedEmployees?.ToList() ?? _wizard.GetSelectedEmployees();
-
-    /// <summary>defaultPeriodStart/defaultPeriodEnd are optional so this can be opened
-    /// with nothing pre-filled, as well as with a sensible starting period the way
-    /// PayrollPage's real "New Payroll Run…" entry point (build-order step 9 --
-    /// PayrollRunViewModel.NewPayrollRun) passes its own current period, the same way
-    /// PayslipScopeDialog's own constructor takes the Payroll tab's current period as its
-    /// default.</summary>
-    public PayrollWizardDialog(
-        ActiveRosterProvider activeRosterProvider,
-        IPayrollRunRepository payrollRunRepository,
-        IPayrollComputationService payrollComputationService,
-        DateTime? defaultPeriodStart = null,
-        DateTime? defaultPeriodEnd = null)
+    public PayrollWizardDialog()
     {
         InitializeComponent();
 
-        _wizard = new PayrollWizardViewModel(
-            activeRosterProvider, payrollRunRepository, payrollComputationService,
-            defaultPeriodStart, defaultPeriodEnd);
-        DataContext = _wizard;
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            // Set by whoever opened the dialog, before showing it.
+            var viewModel = ViewModel!;
+            ViewInteractions.Register(viewModel, this).DisposeWith(d);
 
-        // Setting DialogResult on a window shown via ShowDialog() closes it immediately,
-        // so there's nothing further to do here beyond that -- see
-        // PayrollWizardViewModel.RequestClose's own doc comment for why this is an event
-        // rather than the ViewModel doing this itself.
-        _wizard.RequestClose += (_, result) => DialogResult = result;
+            // Step indicator and content: only the current step's panel shows, and its label
+            // is dark and bold while the others stay muted.
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step1Panel.Visibility, step => VisibleWhen(step == 0)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step2Panel.Visibility, step => VisibleWhen(step == 1)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step3Panel.Visibility, step => VisibleWhen(step == 2)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step1Label.FontWeight, step => WeightFor(step == 0)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step2Label.FontWeight, step => WeightFor(step == 1)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step3Label.FontWeight, step => WeightFor(step == 2)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step1Label.Foreground, step => StepBrush(step == 0)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step2Label.Foreground, step => StepBrush(step == 1)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CurrentStepIndex, v => v.Step3Label.Foreground, step => StepBrush(step == 2)).DisposeWith(d);
 
-        Loaded += async (_, _) => await _wizard.LoadEmployeeTreeCommand.Execute();
+            // Step 1
+            this.Bind(ViewModel, vm => vm.PeriodStart, v => v.PeriodStartPicker.DateTime).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.PeriodEnd, v => v.PeriodEndPicker.DateTime).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.Label, v => v.LabelBox.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PeriodValidationMessage, v => v.PeriodProblemText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PeriodValidationMessage, v => v.PeriodProblemText.Visibility,
+                message => VisibleWhen(message is not null)).DisposeWith(d);
+
+            // Step 2
+            this.Bind(ViewModel, vm => vm.SearchText, v => v.SearchBox.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.VisibleDepartments, v => v.EmployeeTree.ItemsSource).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SelectionScopeText, v => v.ScopeText.Text).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.SelectAllTreeCommand, v => v.SelectAllButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.ClearTreeSelectionCommand, v => v.ClearButton).DisposeWith(d);
+
+            // Step 3 -- the calculating pulse, the error and the grid are mutually exclusive
+            // (see PayrollWizardViewModel.IsReviewReady).
+            this.OneWayBind(ViewModel, vm => vm.IsCalculating, v => v.CalculatingText.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CalculationErrorMessage, v => v.CalculationErrorText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.CalculationErrorMessage, v => v.CalculationErrorText.Visibility,
+                message => VisibleWhen(message is not null)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.IsReviewReady, v => v.ReviewPanel.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.ReviewResults, v => v.ReviewGrid.ItemsSource).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.TotalGrossPay, v => v.TotalGrossPayText.Text, NumberConverter.Format).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.TotalDeductions, v => v.TotalDeductionsText.Text, NumberConverter.Format).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.TotalNetPay, v => v.TotalNetPayText.Text, NumberConverter.Format).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.SavePayrollGroupCommand, v => v.SaveButton).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.IsSaving, v => v.SavingText.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SaveErrorMessage, v => v.SaveErrorText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SaveErrorMessage, v => v.SaveErrorText.Visibility,
+                message => VisibleWhen(message is not null)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SavedRunSummary, v => v.SavedSummaryText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SavedRunSummary, v => v.SavedSummaryText.Visibility,
+                summary => VisibleWhen(summary is not null)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SavedRunSummary, v => v.SavedNoteText.Visibility,
+                summary => VisibleWhen(summary is not null)).DisposeWith(d);
+
+            // Navigation -- Finish (Next on the last step) closes the dialog as accepted.
+            this.BindCommand(ViewModel, vm => vm.BackCommand, v => v.BackButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.NextCommand, v => v.NextButton).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.NextButtonText, v => v.NextButton.Label).DisposeWith(d);
+            viewModel.NextCommand
+                .Where(finished => finished)
+                .Subscribe(_ => DialogResult = true)
+                .DisposeWith(d);
+
+            viewModel.LoadEmployeeTreeCommand.Execute().Subscribe().DisposeWith(d);
+        });
     }
+
+    private static Visibility VisibleWhen(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+
+    private static FontWeight WeightFor(bool isCurrentStep) => isCurrentStep ? FontWeights.Bold : FontWeights.Normal;
+
+    private Brush StepBrush(bool isCurrentStep) =>
+        (Brush)FindResource(isCurrentStep ? "TextForegroundBrush" : "MutedForegroundBrush");
 }

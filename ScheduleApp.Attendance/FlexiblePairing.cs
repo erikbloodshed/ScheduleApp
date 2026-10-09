@@ -73,11 +73,11 @@ public static class FlexiblePairingBuilder
         {
             if (merged.Count > 0)
             {
-                var prev = merged[^1];
-                double gapHours = (pair.In.Timestamp - prev.Out.Timestamp).TotalHours;
+                var (In, Out) = merged[^1];
+                double gapHours = (pair.In.Timestamp - Out.Timestamp).TotalHours;
                 if (gapHours < minimumBreakGapHours)
                 {
-                    merged[^1] = (prev.In, pair.Out); // extend, don't start a new interval
+                    merged[^1] = (In, pair.Out); // extend, don't start a new interval
                     continue;
                 }
             }

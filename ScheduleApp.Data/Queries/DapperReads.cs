@@ -42,35 +42,38 @@ internal static class DapperReads
 
     public static string IdList(IEnumerable<int> ids) => string.Join(',', ids);
 
-    public static DbConnection Connection(this ScheduleDbContext db) => db.Database.GetDbConnection();
+    extension(ScheduleDbContext db)
+    {
+        public DbConnection Connection() => db.Database.GetDbConnection();
 
-    /// <summary>A command on <paramref name="db"/>'s connection, in its transaction if it has one.</summary>
-    public static CommandDefinition Command(
-        this ScheduleDbContext db, string sql, object? parameters, CancellationToken cancellationToken) =>
-        new(sql, parameters, db.Database.CurrentTransaction?.GetDbTransaction(), cancellationToken: cancellationToken);
+        /// <summary>A command on <paramref name="db"/>'s connection, in its transaction if it has one.</summary>
+        public CommandDefinition Command(
+            string sql, object? parameters, CancellationToken cancellationToken) =>
+            new(sql, parameters, db.Database.CurrentTransaction?.GetDbTransaction(), cancellationToken: cancellationToken);
 
-    /// <summary>Runs <paramref name="read"/>, retried on a transient failure when there's no transaction to replay.</summary>
-    public static Task<TResult> ReadAsync<TResult>(
-        this ScheduleDbContext db, Func<Task<TResult>> read, CancellationToken cancellationToken) =>
-        db.Database.CurrentTransaction is null
-            ? db.Database.CreateExecutionStrategy().ExecuteAsync(read, (_, _) => read(), cancellationToken)
-            : read();
+        /// <summary>Runs <paramref name="read"/>, retried on a transient failure when there's no transaction to replay.</summary>
+        public Task<TResult> ReadAsync<TResult>(
+            Func<Task<TResult>> read, CancellationToken cancellationToken) =>
+            db.Database.CurrentTransaction is null
+                ? db.Database.CreateExecutionStrategy().ExecuteAsync(read, (_, _) => read(), cancellationToken)
+                : read();
 
-    public static Task<List<T>> QueryAsync<T>(
-        this ScheduleDbContext db, string sql, object? parameters, CancellationToken cancellationToken) =>
-        db.ReadAsync(
-            async () => (await db.Connection().QueryAsync<T>(db.Command(sql, parameters, cancellationToken))).AsList(),
-            cancellationToken);
+        public Task<List<T>> QueryAsync<T>(
+            string sql, object? parameters, CancellationToken cancellationToken) =>
+            db.ReadAsync(
+                async () => (await db.Connection().QueryAsync<T>(db.Command(sql, parameters, cancellationToken))).AsList(),
+                cancellationToken);
 
-    public static Task<T?> QueryFirstOrDefaultAsync<T>(
-        this ScheduleDbContext db, string sql, object? parameters, CancellationToken cancellationToken) =>
-        db.ReadAsync(
-            () => db.Connection().QueryFirstOrDefaultAsync<T?>(db.Command(sql, parameters, cancellationToken)),
-            cancellationToken);
+        public Task<T?> QueryFirstOrDefaultAsync<T>(
+            string sql, object? parameters, CancellationToken cancellationToken) =>
+            db.ReadAsync(
+                () => db.Connection().QueryFirstOrDefaultAsync<T?>(db.Command(sql, parameters, cancellationToken)),
+                cancellationToken);
 
-    public static Task<T> QuerySingleAsync<T>(
-        this ScheduleDbContext db, string sql, object? parameters, CancellationToken cancellationToken) =>
-        db.ReadAsync(
-            () => db.Connection().QuerySingleAsync<T>(db.Command(sql, parameters, cancellationToken)),
-            cancellationToken);
+        public Task<T> QuerySingleAsync<T>(
+            string sql, object? parameters, CancellationToken cancellationToken) =>
+            db.ReadAsync(
+                () => db.Connection().QuerySingleAsync<T>(db.Command(sql, parameters, cancellationToken)),
+                cancellationToken);
+    }
 }

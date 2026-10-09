@@ -20,7 +20,7 @@ namespace ScheduleApp.Excel;
 public static class EmployeeRosterExporter
 {
     private static readonly string[] Headers =
-    {
+    [
         EmployeeRosterImporter.EmployeeIdHeader,
         EmployeeRosterImporter.LastNameHeader,
         EmployeeRosterImporter.FirstNameHeader,
@@ -33,7 +33,7 @@ public static class EmployeeRosterExporter
         EmployeeRosterImporter.PhilHealthHeader,
         EmployeeRosterImporter.PagIbigHeader,
         EmployeeRosterImporter.HasLeaveWithPayHeader,
-    };
+    ];
 
     private const string MoneyFormat = "#,##0.00";
 

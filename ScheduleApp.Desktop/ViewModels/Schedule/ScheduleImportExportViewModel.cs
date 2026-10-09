@@ -1,15 +1,10 @@
-using System.Windows;
-using Microsoft.Win32;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Excel;
 using ScheduleApp.Desktop.Services;
-using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
-using ScheduleApp.Desktop.Views;
-using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
@@ -55,7 +50,7 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// logged rather than escaping a command, and an import's list of problems is shown through
 /// Notify, which the page answers with a MessageBox.
 /// </summary>
-public class ScheduleImportExportViewModel : ViewModelBase
+public partial class ScheduleImportExportViewModel : ViewModelBase
 {
     private readonly IScheduleRepository _repository;
 
@@ -95,13 +90,13 @@ public class ScheduleImportExportViewModel : ViewModelBase
 
     /// <summary>For DisplayedMonth only -- ExportScheduleAsync's default date range (the
     /// currently-displayed month) before the person narrows or widens it in
-    /// PayslipScopeDialog. See this class's own summary above for why this is a constructor
+    /// the scope picker. See this class's own summary above for why this is a constructor
     /// dependency.</summary>
     private readonly ScheduleCalendarViewModel _calendar;
 
-    /// <summary>Handed straight through to ExportScheduleAsync's own PayslipScopeDialog
-    /// construction, replacing the raw _repository that dialog's constructor used to take --
-    /// see ActiveRosterProvider's own doc comment for why every one of PayslipScopeDialog's
+    /// <summary>Handed straight through to ExportScheduleAsync's own scope picker
+    /// (PayslipScopeViewModel), replacing the raw _repository it used to take --
+    /// see ActiveRosterProvider's own doc comment for why every one of that picker's
     /// callers (this one included) now goes through the shared cache instead of each paying
     /// for its own GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync
     /// round trip. Nothing else in this class reads it -- ExportScheduleAsync's own
@@ -126,67 +121,55 @@ public class ScheduleImportExportViewModel : ViewModelBase
         _calendar = calendar;
         _activeRosterProvider = activeRosterProvider;
 
-        ExportScheduleCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportScheduleAsync));
-        ImportScheduleCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportScheduleAsync));
-        ImportEmployeesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportEmployeesAsync));
-        ExportEmployeesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportEmployeesAsync));
+        ReportFailuresOf(ExportScheduleCommand, ImportScheduleCommand, ImportEmployeesCommand, ExportEmployeesCommand);
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> ExportScheduleCommand { get; }
-    public ReactiveCommand<RxVoid, RxVoid> ImportScheduleCommand { get; }
-    public ReactiveCommand<RxVoid, RxVoid> ImportEmployeesCommand { get; }
-
-    /// <summary>See ExportEmployeesAsync.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> ExportEmployeesCommand { get; }
+    private const string ExcelFilter = "Excel workbook (*.xlsx)|*.xlsx";
 
     /// <summary>
     /// Opens the same Department/Employee checkbox-tree + period-picker scope dialog
     /// PayrollViewModel's "Print Payslips…"/"Export Payroll Report…" use (see
-    /// PayslipScopeDialog's own doc comment for the shared machinery), so the export can be
+    /// PayslipScopeViewModel's own doc comment for the shared machinery), so the export can be
     /// narrowed to a single employee, a batch of employees/departments, or the whole company,
     /// over any date range -- rather than always dumping every employee's entire schedule
     /// history the way this command used to. requirePin: false because schedule export
     /// (unlike payroll) has never required an Employee ID -- see
     /// PayslipScopeViewModel.GetSelectedEmployees' own doc comment.
     /// </summary>
+    [ReactiveCommand]
     private async Task ExportScheduleAsync()
     {
         var defaultStart = new DateTime(_calendar.DisplayedMonth.Year, _calendar.DisplayedMonth.Month, 1);
         var defaultEnd = defaultStart.AddMonths(1).AddDays(-1);
 
-        var scopeDialog = new PayslipScopeDialog(
-            _activeRosterProvider, defaultStart, defaultEnd,
-            title: "Export Schedule",
-            description: "Choose who to export the schedule for and which date range.",
-            confirmButtonText: "Export…",
-            confirmButtonTooltip: "Saves the chosen employees' schedule for the chosen date range to an Excel workbook.",
+        var scopePicker = new PayslipScopeViewModel(_activeRosterProvider, requirePin: false)
+        {
+            Title = "Export Schedule",
+            Description = "Choose who to export the schedule for and which date range.",
+            ConfirmText = "Export…",
+            ConfirmToolTip = "Saves the chosen employees' schedule for the chosen date range to an Excel workbook.",
+            PeriodStart = defaultStart,
+            PeriodEnd = defaultEnd,
             // Presets to just the currently-selected employee (the common "export one
             // person's schedule" case) when there is one, same "start narrow, still fully
-            // editable" reasoning as PayrollViewModel's HasBatchScope preset -- otherwise
-            // falls back to the dialog's own "whole company" default.
-            presetSelection: _tree.SelectedEmployee is not null ? [_tree.SelectedEmployee] : null,
-            requirePin: false)
-        {
-            Owner = Application.Current.MainWindow,
+            // editable" reasoning as the Payroll tab's active-group preset -- otherwise
+            // falls back to the picker's own "whole company" default.
+            PresetSelection = _tree.SelectedEmployee is { } selected ? [selected] : null,
         };
-        if (scopeDialog.ShowDialog() != true) return;
+        if (!await ShowDialogAsync(scopePicker) || scopePicker.AcceptedScope is not { } scope) return;
 
-        var rangeStart = DateOnly.FromDateTime(scopeDialog.PeriodStart);
-        var rangeEnd = DateOnly.FromDateTime(scopeDialog.PeriodEnd);
-        var employeeIds = scopeDialog.SelectedEmployees.Select(e => e.Id).ToList();
+        var rangeStart = DateOnly.FromDateTime(scope.PeriodStart);
+        var rangeEnd = DateOnly.FromDateTime(scope.PeriodEnd);
+        var employeeIds = scope.Employees.Select(e => e.Id).ToList();
 
-        var saveDialog = new SaveFileDialog
-        {
-            Filter = "Excel workbook (*.xlsx)|*.xlsx",
-            FileName = $"Schedule_{rangeStart:yyyy-MM-dd}_to_{rangeEnd:yyyy-MM-dd}.xlsx",
-        };
-        if (saveDialog.ShowDialog() != true) return;
+        if (await PickFileToSaveAsync(ExcelFilter, $"Schedule_{rangeStart:yyyy-MM-dd}_to_{rangeEnd:yyyy-MM-dd}.xlsx") is not { } path)
+            return;
 
         try
         {
             var departments = await _repository.GetDepartmentsForExportAsync(employeeIds, rangeStart, rangeEnd);
             var unassigned = await _repository.GetUnassignedForExportAsync(employeeIds, rangeStart, rangeEnd);
-            ExcelScheduleExporter.Export(departments, unassigned, saveDialog.FileName);
+            ExcelScheduleExporter.Export(departments, unassigned, path);
         }
         catch (Exception ex)
         {
@@ -199,14 +182,14 @@ public class ScheduleImportExportViewModel : ViewModelBase
         StatusBar.ShowSuccess("Schedule exported.", "Export complete");
     }
 
+    [ReactiveCommand]
     private async Task ImportScheduleAsync()
     {
-        var dialog = new OpenFileDialog { Filter = "Excel workbook (*.xlsx)|*.xlsx" };
-        if (dialog.ShowDialog() != true) return;
+        if (await PickFileToOpenAsync(ExcelFilter) is not { } path) return;
 
         try
         {
-            var departments = ExcelScheduleImporter.Import(dialog.FileName);
+            var departments = ExcelScheduleImporter.Import(path);
             await _repository.ImportAsync(departments);
 
             // Per-employee, not the plain BumpSchedule() this used to call. The workbook is
@@ -246,15 +229,15 @@ public class ScheduleImportExportViewModel : ViewModelBase
         StatusBar.ShowSuccess("Schedule import complete.", "Import");
     }
 
+    [ReactiveCommand]
     private async Task ImportEmployeesAsync()
     {
-        var dialog = new OpenFileDialog { Filter = "Excel workbook (*.xlsx)|*.xlsx" };
-        if (dialog.ShowDialog() != true) return;
+        if (await PickFileToOpenAsync(ExcelFilter) is not { } path) return;
 
         List<EmployeeImportRow> rows;
         try
         {
-            rows = EmployeeRosterImporter.Import(dialog.FileName);
+            rows = EmployeeRosterImporter.Import(path);
             await _repository.ImportEmployeeRosterAsync(rows);
             _dataVersion.BumpRoster(); // writes Employee/Department -- see this class's own _dataVersion doc comment
         }
@@ -291,20 +274,17 @@ public class ScheduleImportExportViewModel : ViewModelBase
     /// since a roster export that silently dropped blacklisted employees wouldn't be the
     /// complete roster.
     /// </summary>
+    [ReactiveCommand]
     private async Task ExportEmployeesAsync()
     {
-        var saveDialog = new SaveFileDialog
-        {
-            Filter = "Excel workbook (*.xlsx)|*.xlsx",
-            FileName = $"Employees_{DateTime.Today:yyyy-MM-dd}.xlsx",
-        };
-        if (saveDialog.ShowDialog() != true) return;
+        if (await PickFileToSaveAsync(ExcelFilter, $"Employees_{DateTime.Today:yyyy-MM-dd}.xlsx") is not { } path)
+            return;
 
         try
         {
             var departments = await _repository.GetDepartmentsWithEmployeesAsync();
             var unassigned = await _repository.GetUnassignedEmployeesAsync();
-            EmployeeRosterExporter.Export(departments, unassigned, saveDialog.FileName);
+            EmployeeRosterExporter.Export(departments, unassigned, path);
         }
         catch (Exception ex)
         {

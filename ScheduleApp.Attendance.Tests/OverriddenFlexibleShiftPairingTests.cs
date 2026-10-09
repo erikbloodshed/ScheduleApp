@@ -65,13 +65,13 @@ public class OverriddenFlexibleShiftPairingTests
         Date = Date,
         EditedBy = "Test Fixture",
         EditedAt = DateTime.UtcNow,
-        Slots = slots.Select(s => new DayPunchPairingSlot
+        Slots = [.. slots.Select(s => new DayPunchPairingSlot
         {
             PunchId = s.Punch.Id,
             IsManualPunch = s.Punch.Source == AttendanceLogSource.Manual,
             SegmentIndex = s.Segment,
             Role = s.Role,
-        }).ToList(),
+        })],
     };
 
     /// <summary>The headline case. Three punches an hour-plus apart: the default

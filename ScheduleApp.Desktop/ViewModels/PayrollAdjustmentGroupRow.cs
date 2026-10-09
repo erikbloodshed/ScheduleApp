@@ -1,8 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Payroll;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -35,8 +38,13 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// SyncAdjustmentRows already used for itemized rows) rather than assuming index i always means
 /// the same PayrollAdjustmentType across calls.
 /// </summary>
-public sealed class PayrollAdjustmentGroupRow : ReactiveObject
+public sealed partial class PayrollAdjustmentGroupRow : ReactiveObject
 {
+    public PayrollAdjustmentGroupRow() =>
+        _singleValueAmountHelper = this.WhenAnyValue(x => x.SingleValueAdjustment)
+            .Select(adjustment => adjustment?.Amount)
+            .ToProperty(this, x => x.SingleValueAmount);
+
     public required PayrollAdjustmentType Type { get; init; }
 
     /// <summary>Same plain passthrough as PayrollAdjustmentGroup.IsSingleValue -- what
@@ -50,45 +58,27 @@ public sealed class PayrollAdjustmentGroupRow : ReactiveObject
     /// <summary>Patched in place by PayrollViewModel.SyncAdjustmentGroupRows on every
     /// LoadCoreAsync -- see PayrollAdjustmentGroup.SingleValueAdjustment's own doc comment for
     /// what this holds and why it's a whole PayrollAdjustment rather than just a decimal.
-    /// Setter is observable (not init) precisely so re-assigning it on an existing row raises
-    /// PropertyChanged instead of requiring a whole new PayrollAdjustmentGroupRow instance --
-    /// that's the entire point of this class.</summary>
-    public PayrollAdjustment? SingleValueAdjustment
-    {
-        get => _singleValueAdjustment;
-        set
-        {
-            if (EqualityComparer<PayrollAdjustment?>.Default.Equals(_singleValueAdjustment, value)) return;
-            this.RaisePropertyChanging();
-            _singleValueAdjustment = value;
-            this.RaisePropertyChanged();
-            this.RaisePropertyChanged(nameof(SingleValueAmount));
-        }
-    }
+    /// Observable (not init) precisely so re-assigning it on an existing row notifies instead of
+    /// requiring a whole new PayrollAdjustmentGroupRow instance -- that's the entire point of
+    /// this class.</summary>
+    [Reactive]
+    public partial PayrollAdjustment? SingleValueAdjustment { get; set; }
 
-    private PayrollAdjustment? _singleValueAdjustment;
-
-    /// <summary>Same value as SingleValueAdjustment?.Amount, same "TextBox binding breaks on a
-    /// null intermediate hop" reasoning as PayrollAdjustmentGroup.SingleValueAmount's own doc
-    /// comment -- kept in sync with SingleValueAdjustment by the change notification that
-    /// property's setter raises above rather than stored separately, so there's exactly one
-    /// place (SyncAdjustmentGroupRows) that ever needs to set this row's single-value state.
-    /// </summary>
-    public decimal? SingleValueAmount => SingleValueAdjustment?.Amount;
+    /// <summary>SingleValueAdjustment?.Amount, for the same "a binding breaks on a null
+    /// intermediate hop" reason as PayrollAdjustmentGroup.SingleValueAmount -- derived from
+    /// SingleValueAdjustment, so SyncAdjustmentGroupRows is still the one place that sets this
+    /// row's single-value state.</summary>
+    [ObservableAsProperty]
+    public partial decimal? SingleValueAmount { get; }
 
     /// <summary>Patched in place by PayrollViewModel.SyncAdjustmentGroupRows on every
     /// LoadCoreAsync, same as SingleValueAdjustment above -- what AdjustmentGroupTemplate's
     /// inline-itemized subtotal box binds to.</summary>
-    public decimal Subtotal
-    {
-        get => _subtotal;
-        set => this.RaiseAndSetIfChanged(ref _subtotal, value);
-    }
+    [Reactive]
+    public partial decimal Subtotal { get; set; }
 
-    private decimal _subtotal;
-
-    /// <summary>What InlineAdjustmentRowTemplate/DeductionInlineAdjustmentRowTemplate's own
-    /// ItemsControl binds to for Incentive/OtherCharge's itemized rows. A stable
+    /// <summary>What InlineAdjustmentRowTemplate's own ItemsControl binds to for
+    /// Incentive/OtherCharge's itemized rows. A stable
     /// ObservableCollection, not replaced wholesale on each load -- PayrollViewModel.
     /// SyncAdjustmentRows patches it in place (add/remove/reorder/replace only the row(s) that
     /// actually changed, matched by PayrollAdjustment.Id) instead of Clear()-then-repopulate,

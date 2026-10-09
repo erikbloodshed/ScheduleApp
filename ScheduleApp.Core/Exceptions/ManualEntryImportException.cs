@@ -16,15 +16,9 @@ namespace ScheduleApp.Core.Exceptions;
 /// convention EmployeeImportException already established for the employee
 /// roster (see its own doc comment).
 /// </summary>
-public class ManualEntryImportException : Exception
+public class ManualEntryImportException(IReadOnlyList<string> errors) : Exception(BuildMessage(errors))
 {
-    public IReadOnlyList<string> Errors { get; }
-
-    public ManualEntryImportException(IReadOnlyList<string> errors)
-        : base(BuildMessage(errors))
-    {
-        Errors = errors;
-    }
+    public IReadOnlyList<string> Errors { get; } = errors;
 
     private static string BuildMessage(IReadOnlyList<string> errors)
         => errors.Count == 1

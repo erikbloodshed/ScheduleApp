@@ -1,233 +1,177 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
+using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Navigation;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using ScheduleApp.Core.Configuration;
-using ScheduleApp.Core.Users;
-using ScheduleApp.Data.Repositories;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.Services;
-using ScheduleApp.Desktop.ViewModels.Attendance;
+using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.Views;
 using Syncfusion.SfSkinManager;
 using Syncfusion.UI.Xaml.NavigationDrawer;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop;
 
 /// <summary>
-/// The sign-in gate used to be a separate modal LoginWindow/SetupAdminWindow shown by
-/// App.OnStartup *before* MainWindow ever existed. It's now AuthOverlay -- a Grid drawn
-/// on top of MainWindow's own content (see MainWindow.xaml) hosting SignInPanel or
-/// SetupAdminPanel -- so the window appears immediately and the sign-in card sits over
-/// it instead of in a window of its own. That moves a few things that used to happen in
-/// App.OnStartup (or in MainWindow's constructor, back when the constructor only ever
-/// ran after a successful sign-in) into this class instead:
-///   - ShowSignInOverlay(hasAccounts), called by App.OnStartup right after resolving
-///     this window and before Show(), decides which panel to display.
-///   - Title and the first NavigateTo both used to happen unconditionally
-///     (construction always meant "already signed in"); now they wait for
-///     OnAuthSucceeded, since construction no longer implies that.
-///   - CurrentUserContext.Set(...) used to be called by App.OnStartup right after
-///     LoginWindow/SetupAdminWindow's ShowDialog() returned true; it's called from
-///     OnAuthSucceeded here instead, for the same reason as Title/Navigate above.
+/// The main window -- see <see cref="ShellViewModel"/> for the sign-in gate, title, pinned
+/// drawer and footer dialogs. What stays here is the window's own: the navigation drawer's
+/// layout, and opening pages in the Frame as the drawer's items are picked.
 /// </summary>
-public partial class MainWindow : Controls.AppWindow
+public partial class MainWindow
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly IConfiguration _configuration;
-    private readonly AttendanceSettings _attendanceSettings;
-    private readonly PayrollSettings _payrollSettings;
-    private readonly SignInSettings _signInSettings;
-    private readonly ConnectionProfilesSettings _connectionProfilesSettings;
-    private readonly SharedConfigWriter _sharedConfigWriter;
-    private readonly DatabaseBackupService _backupService;
-    private readonly DatabaseProvisioningService _provisioningService;
-    private readonly IUserAccountRepository _userAccountRepository;
-    private readonly IHolidayRepository _holidayRepository;
-    private readonly AttendanceDataVersion _dataVersion;
-    private readonly CurrentUserContext _currentUser;
-    private readonly NavigationDrawerStateStore _navDrawerStateStore;
-
-    /// <summary>Whether the navigation drawer is pinned open. Loaded from
-    /// <see cref="_navDrawerStateStore"/> in the constructor and applied to the drawer in
-    /// <see cref="OnAuthSucceeded"/> (same "wait for sign-in" timing as the first
-    /// NavigateTo/Title); toggled by <see cref="PinPaneButton_Click"/>. See
-    /// <see cref="ApplyNavDrawerPinned"/> for what pinned and unpinned look like.</summary>
-    private bool _navDrawerPinned;
 
     /// <summary>The page on screen, told when it's left -- see <see cref="NavigateTo"/>.</summary>
     private INavigationAware? _currentPage;
 
-    public MainWindow(
-        IServiceProvider serviceProvider,
-        IStatusBarService statusBarService,
-        IConfiguration configuration,
-        AttendanceSettings attendanceSettings,
-        PayrollSettings payrollSettings,
-        SignInSettings signInSettings,
-        ConnectionProfilesSettings connectionProfilesSettings,
-        SharedConfigWriter sharedConfigWriter,
-        DatabaseBackupService backupService,
-        DatabaseProvisioningService provisioningService,
-        IUserAccountRepository userAccountRepository,
-        IHolidayRepository holidayRepository,
-        AttendanceDataVersion dataVersion,
-        CurrentUserContext currentUser,
-        RememberedSignInStore rememberedSignInStore,
-        NavigationDrawerStateStore navigationDrawerStateStore)
+    public MainWindow(IServiceProvider serviceProvider, IStatusBarService statusBarService, ShellViewModel viewModel)
     {
         InitializeComponent();
 
-        _configuration = configuration;
-        _attendanceSettings = attendanceSettings;
-        _payrollSettings = payrollSettings;
-        _signInSettings = signInSettings;
-        _connectionProfilesSettings = connectionProfilesSettings;
-        _sharedConfigWriter = sharedConfigWriter;
-        _backupService = backupService;
-        _provisioningService = provisioningService;
-        _userAccountRepository = userAccountRepository;
-        _holidayRepository = holidayRepository;
-        _dataVersion = dataVersion;
-        _currentUser = currentUser;
-        _navDrawerStateStore = navigationDrawerStateStore;
-
-        // Read now, applied to the pane in OnAuthSucceeded (see below) alongside the
-        // rest of the deferred startup.
-        _navDrawerPinned = navigationDrawerStateStore.LoadPinned();
-
-        // Generic until OnAuthSucceeded fills in who's signed in -- see this class's own
-        // doc comment for why that can no longer happen right here in the constructor.
-        Title = "Schedule Manager";
-
-        // NavigateTo resolves SchedulePage/AttendanceSummaryPage/... (and the ViewModels
-        // their constructors ask for) through DI rather than constructing them itself.
+        // Pages come from DI, the same scoped instances each time -- see App.xaml.cs.
         _serviceProvider = serviceProvider;
-
+        ViewModel = viewModel;
         statusBarService.SetStatusBarPresenter(RootStatusBarPresenter);
 
-        SignInPanelControl.Initialize(_userAccountRepository, rememberedSignInStore);
-        SignInPanelControl.SignedIn += OnAuthSucceeded;
-        SignInPanelControl.ExitRequested += (_, _) => Close();
-        SignInPanelControl.ApplyLogo(_signInSettings.LogoPath);
+        SignInPanelControl.ViewModel = viewModel.SignIn;
+        SetupAdminPanelControl.ViewModel = viewModel.SetupAdmin;
+        SignInPanelControl.ApplyLogo(viewModel.LogoPath);
+        SetupAdminPanelControl.ApplyLogo(viewModel.LogoPath);
+        NavigationDrawer.SizeChanged += NavigationDrawer_SizeChanged;
 
-        SetupAdminPanelControl.Initialize(_userAccountRepository);
-        SetupAdminPanelControl.AccountCreated += OnAuthSucceeded;
-        SetupAdminPanelControl.ExitRequested += (_, _) => Close();
-        SetupAdminPanelControl.ApplyLogo(_signInSettings.LogoPath);
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            ViewInteractions.Register(viewModel, this).DisposeWith(d);
+            viewModel.Restart.RegisterHandler(context =>
+            {
+                if (Environment.ProcessPath is { } exePath)
+                {
+                    Process.Start(exePath);
+                    Application.Current.Shutdown();
+                }
 
-        // Whichever panel ShowSignInOverlay made Visible before Show() was called --
-        // Focus() needs the window actually loaded/rendered first, which is why this
-        // waits for Loaded rather than happening inside ShowSignInOverlay itself.
+                context.SetOutput(RxVoid.Default);
+            }).DisposeWith(d);
+
+            this.OneWayBind(ViewModel, vm => vm.Title, v => v.Title).DisposeWith(d);
+
+            // The overlay and the pin, until someone signs in -- the pin sits on the title
+            // bar, which the overlay doesn't cover.
+            this.OneWayBind(ViewModel, vm => vm.Stage, v => v.AuthOverlay.Visibility,
+                stage => VisibleWhen(stage != ShellStage.SignedIn)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Stage, v => v.SignInPanelControl.Visibility,
+                stage => VisibleWhen(stage == ShellStage.SignIn)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Stage, v => v.SetupAdminPanelControl.Visibility,
+                stage => VisibleWhen(stage == ShellStage.SetupAdmin)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Stage, v => v.PinPaneButton.Visibility,
+                stage => VisibleWhen(stage == ShellStage.SignedIn)).DisposeWith(d);
+            viewModel.WhenAnyValue(vm => vm.Stage)
+                .Where(stage => stage == ShellStage.SignedIn)
+                .Take(1)
+                .Subscribe(_ => NavigateTo(ScheduleNavItem))
+                .DisposeWith(d);
+            Observable.Merge(SignInPanelControl.ExitRequested, SetupAdminPanelControl.ExitRequested)
+                .Subscribe(_ => Close())
+                .DisposeWith(d);
+
+            this.OneWayBind(ViewModel, vm => vm.PinGlyph, v => v.PinPaneGlyph.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PinToolTip, v => v.PinPaneButton.ToolTip).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.TogglePinnedCommand, v => v.PinPaneButton).DisposeWith(d);
+            viewModel.WhenAnyValue(vm => vm.IsDrawerPinned).Subscribe(ApplyDrawerPinned).DisposeWith(d);
+        });
+
+        // Focus needs the window rendered, so it waits for Loaded.
         Loaded += (_, _) =>
         {
-            if (SignInPanelControl.Visibility == Visibility.Visible)
-                SignInPanelControl.FocusUsername();
-            else if (SetupAdminPanelControl.Visibility == Visibility.Visible)
-                SetupAdminPanelControl.FocusUsername();
+            switch (viewModel.Stage)
+            {
+                case ShellStage.SignIn:
+                    SignInPanelControl.FocusUsername();
+                    break;
+                case ShellStage.SetupAdmin:
+                    SetupAdminPanelControl.FocusUsername();
+                    break;
+            }
         };
     }
 
-    /// <summary>Called by App.OnStartup right after resolving this window and before
-    /// Show() -- decides which of the two AuthOverlay panels greets whoever's at the
-    /// keyboard. hasExistingAccounts is App.OnStartup's own IUserAccountRepository.AnyAsync()
-    /// result, computed there rather than re-checked here since App.OnStartup already
-    /// has the try/catch + Startup-error MessageBox for that call in place (see its own
-    /// comments) and there's no reason to duplicate it.</summary>
-    public void ShowSignInOverlay(bool hasExistingAccounts)
-    {
-        AuthOverlay.Visibility = Visibility.Visible;
+    /// <summary>Called by startup before Show(): which card greets whoever's at the keyboard
+    /// -- see <see cref="ShellViewModel.BeginSignIn"/>.</summary>
+    public void ShowSignInOverlay(bool hasExistingAccounts) => ViewModel!.BeginSignIn(hasExistingAccounts);
 
-        // The overlay covers the window's content but not its title bar, where the pin sits;
-        // nothing is there to pin until someone has signed in.
-        PinPaneButton.Visibility = Visibility.Collapsed;
-
-        if (hasExistingAccounts)
-        {
-            SignInPanelControl.Visibility = Visibility.Visible;
-            SetupAdminPanelControl.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            SetupAdminPanelControl.Visibility = Visibility.Visible;
-            SignInPanelControl.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    /// <summary>Shared handler for SignInPanel.SignedIn and SetupAdminPanel.AccountCreated
-    /// -- either one means the same thing here: an account is now authenticated, so
-    /// finish the startup this window's constructor deferred (see its own doc comment)
-    /// and reveal the app underneath the overlay.</summary>
-    private void OnAuthSucceeded(object? sender, AuthenticatedEventArgs e)
-    {
-        _currentUser.Set(e.UserId, e.Username);
-        Title = $"Schedule Manager -- Signed in as {_currentUser.Username}";
-        AuthOverlay.Visibility = Visibility.Collapsed;
-        PinPaneButton.Visibility = Visibility.Visible;
-        ApplyNavDrawerPinned();
-        NavigateTo(ScheduleNavItem);
-    }
-
-    /// <summary>Toggles the navigation drawer's pinned-open state and remembers it for
-    /// next launch.</summary>
-    private void PinPaneButton_Click(object sender, RoutedEventArgs e)
-    {
-        _navDrawerPinned = !_navDrawerPinned;
-        _navDrawerStateStore.SavePinned(_navDrawerPinned);
-        ApplyNavDrawerPinned();
-    }
-
-    /// <summary>Pinned: the drawer is Expanded, the full labelled menu always open beside the
-    /// page, and its own toggle is hidden since the pin owns that job. Unpinned: it's Compact,
-    /// an icon rail whose toggle expands the menu over the page until a page is picked (see
-    /// <see cref="NavigationDrawer_ItemClicked"/>), with Attendance's three pages in a popup
-    /// off the rail. The pin glyph is filled while pinned, and its tooltip says what a click
-    /// will do.
+    /// <summary>Pinned: the drawer is Expanded, its own toggle hidden since the pin owns that
+    /// job. Unpinned: Compact, an icon rail whose toggle expands the menu over the page until a
+    /// page is picked, with Attendance's three pages in a popup off the rail.
     ///
-    /// Expanded, the drawer pushes the content right by the difference between its two
-    /// widths but still sizes it as if it were Compact, so the page's right edge would run
-    /// that far off the window. The Frame's right margin takes the difference back.</summary>
-    private void ApplyNavDrawerPinned()
+    /// Expanded, the drawer pushes the content right by the difference between its two widths
+    /// but still sizes it as if Compact, so the page would run that far off the window; the
+    /// Frame's right margin takes the difference back.</summary>
+    private void ApplyDrawerPinned(bool pinned)
     {
-        NavigationDrawer.DisplayMode = _navDrawerPinned ? DisplayMode.Expanded : DisplayMode.Compact;
-        NavigationDrawer.IsToggleButtonVisible = !_navDrawerPinned;
-        NavigationDrawer.IsOpen = _navDrawerPinned;
-        ContentFrame.Margin = _navDrawerPinned
+        NavigationDrawer.DisplayMode = pinned ? DisplayMode.Expanded : DisplayMode.Compact;
+        NavigationDrawer.IsToggleButtonVisible = !pinned;
+        NavigationDrawer.IsOpen = pinned;
+        ContentFrame.Margin = pinned
             ? new Thickness(0, 0, NavigationDrawer.ExpandedModeWidth - NavigationDrawer.CompactModeWidth, 0)
             : default;
-
-        PinPaneGlyph.Text = _navDrawerPinned ? "" : ""; // PinFill : Pin
-        PinPaneButton.ToolTip = _navDrawerPinned
-            ? "Unpin the navigation pane (fold it back to icons)"
-            : "Pin the navigation pane open";
     }
 
-    /// <summary>A page item opens its page (its Tag is the page's type); a footer item opens
-    /// its dialog (its Tag names it). Attendance itself has no Tag -- the drawer expands its
+    /// <summary>Keeps the page as wide as the window while the drawer is pinned. The drawer
+    /// resizes its content to the window only while Compact; Expanded, it leaves the content at
+    /// the width it had when it opened, so maximizing or restoring the window would leave the
+    /// page that width until the next pin or unpin. The width the drawer gives the content is
+    /// held by its own animation, which has to be cleared before a new width can take. Runs
+    /// after the drawer's own SizeChanged handler, which it subscribes in its
+    /// constructor.</summary>
+    private void NavigationDrawer_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (ViewModel?.IsDrawerPinned != true
+            || NavigationDrawer.Template?.FindName("ContentViewContentPresenter", NavigationDrawer) is not ContentPresenter content)
+            return;
+
+        content.BeginAnimation(WidthProperty, null);
+        content.Width = e.NewSize.Width - NavigationDrawer.CompactModeWidth;
+    }
+
+    /// <summary>A page item opens its page (its Tag is the page's type); a footer item opens its
+    /// dialog (its Tag names it). Attendance itself has no Tag -- the drawer expands its
     /// sub-items, or pops them up off the compact rail, on its own. Unpinned, picking a page
-    /// folds the expanded menu back to the rail, so it's out of the way of the page.</summary>
+    /// folds the expanded menu back to the rail, out of the page's way.</summary>
     private void NavigationDrawer_ItemClicked(object? sender, NavigationItemClickedEventArgs e)
     {
         switch (e.Item?.Tag)
         {
             case Type:
                 NavigateTo(e.Item);
-                if (!_navDrawerPinned)
+                if (ViewModel?.IsDrawerPinned != true)
                     NavigationDrawer.IsOpen = false;
                 break;
-            case string dialog:
-                OpenDialog(dialog);
+            case string dialog when DialogCommand(dialog) is { } command:
+                ((ICommand)command).Execute(null);
                 break;
         }
     }
 
+    private ReactiveCommand<RxVoid, RxVoid>? DialogCommand(string dialog) => dialog switch
+    {
+        "Holidays" => ViewModel!.OpenManageHolidaysCommand,
+        "Users" => ViewModel!.OpenManageUsersCommand,
+        "Backup" => ViewModel!.OpenBackupRestoreCommand,
+        "Settings" => ViewModel!.OpenSettingsCommand,
+        _ => null,
+    };
+
     /// <summary>Shows <paramref name="item"/>'s page (its Tag) and marks the item selected,
-    /// which the drawer doesn't do on its own for a navigation that didn't come from a
-    /// click (the first page after sign-in). The page comes from DI each time -- see
-    /// App.xaml.cs's page registrations for why that hands back the same instance -- and the
-    /// page being left, then the new one, are told (<see cref="INavigationAware"/>) once the
-    /// Frame has switched (<see cref="ContentFrame_Navigated"/>).</summary>
+    /// which the drawer doesn't do itself for a navigation that didn't come from a click (the
+    /// first page after sign-in). The page being left, then the new one, are told
+    /// (<see cref="INavigationAware"/>) once the Frame has switched
+    /// (<see cref="ContentFrame_Navigated"/>).</summary>
     private void NavigateTo(NavigationItem item)
     {
         if (item.Tag is not Type pageType)
@@ -248,11 +192,10 @@ public partial class MainWindow : Controls.AppWindow
         ContentFrame.Navigate(page);
     }
 
-    /// <summary>Clears the journal the Frame just added to -- the app has no back/forward --
-    /// so it doesn't hold on to the pages it showed, then runs the page lifecycle calls
+    /// <summary>Clears the journal the Frame just added to -- the app has no back/forward -- so
+    /// it doesn't hold on to the pages it showed, then runs the page lifecycle calls
     /// <see cref="NavigateTo"/> deferred to here. async void, so an exception from a page's
-    /// OnNavigatedToAsync reaches App's DispatcherUnhandledException handler, as it did when
-    /// WPF-UI's NavigationView made these calls.</summary>
+    /// OnNavigatedToAsync reaches App's DispatcherUnhandledException handler.</summary>
     private async void ContentFrame_Navigated(object sender, NavigationEventArgs e)
     {
         while (ContentFrame.CanGoBack)
@@ -267,162 +210,5 @@ public partial class MainWindow : Controls.AppWindow
             await _currentPage.OnNavigatedToAsync();
     }
 
-    /// <summary>The footer items' dialogs, by the name in each one's Tag
-    /// (MainWindow.xaml).</summary>
-    private void OpenDialog(string dialog)
-    {
-        switch (dialog)
-        {
-            case "Holidays":
-                OpenManageHolidays();
-                break;
-            case "Users":
-                OpenManageUsers();
-                break;
-            case "Backup":
-                OpenBackupRestore();
-                break;
-            case "Settings":
-                OpenSettings();
-                break;
-        }
-    }
-
-    /// <summary>Opens SettingsDialog pre-filled with whatever's currently effective --
-    /// connection string, saved connection profiles, attendance device defaults,
-    /// attendance policy, the Net Pay rounding multiple, the sign-in logo, and the
-    /// payslip company name -- whether that's coming from the shared file already
-    /// overriding, or from appsettings.json (all already merged into
-    /// _configuration/_attendanceSettings/_payrollSettings/_signInSettings/
-    /// _connectionProfilesSettings by the time MainWindow exists, see App.OnStartup),
-    /// then hands anything the user Saved to SharedConfigWriter. AttendanceSettings/
-    /// PayrollSettings/ConnectionProfilesSettings rather than _configuration for the
-    /// device fields/policies/profiles since AttendanceSettings.DeviceTransport/
-    /// Policy, PayrollSettings.Policy/CompanyName, and
-    /// ConnectionProfilesSettings.Profiles are already the shapes SettingsDialog/
-    /// SharedConfigWriter expect.</summary>
-    private void OpenSettings()
-    {
-        var dialog = new SettingsDialog(
-            _provisioningService,
-            _configuration.GetConnectionString("ScheduleDb") ?? string.Empty,
-            _connectionProfilesSettings.Profiles,
-            _attendanceSettings.DeviceIp,
-            _attendanceSettings.DevicePort,
-            _attendanceSettings.DeviceCommKey,
-            _attendanceSettings.DeviceTransport,
-            _attendanceSettings.DefaultWorkTimeHours,
-            _attendanceSettings.Policy,
-            _payrollSettings.Policy,
-            _signInSettings.LogoPath,
-            _payrollSettings.CompanyName,
-            SharedConfigFile.ResolvePath())
-        { Owner = this };
-
-        // SettingsDialog itself refuses to close with DialogResult = true unless at
-        // least one group actually changed (see its own SaveButton_Click), so HasChanges
-        // is always true here -- this check just guards against that contract changing
-        // out from under this method without a compile error to catch it.
-        if (dialog.ShowDialog() != true || !dialog.HasChanges)
-            return;
-
-        // This file is machine-wide -- it's read by every account that runs Schedule
-        // Manager on this machine, and by the Push Listener Windows Service if one's
-        // installed, regardless of which of those started this particular change. Worth
-        // a confirmation rather than a silent write, the same way a shared/kiosk machine
-        // would want a heads-up before one user's edit affects everyone else's.
-        var confirm = MessageBox.Show(
-            "This changes settings shared by every account that runs Schedule Manager on " +
-            "this machine, and by the Push Listener service if one is installed here.\n\n" +
-            "Continue?",
-            "Confirm shared change", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
-        if (confirm != MessageBoxResult.Yes)
-            return;
-
-        string? savedPath;
-        try
-        {
-            savedPath = _sharedConfigWriter.Save(
-                dialog.ChangedConnectionString,
-                dialog.ChangedDevice,
-                dialog.ChangedDefaultWorkTimeHours,
-                dialog.ChangedPolicy,
-                dialog.ChangedPayrollPolicy,
-                dialog.ChangedLogoPath,
-                dialog.ChangedCompanyName,
-                dialog.ChangedConnectionProfiles);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            MessageBox.Show(
-                "Could not save the shared config file -- access was denied.\n\n" + ex.Message +
-                "\n\nThis usually means the current Windows account doesn't have write access " +
-                "to " + SharedConfigFile.DefaultPath + ". Ask whoever set this machine up to " +
-                "grant your account write access to that folder, or run Schedule Manager as " +
-                "an administrator.",
-                "Save failed -- access denied", MessageBoxButton.OK, MessageBoxImage.Error);
-            return;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                "Could not save the shared config file.\n\n" + ex.Message,
-                "Save failed", MessageBoxButton.OK, MessageBoxImage.Error);
-            return;
-        }
-
-        if (savedPath is null)
-            return;
-
-        var restart = MessageBox.Show(
-            $"Saved to {savedPath}.\n\n" +
-            "This only takes effect the next time an app reads it at startup -- Schedule " +
-            "Manager, and the Push Listener service (ScheduleAppPushListener) if one is " +
-            "installed on this machine.\n\n" +
-            "Restart Schedule Manager now?",
-            "Saved", MessageBoxButton.YesNo, MessageBoxImage.Information);
-
-        if (restart == MessageBoxResult.Yes && Environment.ProcessPath is { } exePath)
-        {
-            Process.Start(exePath);
-            Application.Current.Shutdown();
-        }
-    }
-
-    /// <summary>Opens BackupRestoreDialog against whatever connection string is
-    /// currently effective -- same source OpenSettings reads (_configuration,
-    /// already merged from appsettings.json and the shared config file by the time
-    /// MainWindow exists -- see App.OnStartup).</summary>
-    private void OpenBackupRestore()
-    {
-        var connectionString = _configuration.GetConnectionString("ScheduleDb");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            MessageBox.Show(
-                "No database connection string is configured -- check Settings.",
-                "Not configured", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var dialog = new BackupRestoreDialog(_backupService, connectionString) { Owner = this };
-        dialog.ShowDialog();
-    }
-
-    /// <summary>Opens ManageUsersDialog -- see its own doc comment for what it covers
-    /// and the two guard rails it enforces so this can't lock the app out of
-    /// itself.</summary>
-    private void OpenManageUsers()
-    {
-        var dialog = new ManageUsersDialog(_userAccountRepository, _currentUser) { Owner = this };
-        dialog.ShowDialog();
-    }
-
-    /// <summary>Opens ManageHolidaysDialog -- see its own doc comment for what it
-    /// covers.</summary>
-    private void OpenManageHolidays()
-    {
-        var dialog = new ManageHolidaysDialog(_holidayRepository, _dataVersion) { Owner = this };
-        dialog.ShowDialog();
-    }
+    private static Visibility VisibleWhen(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 }

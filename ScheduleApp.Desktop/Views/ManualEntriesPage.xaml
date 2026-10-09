@@ -1,8 +1,11 @@
-<Page x:Class="ScheduleApp.Desktop.Views.ManualEntriesPage"
+<rxui:ReactivePage x:Class="ScheduleApp.Desktop.Views.ManualEntriesPage"
+      x:TypeArguments="vm:AttendanceViewModel"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:rxui="http://reactiveui.net"
+      xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
       xmlns:views="clr-namespace:ScheduleApp.Desktop.Views"
       ScrollViewer.CanContentScroll="False"
       Title="Attendance -- Manual Entries">
-    <views:ManualEntriesView />
-</Page>
+    <views:ManualEntriesView x:Name="EntriesView" />
+</rxui:ReactivePage>

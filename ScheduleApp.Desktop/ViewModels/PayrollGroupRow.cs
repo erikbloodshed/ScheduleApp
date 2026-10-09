@@ -1,5 +1,6 @@
 using ScheduleApp.Core.Models;
 using ReactiveUI;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -21,7 +22,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 ///      matching the just-selected employee without triggering a full
 ///      refresh of every other row in the group.
 /// </summary>
-public sealed class PayrollGroupRow : ReactiveObject
+public sealed partial class PayrollGroupRow : ReactiveObject
 {
     public required Employee Employee { get; init; }
 
@@ -31,13 +32,8 @@ public sealed class PayrollGroupRow : ReactiveObject
     /// NumberConverter's null path returns string.Empty, so the cell
     /// just stays blank rather than showing "0.00" or an error while
     /// the figure is pending.</summary>
-    public decimal? NetPay
-    {
-        get => _netPay;
-        set => this.RaiseAndSetIfChanged(ref _netPay, value);
-    }
-
-    private decimal? _netPay;
+    [Reactive]
+    public partial decimal? NetPay { get; set; }
 
     /// <summary>Same LastName, FirstName format as Employee.DisplayName
     /// — keeps this table's Name column consistent with the tree it

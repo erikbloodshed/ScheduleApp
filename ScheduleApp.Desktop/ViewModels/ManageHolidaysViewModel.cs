@@ -1,11 +1,13 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Reactive.Linq;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
 using ScheduleApp.Desktop.ViewModels.Attendance;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -22,7 +24,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// uses -- nothing but this class flips that flag, so there's no framework edit pipeline to
 /// auto-commit a row past SaveInlineEditAsync's validation.
 /// </summary>
-public class ManageHolidaysViewModel : ReactiveViewModel
+public partial class ManageHolidaysViewModel : ReactiveViewModel
 {
     private readonly IHolidayRepository _holidayRepository;
 
@@ -33,6 +35,10 @@ public class ManageHolidaysViewModel : ReactiveViewModel
     /// right-click path; this dialog is the other writer.</summary>
     private readonly AttendanceDataVersion _dataVersion;
 
+    private readonly IObservable<bool> _canAdd;
+    private readonly IObservable<bool> _canEditOrSave;
+    private readonly IObservable<bool> _canDelete;
+
     private List<Holiday> _holidays = [];
 
     public ManageHolidaysViewModel(IHolidayRepository holidayRepository, AttendanceDataVersion dataVersion)
@@ -40,26 +46,25 @@ public class ManageHolidaysViewModel : ReactiveViewModel
         _holidayRepository = holidayRepository;
         _dataVersion = dataVersion;
 
-        LoadCommand = ReactiveCommand.CreateFromTask(ReloadAsync);
-        AddCommand = ReactiveCommand.Create(Add, CanExecuteFrom(() => !IsEditingRow));
-        EditOrSaveCommand = ReactiveCommand.CreateFromTask(EditOrSaveAsync,
-            CanExecuteFrom(() => IsEditingRow || SelectedHoliday is not null));
-        CancelEditCommand = ReactiveCommand.Create(CancelInlineEdit);
-        DeleteCommand = ReactiveCommand.CreateFromTask(DeleteAsync,
-            CanExecuteFrom(() => !IsEditingRow && SelectedHoliday is not null));
+        _editButtonTextHelper = this.WhenAnyValue(x => x.IsEditingRow)
+            .Select(isEditing => isEditing ? "Save" : "Edit…")
+            .ToProperty(this, x => x.EditButtonText);
+
+        // Edit and Delete need a persisted row: not the one an inline Add is still filling in
+        // (see SelectedHoliday).
+        _canAdd = this.WhenAnyValue(x => x.IsEditingRow).Select(isEditing => !isEditing);
+        _canEditOrSave = this.WhenAnyValue(x => x.IsEditingRow, x => x.SelectedRow,
+            (isEditing, row) => isEditing || row is { IsNew: false });
+        _canDelete = this.WhenAnyValue(x => x.IsEditingRow, x => x.SelectedRow,
+            (isEditing, row) => !isEditing && row is { IsNew: false });
     }
 
-    /// <summary>The list's items: ReloadAsync rebuilds it from _holidays, Add appends one
-    /// unsaved row, CancelInlineEdit removes that row again if the add is abandoned.</summary>
+    /// <summary>The list's items: LoadAsync rebuilds it from _holidays, Add appends one
+    /// unsaved row, CancelEdit removes that row again if the add is abandoned.</summary>
     public ObservableCollection<HolidayRow> Rows { get; } = [];
 
-    public HolidayRow? SelectedRow
-    {
-        get => _selectedRow;
-        set => this.RaiseAndSetIfChanged(ref _selectedRow, value);
-    }
-
-    private HolidayRow? _selectedRow;
+    [Reactive]
+    public partial HolidayRow? SelectedRow { get; set; }
 
     /// <summary>Null while the selected row is an unsaved new one (IsNew) -- Edit and
     /// Delete have nothing persisted to act on then, and both stay disabled anyway because
@@ -67,56 +72,31 @@ public class ManageHolidaysViewModel : ReactiveViewModel
     private Holiday? SelectedHoliday => SelectedRow is { IsNew: false } row ? row.Holiday : null;
 
     /// <summary>True from StartInlineEdit until the edit either saves successfully
-    /// (SaveInlineEditAsync's own ReloadAsync call rebuilds every row fresh, dropping this
-    /// back to false) or is cancelled (Escape -- see CancelInlineEdit). Gates Add/Delete --
+    /// (SaveInlineEditAsync's own LoadAsync call rebuilds every row fresh, dropping this
+    /// back to false) or is cancelled (Escape -- see CancelEdit). Gates Add/Delete --
     /// adding or deleting a *different* row while this one's still open for edit would leave
     /// an ambiguous "which row do my pending edits belong to" situation -- and tells
     /// EditOrSaveCommand which of its two jobs to do. Mirrors the edited row's own
     /// HolidayRow.IsEditing flag; kept separately so the command logic doesn't have to
     /// reach through SelectedRow (which a stray selection change could move) to read
     /// it.</summary>
-    public bool IsEditingRow
-    {
-        get => _isEditingRow;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _isEditingRow, value);
-            this.RaisePropertyChanged(nameof(EditButtonText));
-        }
-    }
-
-    private bool _isEditingRow;
+    [Reactive]
+    public partial bool IsEditingRow { get; private set; }
 
     /// <summary>The Edit button's two jobs, one per IsEditingRow state -- see
     /// EditOrSaveAsync.</summary>
-    public string EditButtonText => IsEditingRow ? "Save" : "Edit…";
+    [ObservableAsProperty]
+    public partial string EditButtonText { get; }
 
     /// <summary>The one inline error line under the list -- a failed load/save/delete or a
     /// validation message. Null hides it.</summary>
-    public string? ErrorMessage
-    {
-        get => _errorMessage;
-        private set => this.RaiseAndSetIfChanged(ref _errorMessage, value);
-    }
+    [Reactive]
+    public partial string? ErrorMessage { get; private set; }
 
-    private string? _errorMessage;
-
-    public ReactiveCommand<RxVoid, RxVoid> LoadCommand { get; }
-
-    public ReactiveCommand<RxVoid, RxVoid> AddCommand { get; }
-
-    /// <summary>Starts inline editing of the selected row ("Edit…"), or validates and saves
-    /// the row's pending EditDate/EditName ("Save", once edit mode has started). Also what
-    /// Enter does while a row is being edited. Add opens edit mode itself, so the "start"
-    /// branch only ever starts editing an existing row.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> EditOrSaveCommand { get; }
-
-    /// <summary>Escape while editing -- see CancelInlineEdit.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> CancelEditCommand { get; }
-
-    public ReactiveCommand<RxVoid, RxVoid> DeleteCommand { get; }
-
-    private async Task ReloadAsync()
+    /// <summary>Lists every holiday: the dialog's first load (LoadCommand), and again after
+    /// each successful save or delete.</summary>
+    [ReactiveCommand]
+    private async Task LoadAsync()
     {
         try
         {
@@ -149,8 +129,9 @@ public class ManageHolidaysViewModel : ReactiveViewModel
     /// <summary>Appends a blank, unsaved row and opens it for editing straight away -- same
     /// inline editor every existing row uses, just with nothing persisted behind it yet
     /// (HolidayRow.IsNew). SaveInlineEditAsync routes it to AddAsync instead of UpdateAsync;
-    /// CancelInlineEdit drops it back off the list. Disabled while another row is mid-edit,
+    /// CancelEdit drops it back off the list. Disabled while another row is mid-edit,
     /// so there's only ever one unsaved row at a time.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canAdd))]
     private void Add()
     {
         if (IsEditingRow)
@@ -162,6 +143,11 @@ public class ManageHolidaysViewModel : ReactiveViewModel
         SelectedRow = row;
     }
 
+    /// <summary>Starts inline editing of the selected row ("Edit…"), or validates and saves
+    /// the row's pending EditDate/EditName ("Save", once edit mode has started). Also what
+    /// Enter does while a row is being edited. Add opens edit mode itself, so the "start"
+    /// branch only ever starts editing an existing row.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canEditOrSave))]
     private async Task EditOrSaveAsync()
     {
         if (!IsEditingRow)
@@ -195,11 +181,12 @@ public class ManageHolidaysViewModel : ReactiveViewModel
         IsEditingRow = true;
     }
 
-    /// <summary>Drops the row out of edit mode without saving. A new row that was never
-    /// saved is removed from the list entirely; an existing row just reverts to its display
-    /// cells (StartInlineEdit re-copies the persisted values next time, so nothing needs
-    /// restoring here).</summary>
-    private void CancelInlineEdit()
+    /// <summary>Drops the row out of edit mode without saving (Escape while editing). A new
+    /// row that was never saved is removed from the list entirely; an existing row just
+    /// reverts to its display cells (StartInlineEdit re-copies the persisted values next
+    /// time, so nothing needs restoring here).</summary>
+    [ReactiveCommand]
+    private void CancelEdit()
     {
         if (SelectedRow is { } row)
         {
@@ -268,13 +255,14 @@ public class ManageHolidaysViewModel : ReactiveViewModel
         _dataVersion.BumpHoliday();
 
         // Drop the row out of edit mode now that the save the person asked for has
-        // actually succeeded, not before. ReloadAsync right after rebuilds the row list
+        // actually succeeded, not before. LoadAsync right after rebuilds the row list
         // from the database anyway (a new row is replaced by its persisted self), but
         // clearing the flag here keeps it and the visible state in step across the await.
         row.IsEditing = false;
-        await ReloadAsync();
+        await LoadAsync();
     }
 
+    [ReactiveCommand(CanExecute = nameof(_canDelete))]
     private async Task DeleteAsync()
     {
         var selected = SelectedHoliday;
@@ -297,7 +285,7 @@ public class ManageHolidaysViewModel : ReactiveViewModel
         }
 
         _dataVersion.BumpHoliday();
-        await ReloadAsync();
+        await LoadAsync();
     }
 }
 
@@ -314,16 +302,9 @@ public class ManageHolidaysViewModel : ReactiveViewModel
 /// DateDisplay/Name are never seen -- it's created already in edit mode -- so the placeholder
 /// Holiday behind it only exists to keep those getters and the Id-based duplicate check
 /// non-null.</summary>
-public sealed class HolidayRow : ReactiveObject
+public sealed partial class HolidayRow(Holiday holiday) : ReactiveObject
 {
-    public HolidayRow(Holiday holiday)
-    {
-        Holiday = holiday;
-        _editDate = holiday.Date.ToDateTime(TimeOnly.MinValue);
-        _editName = holiday.Name;
-    }
-
-    public Holiday Holiday { get; }
+    public Holiday Holiday { get; } = holiday;
 
     public string DateDisplay => Holiday.Date.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture);
 
@@ -333,29 +314,14 @@ public sealed class HolidayRow : ReactiveObject
     /// the inline Add hasn't saved yet.</summary>
     public bool IsNew => Holiday.Id == 0;
 
-    public bool IsEditing
-    {
-        get => _isEditing;
-        set => this.RaiseAndSetIfChanged(ref _isEditing, value);
-    }
+    [Reactive]
+    public partial bool IsEditing { get; set; }
 
-    private bool _isEditing;
+    [Reactive]
+    public partial DateTime? EditDate { get; set; } = holiday.Date.ToDateTime(TimeOnly.MinValue);
 
-    public DateTime? EditDate
-    {
-        get => _editDate;
-        set => this.RaiseAndSetIfChanged(ref _editDate, value);
-    }
-
-    private DateTime? _editDate;
-
-    public string EditName
-    {
-        get => _editName;
-        set => this.RaiseAndSetIfChanged(ref _editName, value);
-    }
-
-    private string _editName;
+    [Reactive]
+    public partial string EditName { get; set; } = holiday.Name;
 
     /// <summary>A not-yet-saved row for inline Add. EditDate starts null so the person has to
     /// pick a date explicitly -- the same no-default stance the old HolidayDialog took, since

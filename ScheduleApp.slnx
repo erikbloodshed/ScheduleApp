@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="ScheduleApp.Core/ScheduleApp.Core.csproj" />
   <Project Path="ScheduleApp.Desktop/ScheduleApp.Desktop.csproj" DefaultStartup="true"/>
+  <Project Path="ScheduleApp.Desktop.Tests/ScheduleApp.Desktop.Tests.csproj" />
   <Project Path="ScheduleApp.ZkTeco/ScheduleApp.ZkTeco.csproj" />
   <Project Path="ScheduleApp.Data/ScheduleApp.Data.csproj" />
   <Project Path="ScheduleApp.Data.Tests/ScheduleApp.Data.Tests.csproj" />

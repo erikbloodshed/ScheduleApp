@@ -1,448 +1,98 @@
-using System.Globalization;
+using System.Reactive.Linq;
 using System.Windows;
-using ScheduleApp.Core.Enums;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
 using ScheduleApp.Core.Models;
-using ScheduleApp.Core.Payroll;
-using Syncfusion.Windows.Shared;
+using ScheduleApp.Desktop.Reactive;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class EmployeeDialog : Controls.AppWindow
+/// <summary>Add/Edit Employee -- see <see cref="ViewModels.Schedule.EmployeeEditorViewModel"/>.</summary>
+public partial class EmployeeDialog
 {
-    private readonly IReadOnlySet<int> _takenEmployeeIds;
-
-    /// <summary>Kept only so OkButton_Click can fall back to the pay type that
-    /// *isn't* currently active's last-saved rate (see the DailyRate/MonthlyRate
-    /// validation comment there) -- everything else already reads off the
-    /// controls directly rather than off this.</summary>
-    private readonly Employee? _existing;
-
-    public string LastName => LastNameBox.Text.Trim();
-    public string FirstName => FirstNameBox.Text.Trim();
-
-    public int? DepartmentId => UnassignedCheck.IsChecked == true
-        ? null
-        : (DepartmentCombo.SelectedItem as Department)?.Id;
-
-    /// <summary>Required -- see Employee.Pin's own doc comment for why. Set by
-    /// OkButton_Click once EmployeeIdBox's text has passed validation.</summary>
-    public int EmployeeId { get; private set; }
-
-    public bool QualifiesForOvertime => QualifiesForOvertimeCheck.IsChecked == true;
-    public bool QualifiesForNightDiff => QualifiesForNightDiffCheck.IsChecked == true;
-
-    /// <summary>See Employee.QualifiesForRestDayPay for what this feeds into and who
-    /// reads it. Unlike QualifiesForOvertime/QualifiesForNightDiff above, this has no
-    /// IsChecked="True" default in the XAML -- a new employee starts out ineligible.</summary>
-    public bool QualifiesForRestDayPay => QualifiesForRestDayPayCheck.IsChecked == true;
-
-    /// <summary>See Employee.QualifiesForPremiumPay for what this feeds into and who
-    /// reads it. Same unchecked-by-default convention as QualifiesForRestDayPay above.</summary>
-    public bool QualifiesForPremiumPay => QualifiesForPremiumPayCheck.IsChecked == true;
-
-    /// <summary>See Employee.ExemptFromUndertimeDeduction for what this feeds into and
-    /// who reads it. Same unchecked-by-default convention as QualifiesForRestDayPay
-    /// above -- an employee has to be explicitly opted into this.</summary>
-    public bool ExemptFromUndertimeDeduction => ExemptFromUndertimeDeductionCheck.IsChecked == true;
-
-    /// <summary>See Employee.ApplyOvertimeRatePercentageByDefault for what this feeds
-    /// into and who reads it -- the separate "does the overtime premium actually apply,
-    /// once eligible" toggle, independent of QualifiesForOvertime above.</summary>
-    public bool ApplyOvertimeRatePercentageByDefault => ApplyOvertimeRatePercentageByDefaultCheck.IsChecked == true;
-
-    /// <summary>See Employee.DefaultLeaveIsPaid for what this feeds into and who reads it.</summary>
-    public bool DefaultLeaveIsPaid => DefaultLeaveIsPaidCheck.IsChecked == true;
-
-    /// <summary>Read straight from which of PayTypeDailyRadio/PayTypeMonthlyRadio is
-    /// checked -- see Employee.EmployeeType for what this feeds into and how it gates
-    /// DailyRate vs. MonthlyRate below.</summary>
-    public EmployeeType EmployeeType => PayTypeMonthlyRadio.IsChecked == true ? EmployeeType.Monthly : EmployeeType.Daily;
-
-    /// <summary>Set by OkButton_Click once DailyRateBox's text has passed validation --
-    /// see Employee.DailyRate for what this feeds into. Blank is treated as 0, the same
-    /// "safe, never-blocking" default Employee.DailyRate itself defaults to, rather than
-    /// being a required field. Only meaningful when EmployeeType == Daily; see MonthlyRate
-    /// below for the Monthly-rated equivalent.</summary>
-    public decimal DailyRate { get; private set; }
-
-    /// <summary>Set by OkButton_Click once MonthlyRateBox's text has passed validation --
-    /// see Employee.MonthlyRate for what this feeds into. Same blank-is-0, never-blocking
-    /// convention as DailyRate above. Only meaningful when EmployeeType == Monthly.</summary>
-    public decimal MonthlyRate { get; private set; }
-
-    /// <summary>Set by OkButton_Click once RestDayWorkPremiumPercentageBox's text has
-    /// passed validation -- see Employee.RestDayWorkPremiumPercentage for what this feeds
-    /// into and the expected format (a decimal like 0.30 for 30%, not the full multiplier).
-    /// Applies to both Pay Types, so it's read regardless of which PayType radio is checked.
-    ///
-    /// Blank stays null here, NOT 0 -- deliberately the opposite of DailyRate and the other
-    /// money fields above, and the same rule the four buffer boxes below already follow:
-    /// null is the meaningful "no employee-level override, inherit
-    /// PayrollPolicy.RestDayPremiumPercentage" state, so folding it to 0 would silently
-    /// pay straight time for a worked Rest Day instead of the company's 130%.</summary>
-    public decimal? RestDayWorkPremiumPercentage { get; private set; }
-
-    /// <summary>Set by OkButton_Click once HolidayPremiumPercentageBox's text has passed
-    /// validation -- see Employee.HolidayPremiumPercentage for what this feeds into and
-    /// the expected format (a decimal like 1.00 for one extra day's pay, not the full
-    /// 2.00 multiplier). Applies to both Pay Types, same as RestDayWorkPremiumPercentage
-    /// above -- Holiday Pay's own day component prices a Daily-rated employee's DailyRate
-    /// or a Monthly-rated employee's effectiveDailyRate equally.
-    ///
-    /// Blank stays null here, NOT 0, same nullable-means-inherit reasoning as
-    /// RestDayWorkPremiumPercentage above: null means "no employee-level override,
-    /// inherit PayrollPolicy.HolidayPremiumPercentage" -- folding it to 0 would silently
-    /// pay zero extra for a worked holiday instead of the company's default one-day
-    /// bonus.</summary>
-    public decimal? HolidayPremiumPercentage { get; private set; }
-
-    /// <summary>Set by OkButton_Click straight off DefaultWorkTimeHoursBox.Value -- see
-    /// Employee.DefaultWorkTimeHours for what this feeds into. Blank stays null here,
-    /// NOT 0 -- same nullable-means-inherit reasoning as RestDayWorkPremiumPercentage
-    /// above: null means "no employee-level suggestion, start from
-    /// AttendanceSettings.DefaultWorkTimeHours instead," so folding it to 0 would
-    /// silently suggest a zero-length shift instead of the company's own default.</summary>
-    public decimal? DefaultWorkTimeHours { get; private set; }
-
-    /// <summary>Set by OkButton_Click once DefaultSssBox's text has passed validation --
-    /// see Employee.DefaultSss for what this feeds into and how it's used. Blank is
-    /// treated as 0, same "never-blocking" convention as DailyRate above.</summary>
-    public decimal DefaultSss { get; private set; }
-
-    /// <summary>See DefaultSss above; see Employee.DefaultPhilHealth for what this feeds into.</summary>
-    public decimal DefaultPhilHealth { get; private set; }
-
-    /// <summary>See DefaultSss above; see Employee.DefaultPagIbig for what this feeds into.</summary>
-    public decimal DefaultPagIbig { get; private set; }
-
-    /// <summary>See DefaultSss above; see Employee.DefaultPremiumPay for what this feeds into.</summary>
-    public decimal DefaultPremiumPay { get; private set; }
-
-    /// <summary>See DefaultSss above; see Employee.DefaultAllowance for what this feeds into.</summary>
-    public decimal DefaultAllowance { get; private set; }
-
-    /// <summary>See DefaultSss above; see Employee.DefaultCashAdvance for what this feeds into.</summary>
-    public decimal DefaultCashAdvance { get; private set; }
-
-    /// <summary>Set by OkButton_Click straight off ClockInBufferBeforeHoursBox -- see
-    /// Employee.ClockInBufferBeforeHours for what this feeds into and who reads it. Unlike
-    /// the money fields above, blank stays null here (not 0) -- null is itself the
-    /// meaningful "no employee-level default, inherit the policy default" value, not a
-    /// placeholder amount, so treating it as 0 would silently turn "no override" into
-    /// "always match immediately, no search window at all." The box itself refuses a
-    /// negative (MinValue 0), so there's nothing left to validate.</summary>
-    public double? ClockInBufferBeforeHours { get; private set; }
-
-    /// <summary>See ClockInBufferBeforeHours above; see Employee.ClockInBufferAfterHours
-    /// for what this feeds into.</summary>
-    public double? ClockInBufferAfterHours { get; private set; }
-
-    /// <summary>See ClockInBufferBeforeHours above; see Employee.ClockOutBufferBeforeHours
-    /// for what this feeds into.</summary>
-    public double? ClockOutBufferBeforeHours { get; private set; }
-
-    /// <summary>See ClockInBufferBeforeHours above; see Employee.ClockOutBufferAfterHours
-    /// for what this feeds into.</summary>
-    public double? ClockOutBufferAfterHours { get; private set; }
-
-    /// <param name="departments">Real departments to offer in the picker.</param>
-    /// <param name="preselectedDepartmentId">Department to preselect when adding a new employee.</param>
-    /// <param name="payrollPolicy">The company's current Payroll settings -- read only for
-    /// RestDayPremiumPercentage/HolidayPremiumPercentage, shown as each override box's own
-    /// watermark so a box left blank visibly shows what it's actually inheriting rather than
-    /// sitting empty with nothing to say so.</param>
-    /// <param name="defaultWorkTimeHours">AttendanceSettings.DefaultWorkTimeHours -- the
-    /// company's current work-time default, shown as DefaultWorkTimeHoursBox's own
-    /// grayed-out placeholder, same reasoning as payrollPolicy above.</param>
-    /// <param name="existing">Pass an existing employee to edit it instead of adding a new one.</param>
-    /// <param name="takenEmployeeIds">Employee IDs already used by OTHER employees -- i.e. excluding
-    /// <paramref name="existing"/>'s own ID when editing. Typing one of these blocks OK, same as the
-    /// existing required-field checks below, so nothing is lost and the user can just pick another ID.</param>
-    public EmployeeDialog(IEnumerable<Department> departments, int? preselectedDepartmentId,
-        PayrollPolicy payrollPolicy, double defaultWorkTimeHours,
-        Employee? existing = null, IReadOnlySet<int>? takenEmployeeIds = null)
+    /// <summary>Shown for an EmployeeEditorViewModel its opener builds (see
+    /// ReactiveViewModel.ShowDialog); the view locator creates it through this
+    /// constructor.</summary>
+    public EmployeeDialog()
     {
         InitializeComponent();
 
-        _takenEmployeeIds = takenEmployeeIds ?? new HashSet<int>();
-        _existing = existing;
-
-        // Watermarks only -- never read back as a real value. Set unconditionally, before
-        // the existing/new-employee branch below, since both cases want the same "show
-        // what blank currently inherits" behavior regardless of whether this employee
-        // already has an override on file.
-        RestDayWorkPremiumPercentageBox.WatermarkText = PercentText(payrollPolicy.RestDayPremiumPercentage);
-        HolidayPremiumPercentageBox.WatermarkText = PercentText(payrollPolicy.HolidayPremiumPercentage);
-        DefaultWorkTimeHoursBox.WatermarkText = defaultWorkTimeHours.ToString("0.##", CultureInfo.CurrentCulture);
-
-        // Deliberately set here, after InitializeComponent, rather than as a XAML
-        // IsChecked="True" default on PayTypeDailyRadio -- see that radio's XAML
-        // comment for why. Fires PayTypeRadio_CheckedChanged, which is what actually
-        // shows DailyRateBox/hides MonthlyRateBox; safe now because every named
-        // element in the window (including MonthlyRateBox, which the handler touches)
-        // is already connected once InitializeComponent has returned.
-        PayTypeDailyRadio.IsChecked = true;
-
-        var departmentList = departments.ToList();
-        DepartmentCombo.ItemsSource = departmentList;
-
-        if (existing is not null)
+        this.WhenActivated((MultipleDisposable d) =>
         {
-            Title = "Edit Employee";
-            EmployeeIdBox.Value = existing.Pin;
-            LastNameBox.Text = existing.LastName;
-            FirstNameBox.Text = existing.FirstName;
-            QualifiesForOvertimeCheck.IsChecked = existing.QualifiesForOvertime;
-            QualifiesForNightDiffCheck.IsChecked = existing.QualifiesForNightDiff;
-            QualifiesForRestDayPayCheck.IsChecked = existing.QualifiesForRestDayPay;
-            QualifiesForPremiumPayCheck.IsChecked = existing.QualifiesForPremiumPay;
-            ApplyOvertimeRatePercentageByDefaultCheck.IsChecked = existing.ApplyOvertimeRatePercentageByDefault;
-            ExemptFromUndertimeDeductionCheck.IsChecked = existing.ExemptFromUndertimeDeduction;
+            // Set by whoever opened the dialog, before showing it.
+            var viewModel = ViewModel!;
+            ViewInteractions.Register(viewModel, this).DisposeWith(d);
 
-            // Setting IsChecked on the selected radio fires PayTypeRadio_CheckedChanged,
-            // which is what actually flips RateLabel/DailyRateBox/MonthlyRateBox's
-            // visibility below -- no separate toggle call needed here.
-            if (existing.EmployeeType == EmployeeType.Monthly) PayTypeMonthlyRadio.IsChecked = true;
-            else PayTypeDailyRadio.IsChecked = true;
+            this.OneWayBind(ViewModel, vm => vm.Title, v => v.Title).DisposeWith(d);
 
-            DailyRateBox.Value = existing.DailyRate;
-            MonthlyRateBox.Value = existing.MonthlyRate;
-            RestDayWorkPremiumPercentageBox.PercentValue = ToPercent(existing.RestDayWorkPremiumPercentage);
-            HolidayPremiumPercentageBox.PercentValue = ToPercent(existing.HolidayPremiumPercentage);
-            DefaultWorkTimeHoursBox.Value = (double?)existing.DefaultWorkTimeHours;
-            DefaultSssBox.Value = existing.DefaultSss;
-            DefaultPhilHealthBox.Value = existing.DefaultPhilHealth;
-            DefaultPagIbigBox.Value = existing.DefaultPagIbig;
-            DefaultPremiumPayBox.Value = existing.DefaultPremiumPay;
-            DefaultAllowanceBox.Value = existing.DefaultAllowance;
-            DefaultCashAdvanceBox.Value = existing.DefaultCashAdvance;
+            // Info
+            this.Bind(ViewModel, vm => vm.Pin, v => v.EmployeeIdBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.LastName, v => v.LastNameBox.Text).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.FirstName, v => v.FirstNameBox.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Departments, v => v.DepartmentCombo.ItemsSource).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.Department, v => v.DepartmentCombo.SelectedItem,
+                department => department!, item => item as Department).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.IsUnassigned, v => v.UnassignedCheck.IsChecked, on => on, check => check == true).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.IsUnassigned, v => v.DepartmentCombo.IsEnabled, unassigned => !unassigned).DisposeWith(d);
 
-            DefaultLeaveIsPaidCheck.IsChecked = existing.DefaultLeaveIsPaid;
+            // Attendance -- blank inherits the company default, shown as the placeholder.
+            this.Bind(ViewModel, vm => vm.DefaultWorkTimeHours, v => v.DefaultWorkTimeHoursBox.Value).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.DefaultWorkTimePlaceholder, v => v.DefaultWorkTimeHoursBox.WatermarkText).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.ClockInBufferBeforeHours, v => v.ClockInBufferBeforeHoursBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.ClockInBufferAfterHours, v => v.ClockInBufferAfterHoursBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.ClockOutBufferBeforeHours, v => v.ClockOutBufferBeforeHoursBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.ClockOutBufferAfterHours, v => v.ClockOutBufferAfterHoursBox.Value).DisposeWith(d);
 
-            // Blank (not "0.00") for whichever of the four are null -- unlike the
-            // money fields above, null here means "no employee-level default," a
-            // real, meaningful state of its own, not just an unset amount, so
-            // it's shown as genuinely empty rather than a formatted zero.
-            ClockInBufferBeforeHoursBox.Value = existing.ClockInBufferBeforeHours;
-            ClockInBufferAfterHoursBox.Value = existing.ClockInBufferAfterHours;
-            ClockOutBufferBeforeHoursBox.Value = existing.ClockOutBufferBeforeHours;
-            ClockOutBufferAfterHoursBox.Value = existing.ClockOutBufferAfterHours;
+            // Payroll -- eligibility
+            this.Bind(ViewModel, vm => vm.QualifiesForOvertime, v => v.QualifiesForOvertimeCheck.IsChecked, on => on, check => check == true).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.ApplyOvertimeRatePercentageByDefault, v => v.ApplyOvertimeRatePercentageByDefaultCheck.IsChecked,
+                on => on, check => check == true).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.QualifiesForNightDiff, v => v.QualifiesForNightDiffCheck.IsChecked, on => on, check => check == true).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.ExemptFromUndertimeDeduction, v => v.ExemptFromUndertimeDeductionCheck.IsChecked,
+                on => on, check => check == true).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.QualifiesForRestDayPay, v => v.QualifiesForRestDayPayCheck.IsChecked, on => on, check => check == true).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.QualifiesForPremiumPay, v => v.QualifiesForPremiumPayCheck.IsChecked, on => on, check => check == true).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DefaultLeaveIsPaid, v => v.DefaultLeaveIsPaidCheck.IsChecked, on => on, check => check == true).DisposeWith(d);
 
-            if (existing.DepartmentId is int existingDeptId)
-            {
-                DepartmentCombo.SelectedItem = departmentList.FirstOrDefault(d => d.Id == existingDeptId);
-            }
-            else
-            {
-                UnassignedCheck.IsChecked = true;
-                DepartmentCombo.IsEnabled = false;
-            }
-        }
-        else
-        {
-            DepartmentCombo.SelectedItem = preselectedDepartmentId is int id
-                ? departmentList.FirstOrDefault(d => d.Id == id)
-                : departmentList.FirstOrDefault();
-            DailyRateBox.Value = 0m;
-            MonthlyRateBox.Value = 0m;
-            // Left null, not 0 -- a brand-new employee inherits the company's Rest
-            // Day premium until someone deliberately types an override (see the
-            // RestDayWorkPremiumPercentage property above). Shows as that company
-            // default, as the box's watermark, rather than sitting empty.
-            RestDayWorkPremiumPercentageBox.PercentValue = null;
-            // Same reasoning, for Holiday Pay's own premium (see the
-            // HolidayPremiumPercentage property above).
-            HolidayPremiumPercentageBox.PercentValue = null;
-            // Same reasoning again -- a brand-new employee starts out suggesting the
-            // company's own default work time (shown grayed out) rather than any
-            // particular number (see DefaultWorkTimeHours property above).
-            DefaultWorkTimeHoursBox.Value = null;
-            DefaultSssBox.Value = 0m;
-            DefaultPhilHealthBox.Value = 0m;
-            DefaultPagIbigBox.Value = 0m;
-            DefaultPremiumPayBox.Value = 0m;
-            DefaultAllowanceBox.Value = 0m;
-            DefaultCashAdvanceBox.Value = 0m;
-        }
+            // Payroll -- pay type and rates. Only the active pay type's rate box shows.
+            this.Bind(ViewModel, vm => vm.IsMonthly, v => v.PayTypeMonthlyRadio.IsChecked, on => on, check => check == true).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.IsMonthly, v => v.PayTypeDailyRadio.IsChecked, monthly => (bool?)!monthly).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RateLabel, v => v.RateLabel.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.IsMonthly, v => v.DailyRateBox.Visibility, monthly => VisibleWhen(!monthly)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.IsMonthly, v => v.MonthlyRateBox.Visibility, VisibleWhen).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DailyRate, v => v.DailyRateBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.MonthlyRate, v => v.MonthlyRateBox.Value).DisposeWith(d);
 
-        // Explicit calls rather than relying solely on the Checked/Unchecked events
-        // above to have fired: for a brand-new employee neither checkbox's IsChecked
-        // ever actually changes value (XAML default and code above both leave it at
-        // the CheckBox's own default false), so no Checked/Unchecked event fires and
-        // RestDayWorkPremiumPercentageBox/PremiumPayFieldPanel would otherwise be left
-        // at whatever Visibility their XAML happens to declare. Calling both here
-        // guarantees the fields' shown/hidden state always matches the checkboxes',
-        // regardless of whether setting IsChecked above actually triggered an event.
-        UpdateRestDayPayFieldVisibility();
-        UpdatePremiumPayFieldVisibility();
+            // Premiums -- each shows only once its eligibility is checked; a hidden value
+            // still saves.
+            this.Bind(ViewModel, vm => vm.RestDayPremiumPercent, v => v.RestDayWorkPremiumPercentageBox.PercentValue).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RestDayPremiumPlaceholder, v => v.RestDayWorkPremiumPercentageBox.WatermarkText).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.QualifiesForRestDayPay, v => v.RestDayWorkPremiumPercentageBox.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.QualifiesForRestDayPay, v => v.RestDayWorkPremiumPercentageLabel.Visibility, VisibleWhen).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.HolidayPremiumPercent, v => v.HolidayPremiumPercentageBox.PercentValue).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.HolidayPremiumPlaceholder, v => v.HolidayPremiumPercentageBox.WatermarkText).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.QualifiesForPremiumPay, v => v.HolidayPremiumPercentageBox.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.QualifiesForPremiumPay, v => v.HolidayPremiumPercentageLabel.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.QualifiesForPremiumPay, v => v.PremiumPayFieldPanel.Visibility, VisibleWhen).DisposeWith(d);
+
+            // Statutory and pay-adjustment defaults
+            this.Bind(ViewModel, vm => vm.DefaultSss, v => v.DefaultSssBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DefaultPhilHealth, v => v.DefaultPhilHealthBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DefaultPagIbig, v => v.DefaultPagIbigBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DefaultPremiumPay, v => v.DefaultPremiumPayBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DefaultAllowance, v => v.DefaultAllowanceBox.Value).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.DefaultCashAdvance, v => v.DefaultCashAdvanceBox.Value).DisposeWith(d);
+
+            this.BindCommand(ViewModel, vm => vm.AcceptCommand, v => v.OkButton).DisposeWith(d);
+            viewModel.AcceptCommand
+                .Where(accepted => accepted)
+                .Subscribe(_ => DialogResult = true)
+                .DisposeWith(d);
+        });
 
         Loaded += (_, _) => EmployeeIdBox.Focus();
     }
 
-    private void UnassignedCheck_CheckedChanged(object sender, RoutedEventArgs e)
-        => DepartmentCombo.IsEnabled = UnassignedCheck.IsChecked != true;
-
-    /// <summary>Hides RestDayWorkPremiumPercentageBox (and its label) whenever
-    /// QualifiesForRestDayPayCheck is unchecked -- leaving a premium-% box visible
-    /// and editable for someone who can't earn the premium at all would be exactly
-    /// the kind of dead-end field this dialog avoids everywhere else. The stored
-    /// value itself is untouched either way; only shown/hidden here, still read and
-    /// validated normally in OkButton_Click regardless of this checkbox's state.</summary>
-    private void QualifiesForRestDayPayCheck_CheckedChanged(object sender, RoutedEventArgs e)
-        => UpdateRestDayPayFieldVisibility();
-
-    private void UpdateRestDayPayFieldVisibility() =>
-        RestDayWorkPremiumPercentageLabel.Visibility = RestDayWorkPremiumPercentageBox.Visibility =
-            QualifiesForRestDayPayCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Same idea as QualifiesForRestDayPayCheck_CheckedChanged above, for the
-    /// "Premium Pay" field in the pay-adjustments row (PremiumPayFieldPanel wraps just
-    /// that field's own label+box, leaving the Allowance/Cash Advance fields alongside
-    /// it untouched) and for HolidayPremiumPercentageBox -- both gated by the same
-    /// checkbox, since both only matter once this employee can actually earn Holiday
-    /// Pay at all: the per-period adjustment amount and the rate a worked holiday's
-    /// day component is priced at.</summary>
-    private void QualifiesForPremiumPayCheck_CheckedChanged(object sender, RoutedEventArgs e)
-        => UpdatePremiumPayFieldVisibility();
-
-    private void UpdatePremiumPayFieldVisibility()
-    {
-        var visibility = QualifiesForPremiumPayCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        PremiumPayFieldPanel.Visibility = visibility;
-        HolidayPremiumPercentageLabel.Visibility = HolidayPremiumPercentageBox.Visibility = visibility;
-    }
-
-    /// <summary>Shared Checked handler for both PayTypeDailyRadio and
-    /// PayTypeMonthlyRadio -- reads current state off EmployeeType rather than off
-    /// whichever radio raised the event, so it's idempotent no matter which one
-    /// fires it. Only touches which rate box is shown/labeled; validation of
-    /// whichever one is active happens later, in OkButton_Click.</summary>
-    private void PayTypeRadio_CheckedChanged(object sender, RoutedEventArgs e)
-    {
-        var isMonthly = EmployeeType == EmployeeType.Monthly;
-        RateLabel.Text = isMonthly ? "Monthly rate" : "Daily rate";
-        DailyRateBox.Visibility = isMonthly ? Visibility.Collapsed : Visibility.Visible;
-        MonthlyRateBox.Visibility = isMonthly ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void OkButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(LastNameBox.Text) || string.IsNullOrWhiteSpace(FirstNameBox.Text))
-        {
-            MessageBox.Show("First and last name are required.", "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        if (UnassignedCheck.IsChecked != true && DepartmentCombo.SelectedItem is null)
-        {
-            MessageBox.Show("Select a department, or check \"Leave unassigned for now\".", "Required",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        // Required now -- see Employee.Pin's own doc comment for why (assigned on the
-        // ZKTeco device before an employee can be added here at all, not something
-        // ScheduleApp generates or lets stand in for "not yet known"). The box only
-        // takes a whole number from 0 up, so blank is the one case left to catch.
-        if (EmployeeIdBox.Value is not long typedId)
-        {
-            MessageBox.Show("Employee ID is required.", "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var employeeId = (int)typedId;
-
-        if (_takenEmployeeIds.Contains(employeeId))
-        {
-            MessageBox.Show($"Employee ID {employeeId} is already assigned to another employee. Choose a different ID.",
-                "Duplicate Employee ID", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        EmployeeId = employeeId;
-
-        // Blank is treated as 0 -- same "never blocks saving" convention as
-        // Employee.DailyRate's own default. All eight of those money fields (DailyRate,
-        // MonthlyRate, the three statutory contribution defaults, and the three
-        // pay-adjustment defaults) are CurrencyTextBoxes, so there's nothing left to
-        // validate here: that control refuses a non-number or a negative at the keystroke,
-        // and MoneyValue below is just "what's in the box, or 0 if it's empty".
-        //
-        // RestDayWorkPremiumPercentageBox and HolidayPremiumPercentageBox do NOT take
-        // that rule -- blank stays null for both, since null is a meaningful "inherit the
-        // company default" rather than an unset amount. See each property's own doc
-        // comment.
-        //
-        // Only the active Pay Type's rate box is read here -- DailyRateBox when
-        // Daily is selected, MonthlyRateBox when Monthly is (see PayTypeRadio_CheckedChanged
-        // for which one is visible). The *other* one is never read, even if it has stale
-        // or invalid text left over from before a Pay Type switch: its stored value is
-        // just carried forward from whatever this employee already had saved (0 for a new
-        // employee), since it's ignored by payroll for this Pay Type anyway -- see
-        // Employee.DailyRate/MonthlyRate's own "ignored ... for the other Pay Type" doc
-        // comments. This also means switching Pay Type back and forth in this dialog
-        // before hitting OK never silently discards a rate the user already typed in.
-        if (EmployeeType == EmployeeType.Monthly)
-        {
-            MonthlyRate = MoneyValue(MonthlyRateBox);
-            DailyRate = _existing?.DailyRate ?? 0m;
-        }
-        else
-        {
-            DailyRate = MoneyValue(DailyRateBox);
-            MonthlyRate = _existing?.MonthlyRate ?? 0m;
-        }
-
-        // Not gated behind Pay Type -- always read regardless of which radio is checked,
-        // since a Daily-rated employee can be called in on a Rest Day too (see
-        // Employee.RestDayWorkPremiumPercentage). Read straight off the box rather than
-        // through MoneyValue: that helper's blank-is-0 rule is exactly wrong for an
-        // override column -- see the property's own doc comment.
-        RestDayWorkPremiumPercentage = ToFraction(RestDayWorkPremiumPercentageBox.PercentValue);
-
-        // Same reasoning as RestDayWorkPremiumPercentage above -- read regardless of
-        // whether QualifiesForPremiumPayCheck is currently checked, so a value typed in
-        // before the checkbox was unchecked survives the round trip instead of being
-        // silently discarded (same "hidden fields still save" rule this dialog follows
-        // everywhere else).
-        HolidayPremiumPercentage = ToFraction(HolidayPremiumPercentageBox.PercentValue);
-
-        // Same reasoning as RestDayWorkPremiumPercentage/HolidayPremiumPercentage
-        // above -- null is itself the meaningful "no employee-level suggestion" state,
-        // not an unset amount, so it's read straight off Value rather than through
-        // MoneyValue's blank-is-0 rule.
-        DefaultWorkTimeHours = DefaultWorkTimeHoursBox.Value is double hours ? Math.Round((decimal)hours, 2) : null;
-
-        DefaultSss = MoneyValue(DefaultSssBox);
-        DefaultPhilHealth = MoneyValue(DefaultPhilHealthBox);
-        DefaultPagIbig = MoneyValue(DefaultPagIbigBox);
-        DefaultPremiumPay = MoneyValue(DefaultPremiumPayBox);
-        DefaultAllowance = MoneyValue(DefaultAllowanceBox);
-        DefaultCashAdvance = MoneyValue(DefaultCashAdvanceBox);
-
-        // Blank stays null -- see ClockInBufferBeforeHours' own doc comment.
-        ClockInBufferBeforeHours = ClockInBufferBeforeHoursBox.Value;
-        ClockInBufferAfterHours = ClockInBufferAfterHoursBox.Value;
-        ClockOutBufferBeforeHours = ClockOutBufferBeforeHoursBox.Value;
-        ClockOutBufferAfterHours = ClockOutBufferAfterHoursBox.Value;
-
-        DialogResult = true;
-    }
-
-    /// <summary>What one of this dialog's money/rate boxes currently holds, with an empty
-    /// box reading as 0 -- the "never blocks saving" rule those boxes share (see the comment
-    /// at this method's call sites).</summary>
-    private static decimal MoneyValue(CurrencyTextBox box) => box.Value ?? 0m;
-
-    /// <summary>A premium fraction (0.30) as the percent PercentTextBox shows (30).</summary>
-    private static double? ToPercent(decimal? fraction) => fraction is decimal f ? (double)(f * 100m) : null;
-
-    /// <summary>A percent typed into a PercentTextBox (30) as the fraction the employee row
-    /// stores (0.30), to the four decimal places its decimal(5,4) column holds.</summary>
-    private static decimal? ToFraction(double? percent) =>
-        percent is double p ? Math.Round((decimal)p / 100m, 4) : null;
-
-    /// <summary>A premium fraction as a percent box's watermark text: 0.3 as "30 %".</summary>
-    private static string PercentText(decimal fraction) =>
-        $"{(fraction * 100m).ToString("0.##", CultureInfo.CurrentCulture)} %";
+    private static Visibility VisibleWhen(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 }

@@ -23,7 +23,7 @@ public class PayrollRunRepository(ScheduleDbContext db) : IPayrollRunRepository
             // Only EmployeeId is meaningful on an incoming row -- Id/PayrollRunId
             // are assigned by EF when this whole graph is saved below, same as
             // the parent's own Id is.
-            Employees = run.Employees.Select(e => new PayrollRunEmployee { EmployeeId = e.EmployeeId }).ToList(),
+            Employees = [.. run.Employees.Select(e => new PayrollRunEmployee { EmployeeId = e.EmployeeId })],
         };
 
         db.PayrollRuns.Add(entry);

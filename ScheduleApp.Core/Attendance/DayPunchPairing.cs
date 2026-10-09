@@ -47,5 +47,5 @@ public class DayPunchPairing
     /// <see cref="DayPunchPairingSlot.SegmentIndex"/> into segments, each with an
     /// In slot and/or an Out slot. Replaced wholesale on every save (see
     /// IDayPunchPairingRepository.SaveAsync).</summary>
-    public List<DayPunchPairingSlot> Slots { get; set; } = new();
+    public List<DayPunchPairingSlot> Slots { get; set; } = [];
 }

@@ -79,7 +79,7 @@ public class SqlDayPunchPairingRepository(ScheduleDbContext db) : IDayPunchPairi
                 Date = pairing.Date,
                 EditedBy = pairing.EditedBy,
                 EditedAt = editedAt,
-                Slots = pairing.Slots.Select(CopySlot).ToList(),
+                Slots = [.. pairing.Slots.Select(CopySlot)],
             });
         }
         else
@@ -92,7 +92,7 @@ public class SqlDayPunchPairingRepository(ScheduleDbContext db) : IDayPunchPairi
             // so a save is all-or-nothing -- a day never ends up with its old
             // slots gone and its new ones not yet written.
             db.DayPunchPairingSlots.RemoveRange(existing.Slots);
-            existing.Slots = pairing.Slots.Select(CopySlot).ToList();
+            existing.Slots = [.. pairing.Slots.Select(CopySlot)];
         }
 
         await db.SaveChangesAsync(cancellationToken);

@@ -32,22 +32,22 @@ public partial class App : Application
     private ServiceProvider? _serviceProvider;
     private IServiceScope? _scope;
 
-    /// <summary>Syncfusion setup that has to happen before App.xaml loads -- see the
-    /// constructor, which runs it first.
+    /// <summary>Syncfusion setup, run first by the constructor so it's in place before
+    /// any window loads.
     ///
     /// The license comes from the SYNCFUSION_LICENSE_KEY environment variable, the same
     /// one TinapayanRMS reads. Without it Syncfusion still works, but shows its unlicensed
     /// banner; that's preferred to refusing to start on a machine nobody has set the
     /// variable up on yet.
     ///
-    /// The theme's settings (the accent and the text sizes) are registered here rather
-    /// than in OnStartup because Themes/FrameworkFallbacks.xaml merges one of the theme's
-    /// own dictionaries at application level, and it reads the registered settings when it
-    /// loads. ApplyThemeAsDefaultStyle makes SfSkinManager theme the native WPF controls
-    /// along with the Syncfusion ones. It stays on: the views still use native controls
-    /// with no Syncfusion counterpart here (PasswordBox, CheckBox, RadioButton, ProgressBar,
-    /// the templated ListBox/ListView lists, ScrollViewer, NumericTextBox and the TextBoxes
-    /// beside it), and they'd fall back to plain WPF chrome without it. ApplicationTheme,
+    /// The theme's settings are the accent and the text sizes. ApplyThemeAsDefaultStyle
+    /// makes SfSkinManager theme the native WPF controls along with the Syncfusion ones, as
+    /// their default style, beneath the app's own (Themes/ControlDefaults.xaml) and any a
+    /// view sets -- so no style needs to be BasedOn a theme style. It stays on: the views
+    /// still use native controls with no Syncfusion counterpart here (PasswordBox, CheckBox,
+    /// RadioButton, ProgressBar, the templated ListBox/ListView lists, ScrollViewer,
+    /// NumericTextBox and the TextBoxes beside it), and they'd fall back to plain WPF chrome
+    /// without it. ApplicationTheme,
     /// set in OnStartup, then applies the theme to every window as it loads.
     ///
     /// Not a static constructor: registering the theme settings loads the theme's
@@ -229,11 +229,12 @@ public partial class App : Application
             }
 
             var provisioningService = new DatabaseProvisioningService();
-            var setupDialog = new DatabaseSetupDialog(
+            var setup = new DatabaseSetupViewModel(
                 provisioningService, prefillConnectionString,
-                mode: DatabaseSetupMode.WindowsAuthOnly, isRequiredFirstRun: true);
+                mode: DatabaseSetupMode.WindowsAuthOnly, isRequiredFirstRun: true, SqlServerDiscovery.DiscoverServers());
+            var setupDialog = new DatabaseSetupDialog { ViewModel = setup };
 
-            if (setupDialog.ShowDialog() != true || setupDialog.ConnectionString is not { } newConnectionString)
+            if (setupDialog.ShowDialog() != true || setup.ConnectionString is not { } newConnectionString)
             {
                 // Cancel, the window's X button, or (defensively) Create succeeding
                 // without ConnectionString somehow set -- no skipping either way (see
@@ -459,12 +460,14 @@ public partial class App : Application
         services.AddSingleton<IConfiguration>(configuration);
         services.AddSingleton<IStatusBarService, StatusBarService>();
         services.AddSingleton<ViewStateStore>();
-        services.AddSingleton<RememberedSignInStore>();
-        services.AddSingleton<NavigationDrawerStateStore>();
+        services.AddSingleton<IRememberedSignInStore, RememberedSignInStore>();
+        services.AddSingleton<INavigationDrawerStateStore, NavigationDrawerStateStore>();
         services.AddSingleton<AppShutdownSignal>();
         services.AddSingleton<SharedConfigWriter>();
-        services.AddSingleton<DatabaseBackupService>();
+        services.AddSingleton<ISharedConfigWriter>(sp => sp.GetRequiredService<SharedConfigWriter>());
+        services.AddSingleton<IDatabaseBackupService, DatabaseBackupService>();
         services.AddSingleton<DatabaseProvisioningService>();
+        services.AddSingleton<IDatabaseProvisioningService>(sp => sp.GetRequiredService<DatabaseProvisioningService>());
         // Set once, by MainWindow.OnAuthSucceeded after SignInPanel/SetupAdminPanel
         // succeeds -- see CurrentUserContext's own doc comment for why Singleton rather
         // than Scoped.
@@ -502,10 +505,10 @@ public partial class App : Application
         //
         // EmployeesPage takes MainViewModel too (same Scoped instance SchedulePage
         // gets) rather than a ViewModel of its own -- see EmployeesPage's own doc
-        // comment for why. PayrollPage takes both MainViewModel (its tree, same
-        // reasoning) and PayrollViewModel (its own payroll-specific state) -- see
-        // PayrollPage's own doc comment.
+        // comment for why. The Payroll tab's ViewModels take only MainViewModel's
+        // app-wide employee selection, as IEmployeeSelection.
         services.AddScoped<MainViewModel>();
+        services.AddScoped<IEmployeeSelection>(sp => sp.GetRequiredService<MainViewModel>());
         services.AddScoped<AttendanceViewModel>();
         // Hands MainViewModel the exact same ManualEntryEditorViewModel instance
         // AttendanceViewModel already built for itself (via `new` in its own
@@ -536,6 +539,7 @@ public partial class App : Application
         services.AddScoped<Views.ManualEntriesPage>();
         services.AddScoped<Views.PushListenerPage>();
         services.AddScoped<Views.PayrollPage>();
+        services.AddTransient<ShellViewModel>();
         services.AddTransient<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -593,9 +597,11 @@ public partial class App : Application
             if (runSetup == MessageBoxResult.Yes)
             {
                 var provisioningService = _scope.ServiceProvider.GetRequiredService<DatabaseProvisioningService>();
-                var setupDialog = new DatabaseSetupDialog(provisioningService, connectionString);
+                var setup = new DatabaseSetupViewModel(provisioningService, connectionString,
+                    knownServers: SqlServerDiscovery.DiscoverServers());
+                var setupDialog = new DatabaseSetupDialog { ViewModel = setup };
 
-                if (setupDialog.ShowDialog() == true && setupDialog.ConnectionString is { } newConnectionString)
+                if (setupDialog.ShowDialog() == true && setup.ConnectionString is { } newConnectionString)
                 {
                     try
                     {

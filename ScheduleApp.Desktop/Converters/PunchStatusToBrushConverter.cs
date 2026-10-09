@@ -36,16 +36,19 @@ public class PunchStatusToBrushConverter : IValueConverter
         ?? Brushes.Black;
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value switch
-        {
-            PunchStatus.Complete => CompleteBrush,
-            PunchStatus.Partial => PartialBrush,
-            PunchStatus.Absent => AbsentBrush,
-            PunchStatus.Leave => LeaveBrush,
-            PunchStatus.OfficialBusiness => OfficialBusinessBrush,
-            PunchStatus.RestDay => RestDayBrush,
-            _ => DefaultBrush,
-        };
+        For(value as PunchStatus?);
+
+    /// <summary>The brush for <paramref name="status"/> -- for a code binding.</summary>
+    public static SolidColorBrush For(PunchStatus? status) => status switch
+    {
+        PunchStatus.Complete => CompleteBrush,
+        PunchStatus.Partial => PartialBrush,
+        PunchStatus.Absent => AbsentBrush,
+        PunchStatus.Leave => LeaveBrush,
+        PunchStatus.OfficialBusiness => OfficialBusinessBrush,
+        PunchStatus.RestDay => RestDayBrush,
+        _ => DefaultBrush,
+    };
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

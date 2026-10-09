@@ -66,7 +66,7 @@ public class PayrollLineItem
 /// gets in ComputedGrossPay -- see PayrollCalculator.Calculate, Pay
 /// Eligibility Flags plan Phase 4.
 /// </summary>
-public class PayrollAdjustmentGroup
+public record PayrollAdjustmentGroup
 {
     public required PayrollAdjustmentType Type { get; init; }
 
@@ -142,7 +142,7 @@ public class PayrollAdjustmentGroup
 /// "finalize and lock" run record in v1); nothing on this class is itself
 /// persisted, only the underlying <see cref="PayrollAdjustment"/> rows are.
 /// </summary>
-public class PayrollResult
+public record PayrollResult
 {
     /// <summary>Employee.Pin -- see PayrollCalculator.Calculate for why this is
     /// required rather than nullable.</summary>

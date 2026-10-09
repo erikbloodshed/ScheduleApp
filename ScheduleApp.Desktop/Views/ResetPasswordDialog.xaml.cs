@@ -1,53 +1,35 @@
+using System.Reactive.Linq;
 using System.Windows;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
+using ScheduleApp.Desktop.Utilities;
 
 namespace ScheduleApp.Desktop.Views;
 
-/// <summary>
-/// Collects a new password for ManageUsersDialog's Reset Password button. Same
-/// no-repository-access shape as AddUserDialog -- ManageUsersDialog does the actual
-/// hashing (see PasswordHasher) and IUserAccountRepository.UpdatePasswordAsync call
-/// after this returns true.
-/// </summary>
-public partial class ResetPasswordDialog : Controls.AppWindow
+/// <summary>Manage Users' Reset Password -- see <see cref="ViewModels.Accounts.ResetPasswordViewModel"/>.</summary>
+public partial class ResetPasswordDialog
 {
-    private const int MinimumPasswordLength = 8;
-
-    public string Password { get; private set; } = string.Empty;
-
-    public ResetPasswordDialog(string targetUsername)
+    public ResetPasswordDialog()
     {
         InitializeComponent();
-        TargetUsernameText.Text = $"New password for \"{targetUsername}\"";
+
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            var viewModel = ViewModel!;
+            TargetUsernameText.Text = viewModel.Prompt;
+            PasswordBoxBinding.Bind(PasswordBoxControl, viewModel.WhenAnyValue(vm => vm.Password), value => viewModel.Password = value)
+                .DisposeWith(d);
+            PasswordBoxBinding.Bind(ConfirmPasswordBoxControl, viewModel.WhenAnyValue(vm => vm.ConfirmPassword),
+                value => viewModel.ConfirmPassword = value).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.ErrorMessage, v => v.ErrorText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.ErrorMessage, v => v.ErrorText.Visibility, AccountViews.VisibleWhenSet).DisposeWith(d);
+
+            this.BindCommand(ViewModel, vm => vm.AcceptCommand, v => v.OkButton).DisposeWith(d);
+            viewModel.AcceptCommand.Where(accepted => accepted).Subscribe(_ => DialogResult = true).DisposeWith(d);
+        });
 
         Loaded += (_, _) => PasswordBoxControl.Focus();
-    }
-
-    private void ResetButton_Click(object sender, RoutedEventArgs e)
-    {
-        var password = PasswordBoxControl.Password;
-        var confirmPassword = ConfirmPasswordBoxControl.Password;
-
-        if (password.Length < MinimumPasswordLength)
-        {
-            ShowError($"Password must be at least {MinimumPasswordLength} characters.");
-            return;
-        }
-
-        if (password != confirmPassword)
-        {
-            ShowError("Password and confirmation don't match.");
-            ConfirmPasswordBoxControl.Clear();
-            ConfirmPasswordBoxControl.Focus();
-            return;
-        }
-
-        Password = password;
-        DialogResult = true;
-    }
-
-    private void ShowError(string message)
-    {
-        ErrorText.Text = message;
-        ErrorText.Visibility = Visibility.Visible;
     }
 }

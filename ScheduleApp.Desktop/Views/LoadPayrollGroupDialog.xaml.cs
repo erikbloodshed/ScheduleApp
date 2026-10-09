@@ -1,9 +1,13 @@
 using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Input;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
 using ScheduleApp.Core.Payroll;
-using ScheduleApp.Data.Repositories;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.Views;
 
@@ -23,49 +27,45 @@ namespace ScheduleApp.Desktop.Views;
 /// convention every other dialog on this tab follows (see PayslipScopeDialog's own doc
 /// comment for why).
 /// </summary>
-public partial class LoadPayrollGroupDialog : Controls.AppWindow
+public partial class LoadPayrollGroupDialog
 {
-    private readonly LoadPayrollGroupViewModel _viewModel;
-
-    /// <summary>The run picked via Load/double-click, once ShowDialog() returns true --
-    /// null if the dialog was cancelled. A plain domain PayrollRun (not
-    /// LoadPayrollGroupRunItem, which exists purely for this dialog's own list-item
-    /// display text -- see that class's own doc comment) since nothing outside this
-    /// dialog has any reason to know that wrapper type exists.</summary>
-    public PayrollRun? SelectedRun { get; private set; }
-
-    public LoadPayrollGroupDialog(IPayrollRunRepository payrollRunRepository)
+    /// <summary>Shown for a LoadPayrollGroupViewModel its opener builds (see
+    /// ReactiveViewModel.ShowDialog); the view locator creates it through this
+    /// constructor.</summary>
+    public LoadPayrollGroupDialog()
     {
         InitializeComponent();
 
-        _viewModel = new LoadPayrollGroupViewModel(payrollRunRepository);
-        DataContext = _viewModel;
-        MessageBoxInteractions.Register(_viewModel, this);
-
-        Loaded += async (_, _) => await _viewModel.LoadRunsCommand.Execute();
-    }
-
-    private void LoadButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_viewModel.SelectedRun is not { } item)
+        this.WhenActivated((MultipleDisposable d) =>
         {
-            MessageBox.Show(
-                "Select a payroll run to load.", "Choose a run", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
+            // Set by whoever opened the dialog, before showing it.
+            var viewModel = ViewModel!;
+            ViewInteractions.Register(viewModel, this).DisposeWith(d);
 
-        SelectedRun = item.Run;
-        DialogResult = true;
+            this.OneWayBind(ViewModel, vm => vm.IsLoading, v => v.LoadingIndicator.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.HasNoRuns, v => v.NoRunsText.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Runs, v => v.RunsListBox.ItemsSource).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.SelectedRun, v => v.RunsListBox.SelectedItem).DisposeWith(d);
+
+            this.BindCommand(ViewModel, vm => vm.DeletePayrollRunCommand, v => v.DeleteButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.ChooseCommand, v => v.LoadButton).DisposeWith(d);
+
+            // Double-clicking a row is the same as picking it and clicking Load.
+            Observable.FromEventPattern<MouseButtonEventHandler, MouseButtonEventArgs>(
+                    handler => RunsListBox.MouseDoubleClick += handler,
+                    handler => RunsListBox.MouseDoubleClick -= handler)
+                .Select(_ => RxVoid.Default)
+                .InvokeCommand(ViewModel, vm => vm.ChooseCommand)
+                .DisposeWith(d);
+
+            viewModel.ChooseCommand
+                .Where(chosen => chosen)
+                .Subscribe(_ => DialogResult = true)
+                .DisposeWith(d);
+
+            viewModel.LoadRunsCommand.Execute().Subscribe().DisposeWith(d);
+        });
     }
 
-    /// <summary>Same "double-click a row to confirm without reaching for the button"
-    /// convenience the PayrollGroupRows/PayrollGroupGrid selection elsewhere on this tab
-    /// don't need (those change a selection, not confirm a whole dialog) -- here it's
-    /// worth it since picking a run and clicking Load are the entire interaction. Only
-    /// fires the same validation LoadButton_Click already has, on whatever row was
-    /// actually under the cursor (SelectedItem binding has already updated by the time
-    /// MouseDoubleClick fires) -- a double-click on empty list space below the last row
-    /// leaves SelectedRun at whatever it was, same as clicking there does.</summary>
-    private void RunsListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e) =>
-        LoadButton_Click(sender, e);
+    private static Visibility VisibleWhen(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
 }

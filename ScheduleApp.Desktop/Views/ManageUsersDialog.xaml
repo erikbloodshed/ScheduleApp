@@ -1,5 +1,7 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.ManageUsersDialog" ShowMinimizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.ManageUsersDialog" ShowMinimizeButton="False"
+        x:TypeArguments="accounts:ManageUsersViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:accounts="clr-namespace:ScheduleApp.Desktop.ViewModels.Accounts"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
@@ -34,8 +36,7 @@
                                AllowDraggingColumns="False"
                                SelectionMode="Single"
                                NavigationMode="Row"
-                               GridLinesVisibility="Horizontal"
-                               SelectionChanged="UsersGrid_SelectionChanged">
+                               GridLinesVisibility="Horizontal">
             <syncfusion:SfDataGrid.Columns>
                 <syncfusion:GridTextColumn MappingName="Username" HeaderText="Account name" ColumnSizer="Star" />
                 <syncfusion:GridTextColumn MappingName="CreatedDisplay" HeaderText="Created" Width="140" />
@@ -49,39 +50,26 @@
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
             <syncfusion:ButtonAdv x:Name="AddButton"
                                   Label="Add User…"
-                                  SizeMode="Normal"
                                   IconTemplate="{StaticResource AddIconTemplate}"
-                                  Margin="0,0,8,0"
-                                  Click="AddButton_Click" />
+                                  Margin="0,0,8,0" />
             <syncfusion:ButtonAdv x:Name="ResetPasswordButton"
                                   Label="Reset Password…"
-                                  SizeMode="Normal"
                                   Tag="&#xE8D7;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  Margin="0,0,8,0"
-                                  IsEnabled="False"
-                                  Click="ResetPasswordButton_Click" />
+                                  Margin="0,0,8,0" />
             <syncfusion:ButtonAdv x:Name="ToggleActiveButton"
-                                  Label="Deactivate"
-                                  SizeMode="Normal"
                                   Tag="&#xE72E;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  Margin="0,0,8,0"
-                                  IsEnabled="False"
-                                  Click="ToggleActiveButton_Click" />
+                                  Margin="0,0,8,0" />
             <syncfusion:ButtonAdv x:Name="DeleteButton"
                                   Label="Delete"
-                                  SizeMode="Normal"
                                   IconTemplate="{StaticResource DeleteIconTemplate}"
-                                  Margin="0,0,8,0"
-                                  IsEnabled="False"
-                                  Click="DeleteButton_Click" />
+                                  Margin="0,0,8,0" />
             <syncfusion:ButtonAdv Label="Close"
-                                  SizeMode="Normal"
                                   IconTemplate="{StaticResource CancelIconTemplate}"
                                   IsDefault="True"
                                   IsCancel="True" />
         </StackPanel>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

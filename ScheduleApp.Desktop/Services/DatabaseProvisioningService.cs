@@ -83,7 +83,7 @@ public sealed record DatabaseProvisioningRequest(
 /// literal instead (see SqlStringLiteral), the same quote-doubling rule
 /// BracketIdentifier already applies to `]` in identifiers, just for `'` in a string.
 /// </summary>
-public class DatabaseProvisioningService
+public class DatabaseProvisioningService : IDatabaseProvisioningService
 {
     /// <summary>SQL Server identifier rules are looser than this in practice (they
     /// allow a lot more than this pattern does), but a brand-new database/login name
@@ -93,7 +93,7 @@ public class DatabaseProvisioningService
     /// brackets, since nothing this pattern allows can contain a `]` to begin with.</summary>
     private static readonly Regex IdentifierPattern = new(@"^[A-Za-z_][A-Za-z0-9_]{0,127}$", RegexOptions.Compiled);
 
-    private static readonly string[] ManagedRoles = { "db_owner", "db_datareader", "db_datawriter" };
+    private static readonly string[] ManagedRoles = ["db_owner", "db_datareader", "db_datawriter"];
 
     /// <summary>
     /// Runs the whole provisioning flow against <paramref name="request"/>.ServerName:
@@ -319,4 +319,12 @@ public class DatabaseProvisioningService
     /// bracket-quote -- this doesn't need <paramref name="value"/> to be restricted to
     /// any particular character set first; it's correct for arbitrary input.</summary>
     private static string SqlStringLiteral(string value) => $"'{value.Replace("'", "''")}'";
+}
+
+/// <summary>What Database Setup asks of <see cref="DatabaseProvisioningService"/>.</summary>
+public interface IDatabaseProvisioningService
+{
+    /// <summary>Creates (or reuses) the database and login, and returns a connection string for
+    /// that login.</summary>
+    Task<string> ProvisionAsync(DatabaseProvisioningRequest request, CancellationToken cancellationToken = default);
 }

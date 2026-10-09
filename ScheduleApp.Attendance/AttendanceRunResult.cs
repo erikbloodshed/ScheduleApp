@@ -9,7 +9,7 @@ namespace ScheduleApp.Attendance;
 /// the summary export and the logs export in AttendanceExcelExporter can be
 /// driven from one result.
 /// </summary>
-public class AttendanceRunResult
+public record AttendanceRunResult
 {
     public List<AttendanceSummary> Summaries { get; init; } = [];
     public List<AttendanceLog> RawLogs { get; init; } = [];

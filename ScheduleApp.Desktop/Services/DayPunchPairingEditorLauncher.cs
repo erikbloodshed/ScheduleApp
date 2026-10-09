@@ -1,11 +1,11 @@
-﻿using System.Windows;
+﻿using ReactiveUI;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Data.Repositories;
+using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
-using ScheduleApp.Desktop.Views;
 
 namespace ScheduleApp.Desktop.Services;
 
@@ -34,7 +34,8 @@ public interface IDayPunchPairingEditorLauncher
     /// AttendanceSummaryRow.Status). It decides whether a non-Flexible day opens
     /// editable (Partial/Absent -- worth fixing) or read-only; pass null when it
     /// isn't known, which is treated as read-only for a non-Flexible day.</summary>
-    Task<bool> OpenAsync(Employee employee, DateOnly date, PunchStatus? attendanceStatus, CancellationToken cancellationToken = default);
+    Task<bool> OpenAsync(Employee employee, DateOnly date, PunchStatus? attendanceStatus,
+        Interaction<ReactiveViewModel, bool> showDialog, CancellationToken cancellationToken = default);
 }
 
 public sealed class DayPunchPairingEditorLauncher(
@@ -54,7 +55,7 @@ public sealed class DayPunchPairingEditorLauncher(
 
     public async Task<bool> OpenAsync(
         Employee employee, DateOnly date, PunchStatus? attendanceStatus,
-        CancellationToken cancellationToken = default)
+        Interaction<ReactiveViewModel, bool> showDialog, CancellationToken cancellationToken = default)
     {
         var entries = await scheduleRepository.GetScheduleEntriesForPeriodAsync(
             date, date, new HashSet<int> { employee.Pin }, cancellationToken);
@@ -126,9 +127,7 @@ public sealed class DayPunchPairingEditorLauncher(
         var editor = new DayPunchPairingEditorViewModel(
             employee, schedule, dayPunches, candidateWindows, new PunchWindow(searchStart, searchEnd),
             _policy, existing, manualAttendanceLogRepository, attendanceStatus);
-        var dialog = new DayPunchPairingDialog(editor) { Owner = Application.Current.MainWindow };
-
-        var dialogResult = dialog.ShowDialog();
+        var accepted = await showDialog.Handle(editor);
 
         // Adding, correcting, or deleting a manual punch inside the editor -- which
         // every mode except the read-only viewer allows -- writes to
@@ -140,10 +139,10 @@ public sealed class DayPunchPairingEditorLauncher(
         if (editor.ManualPunchesChanged)
             dataVersion.BumpManualLogs();
 
-        if (dialogResult != true)
+        if (!accepted)
             return editor.ManualPunchesChanged;
 
-        if (dialog.Outcome == DayPunchPairingDialogOutcome.ResetToAutomatic)
+        if (editor.Outcome == DayPunchPairingOutcome.ResetToAutomatic)
         {
             // Only reachable on a Flexible day -- the dialog shows "Reset to
             // Automatic" only when a pairing is actually read back (see

@@ -1,5 +1,8 @@
-﻿<UserControl x:Class="ScheduleApp.Desktop.Controls.DayPunchPairingEditor"
+﻿<rxui:ReactiveUserControl x:Class="ScheduleApp.Desktop.Controls.DayPunchPairingEditor"
+             x:TypeArguments="vm:DayPunchPairingEditorViewModel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:rxui="http://reactiveui.net"
+             xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -7,21 +10,17 @@
              xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels.Attendance"
              xmlns:conv="clr-namespace:ScheduleApp.Desktop.Converters"
              mc:Ignorable="d"
-             d:DataContext="{d:DesignInstance Type=vm:DayPunchPairingEditorViewModel}"
              d:DesignWidth="620"
              d:DesignHeight="560">
     <UserControl.Resources>
-        <conv:PunchStatusToBrushConverter x:Key="StatusBrush" />
         <conv:NullToVisibilityConverter x:Key="NullToVisible" />
         <conv:NotNullToVisibilityConverter x:Key="NotNullToVisible" />
-        <BooleanToVisibilityConverter x:Key="BoolToVisible" />
-        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisible" />
 
         <!-- The "missing punch" placeholder shown in an empty slot: the visible
              shape of a Partial day. Its tooltip invites the add gesture, so it is
              dropped in a read-only "View Punches…" open where there is none. The
              DataContext here is a DayPunchPairingRowViewModel, so IsReadOnly is
-             reached via the editor UserControl. -->
+             reached through the editor's own ViewModel. -->
         <Style x:Key="MissingPunchPlaceholderStyle" TargetType="TextBlock">
             <Setter Property="Text" Value="missing punch" />
             <Setter Property="Foreground" Value="{DynamicResource TertiaryForegroundBrush}" />
@@ -31,7 +30,7 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="ToolTip" Value="Double-click or right-click to add a manual punch." />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding DataContext.IsReadOnly, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                <DataTrigger Binding="{Binding ViewModel.IsReadOnly, RelativeSource={RelativeSource AncestorType=controls:DayPunchPairingEditor}}" Value="True">
                     <Setter Property="ToolTip" Value="{x:Null}" />
                 </DataTrigger>
             </Style.Triggers>
@@ -203,8 +202,8 @@
     <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,*,Auto">
         <!-- Who / when -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="{Binding EmployeeName}" FontWeight="Bold" FontSize="16" />
-            <TextBlock Text="{Binding DateText}" Style="{StaticResource CaptionTextStyle}" Margin="0,2,0,0" />
+            <TextBlock x:Name="EmployeeNameText" FontWeight="Bold" FontSize="16" />
+            <TextBlock x:Name="DateText" Style="{StaticResource CaptionTextStyle}" Margin="0,2,0,0" />
         </StackPanel>
 
         <!-- Column headers, on the same two fixed tracks the rows use. -->
@@ -217,20 +216,18 @@
 
         <!-- Every button here mutates the grid, so the whole strip is gone in a
              read-only "View Punches…" open (see DayPunchPairingEditorViewModel.IsReadOnly). -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8"
-                    Visibility="{Binding IsReadOnly, Converter={StaticResource InverseBoolToVisible}}">
-            <syncfusion:ButtonAdv Label="Add Segment" IconTemplate="{StaticResource AddIconTemplate}" SizeMode="Normal"
-                                  Command="{Binding AddRowCommand}" />
-            <syncfusion:ButtonAdv Label="Remove Empty" IconTemplate="{StaticResource DeleteIconTemplate}" SizeMode="Normal"
-                                  Command="{Binding RemoveEmptySegmentsCommand}" Margin="8,0,0,0" />
-            <syncfusion:ButtonAdv Label="Undo" Tag="&#xE7A7;" IconTemplate="{StaticResource TagGlyphIconTemplate}" SizeMode="Normal"
-                                  Command="{Binding UndoCommand}" Margin="8,0,0,0" />
+        <StackPanel x:Name="Toolbar" Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+            <syncfusion:ButtonAdv x:Name="AddSegmentButton" Label="Add Segment" IconTemplate="{StaticResource AddIconTemplate}" />
+            <syncfusion:ButtonAdv x:Name="RemoveEmptyButton" Label="Remove Empty" IconTemplate="{StaticResource DeleteIconTemplate}"
+                                  Margin="8,0,0,0" />
+            <syncfusion:ButtonAdv x:Name="UndoButton" Label="Undo" Tag="&#xE7A7;" IconTemplate="{StaticResource TagGlyphIconTemplate}"
+                                  Margin="8,0,0,0" />
             <TextBlock Text="Drag onto a slot to insert · double-click an empty slot to add, or a manual punch to edit"
                        Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="14,0,0,0" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Rows}"
+            <ItemsControl x:Name="RowsList"
                           ItemTemplate="{StaticResource PairingRowTemplate}" />
         </ScrollViewer>
 
@@ -244,45 +241,41 @@
         <Border Grid.Row="4" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1"
                 CornerRadius="6" Padding="12,9" Margin="0,10,0,0">
           <Grid>
-            <StackPanel Visibility="{Binding PairingAffectsResult, Converter={StaticResource InverseBoolToVisible}}">
-                <TextBlock Text="{Binding PunchCountText}" FontWeight="SemiBold" FontSize="14" />
-                <TextBlock Text="{Binding PairingNote}"
+            <StackPanel x:Name="PunchCountFooter">
+                <TextBlock x:Name="PunchCountText" FontWeight="SemiBold" FontSize="14" />
+                <TextBlock x:Name="PairingNoteText"
                            FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"
                            Foreground="{DynamicResource MutedForegroundBrush}" />
             </StackPanel>
 
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto"
-                  Visibility="{Binding PairingAffectsResult, Converter={StaticResource BoolToVisible}}">
+            <Grid x:Name="PreviewFooter" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
                 <StackPanel Grid.Column="0" Margin="0,0,22,0">
                     <TextBlock Text="Worked" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
-                    <TextBlock Text="{Binding WorkedText}" FontWeight="SemiBold" FontSize="14"
+                    <TextBlock x:Name="WorkedText" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="0,0,22,0">
                     <TextBlock Text="Required" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
-                    <TextBlock Text="{Binding RequiredText}" FontWeight="SemiBold" FontSize="14"
+                    <TextBlock x:Name="RequiredText" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock Text="{Binding RemainderLabel}" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
-                    <TextBlock Text="{Binding RemainderText}" FontWeight="SemiBold" FontSize="14"
+                    <TextBlock x:Name="RemainderLabel" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
+                    <TextBlock x:Name="RemainderText" FontWeight="SemiBold" FontSize="14"
                                FontFamily="Consolas, Segoe UI" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Ellipse Width="10" Height="10" VerticalAlignment="Center"
-                                 Fill="{Binding PreviewStatus, Converter={StaticResource StatusBrush}}" />
-                        <TextBlock Text="{Binding PreviewStatusText}" Margin="7,0,0,0"
-                                   FontWeight="Bold" FontSize="14"
-                                   Foreground="{Binding PreviewStatus, Converter={StaticResource StatusBrush}}" />
+                        <Ellipse x:Name="StatusDot" Width="10" Height="10" VerticalAlignment="Center" />
+                        <TextBlock x:Name="PreviewStatusText" Margin="7,0,0,0"
+                                   FontWeight="Bold" FontSize="14" />
                     </StackPanel>
-                    <TextBlock Text="{Binding UnpairedCount, StringFormat={}{0} punch still unpaired}"
-                               FontSize="11" Foreground="{DynamicResource WarningForegroundBrush}" HorizontalAlignment="Right" Margin="0,2,0,0"
-                               Visibility="{Binding HasUnpairedPunches, Converter={StaticResource BoolToVisible}}" />
+                    <TextBlock x:Name="UnpairedText"
+                               FontSize="11" Foreground="{DynamicResource WarningForegroundBrush}" HorizontalAlignment="Right" Margin="0,2,0,0" />
                 </StackPanel>
             </Grid>
           </Grid>
         </Border>
     </Grid>
-</UserControl>
+</rxui:ReactiveUserControl>

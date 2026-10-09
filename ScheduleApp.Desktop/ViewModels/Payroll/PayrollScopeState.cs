@@ -1,5 +1,6 @@
 using ScheduleApp.Core.Models;
 using ReactiveUI;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Payroll;
 
@@ -31,54 +32,28 @@ namespace ScheduleApp.Desktop.ViewModels.Payroll;
 /// four live in shared state at all rather than being split apart along with everything
 /// else; see the refactor plan's own "Target shape" section for the fuller reasoning.
 /// </summary>
-public class PayrollScopeState : ReactiveObject
+/// <remarks>The period is assigned directly to the backing fields here, bypassing
+/// the property setters below, so constructing this with today's
+/// default half-month range doesn't raise a PropertyChanged that nothing is
+/// subscribed to catch yet -- the same reason PayrollViewModel's own constructor used
+/// to assign its periodStart/periodEnd backing fields directly, before those fields
+/// lived here (see that constructor's own comment for the full "avoid a stale-name
+/// flicker on first load" story this sidesteps).</remarks>
+public partial class PayrollScopeState(DateTime periodStart, DateTime periodEnd) : ReactiveObject
 {
-    /// <summary>The period is assigned directly to the backing fields here, bypassing
-    /// the property setters below, so constructing this with today's
-    /// default half-month range doesn't raise a PropertyChanged that nothing is
-    /// subscribed to catch yet -- the same reason PayrollViewModel's own constructor used
-    /// to assign its periodStart/periodEnd backing fields directly, before those fields
-    /// lived here (see that constructor's own comment for the full "avoid a stale-name
-    /// flicker on first load" story this sidesteps).</summary>
-    public PayrollScopeState(DateTime periodStart, DateTime periodEnd)
-    {
-        _periodStart = periodStart;
-        _periodEnd = periodEnd;
-    }
+    [Reactive]
+    public partial DateTime PeriodStart { get; set; } = periodStart;
 
-    public DateTime PeriodStart
-    {
-        get => _periodStart;
-        set => this.RaiseAndSetIfChanged(ref _periodStart, value);
-    }
-
-    private DateTime _periodStart;
-
-    public DateTime PeriodEnd
-    {
-        get => _periodEnd;
-        set => this.RaiseAndSetIfChanged(ref _periodEnd, value);
-    }
-
-    private DateTime _periodEnd;
+    [Reactive]
+    public partial DateTime PeriodEnd { get; set; } = periodEnd;
 
     /// <summary>See PayrollViewModel.BatchScopeEmployees' own doc comment (still the
     /// facade every reaction and every XAML binding goes through) for what this actually
     /// represents and who writes it -- this field is only the storage.</summary>
-    public IReadOnlyList<Employee> BatchScopeEmployees
-    {
-        get => _batchScopeEmployees;
-        set => this.RaiseAndSetIfChanged(ref _batchScopeEmployees, value);
-    }
-
-    private IReadOnlyList<Employee> _batchScopeEmployees = [];
+    [Reactive]
+    public partial IReadOnlyList<Employee> BatchScopeEmployees { get; set; } = [];
 
     /// <summary>See PayrollViewModel.ActivePayrollRunId's own doc comment.</summary>
-    public int? ActivePayrollRunId
-    {
-        get => _activePayrollRunId;
-        set => this.RaiseAndSetIfChanged(ref _activePayrollRunId, value);
-    }
-
-    private int? _activePayrollRunId;
+    [Reactive]
+    public partial int? ActivePayrollRunId { get; set; }
 }

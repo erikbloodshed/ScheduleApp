@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Data.Repositories;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -20,19 +22,25 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// PayslipScopeViewModel/PayrollWizardViewModel already follow (see either class's own doc
 /// comment) -- so there's no leftover Runs/SelectedRun state between opens, and no
 /// IStatusBarService reference to thread through (that's the host page's, not this
-/// dialog's -- see DeletePayrollRunAsync's own doc comment for why this uses MessageBox
-/// instead, same as LoadPayrollGroupDialog.LoadButton_Click's own validation message).
+/// dialog's -- see DeletePayrollRunAsync's own doc comment for why this asks and reports
+/// through Confirm/Notify instead, same as ChooseAsync's own "pick one first" message).
 /// </summary>
-public class LoadPayrollGroupViewModel : ReactiveViewModel
+public partial class LoadPayrollGroupViewModel : ReactiveViewModel
 {
     private readonly IPayrollRunRepository _payrollRunRepository;
+
+    private readonly IObservable<bool> _canDeletePayrollRun;
 
     public LoadPayrollGroupViewModel(IPayrollRunRepository payrollRunRepository)
     {
         _payrollRunRepository = payrollRunRepository;
 
-        LoadRunsCommand = ReactiveCommand.CreateFromTask(async () => await LoadRunsAsync());
-        DeletePayrollRunCommand = ReactiveCommand.CreateFromTask(async () => await DeletePayrollRunAsync(), CanExecuteFrom(CanDeleteRun));
+        _hasNoRunsHelper = this.WhenAnyValue(x => x.IsLoading, x => x.Runs.Count,
+                (isLoading, count) => !isLoading && count == 0)
+            .ToProperty(this, x => x.HasNoRuns);
+
+        _canDeletePayrollRun = this.WhenAnyValue(x => x.SelectedRun, x => x.IsLoading,
+            (selected, isLoading) => selected is not null && !isLoading);
     }
 
     /// <summary>Every saved run, newest first -- a straight pass-through of
@@ -40,63 +48,30 @@ public class LoadPayrollGroupViewModel : ReactiveViewModel
     /// not re-sorted here, just wrapped one-for-one in <see cref="LoadPayrollGroupRunItem"/>
     /// so the list's own display text (EmployeeCountText's pluralization) doesn't need a
     /// converter. What LoadPayrollGroupDialog's ListBox binds to.</summary>
-    public ObservableCollection<LoadPayrollGroupRunItem> Runs { get; } = new();
+    public ObservableCollection<LoadPayrollGroupRunItem> Runs { get; } = [];
 
-    public LoadPayrollGroupRunItem? SelectedRun
-    {
-        get => _selectedRun;
-        set
-        {
-            if (EqualityComparer<LoadPayrollGroupRunItem?>.Default.Equals(_selectedRun, value)) return;
-            this.RaisePropertyChanging();
-            _selectedRun = value;
-            OnSelectedRunChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
+    /// <summary>The picked row. Delete only makes sense once something's picked; Choose
+    /// says so instead of closing on nothing (see ChooseAsync).</summary>
+    [Reactive]
+    public partial LoadPayrollGroupRunItem? SelectedRun { get; set; }
 
-    private LoadPayrollGroupRunItem? _selectedRun;
-
-    /// <summary>Delete button only makes sense once something's picked -- same
-    /// "nothing selected, nothing to act on" gating LoadButton_Click already enforces by
-    /// hand (via its own MessageBox warning) for Load; this one's a RelayCommand
-    /// CanExecute instead since there's no separate button-click validation path to
-    /// reuse the way Load's has.</summary>
-    private void OnSelectedRunChanged(LoadPayrollGroupRunItem? value) =>
-        RequeryCanExecute();
-
-    public bool IsLoading
-    {
-        get => _isLoading;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isLoading, value)) return;
-            this.RaisePropertyChanging();
-            _isLoading = value;
-            OnIsLoadingChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private bool _isLoading;
+    /// <summary>True while ListAsync/DeleteAsync is touching the shared ScheduleDbContext --
+    /// gates Delete for the same "don't let a second write start mid-read" reasoning
+    /// PayrollViewModel's own _busy-gated commands follow, just via this dialog's single
+    /// flag instead of a shared AttendanceBusyState: a single-purpose picker dialog has no
+    /// other work it would need to coordinate with.</summary>
+    [Reactive]
+    public partial bool IsLoading { get; private set; }
 
     /// <summary>Shown in place of the list while it's empty and nothing's loading --
     /// distinguishes "nothing's been saved yet" from a list that's merely still loading
     /// (IsLoading covers that state on its own, via the same progress-bar pattern
     /// PayrollViewModel.IsBusy already uses elsewhere on this tab).</summary>
-    public bool HasNoRuns => !IsLoading && Runs.Count == 0;
+    [ObservableAsProperty]
+    public partial bool HasNoRuns { get; }
 
-    private void OnIsLoadingChanged(bool value)
-    {
-        this.RaisePropertyChanged(nameof(HasNoRuns));
-
-        // Same "don't let a second write start while ListAsync/DeleteAsync is already
-        // touching the shared ScheduleDbContext" reasoning PayrollViewModel's own
-        // _busy-gated commands follow, just via this dialog's single IsLoading flag
-        // instead of a shared AttendanceBusyState -- a single-purpose picker dialog has
-        // no other work IsLoading would need to coordinate with.
-        RequeryCanExecute();
-    }
+    /// <summary>What Choose settled on -- null until it succeeds.</summary>
+    public PayrollRun? ChosenRun { get; private set; }
 
     /// <summary>Run once, from LoadPayrollGroupDialog's own Loaded handler -- same "load on
     /// open, not lazily" convention PayslipScopeViewModel.LoadEmployeeTreeCommand and
@@ -104,8 +79,7 @@ public class LoadPayrollGroupViewModel : ReactiveViewModel
     /// re-run by DeletePayrollRunAsync below after a successful delete, so the list (and
     /// SelectedRun/HasNoRuns) reflect what's actually left on disk rather than the row
     /// just being spliced out of Runs by hand.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> LoadRunsCommand { get; }
-
+    [ReactiveCommand]
     private async Task LoadRunsAsync()
     {
         IsLoading = true;
@@ -119,10 +93,8 @@ public class LoadPayrollGroupViewModel : ReactiveViewModel
         }
         finally
         {
-            // Flips HasNoRuns' own notification via OnIsLoadingChanged below -- while
-            // IsLoading was still true above, HasNoRuns was already forced false
-            // regardless of Runs.Count, so there's nothing worth notifying until this
-            // actually lands.
+            // HasNoRuns stays false while IsLoading is true, whatever Runs.Count does in
+            // between, so it only settles once this lands.
             IsLoading = false;
         }
     }
@@ -131,13 +103,13 @@ public class LoadPayrollGroupViewModel : ReactiveViewModel
     /// SelectedRun via IPayrollRunRepository.DeleteAsync (see that method's own doc comment:
     /// membership rows cascade with it, but the underlying PayrollAdjustment rows for its
     /// employees/period are untouched -- this only forgets the saved grouping, not any
-    /// payroll data). Same Yes/No MessageBox confirmation as
-    /// PayrollViewModel.DeleteAdjustmentAsync/ManualEntryEditorViewModel.
-    /// DeleteManualEntryAsync -- there's no status bar to show a caution/success message on
-    /// from inside a modal dialog (see StatusBarNotificationExtensions' own doc comment for
-    /// why that's a MainWindow-level concept this dialog was never given a reference to),
-    /// so both the confirmation and any failure are plain MessageBox calls, matching
-    /// LoadButton_Click's own validation warning right below this in the dialog.
+    /// payroll data). Same Yes/No confirmation as PayrollViewModel.DeleteAdjustmentAsync/
+    /// ManualEntryEditorViewModel.DeleteManualEntryAsync -- there's no status bar to show a
+    /// caution/success message on from inside a modal dialog (see
+    /// StatusBarNotificationExtensions' own doc comment for why that's a MainWindow-level
+    /// concept this dialog was never given a reference to), so both the confirmation and any
+    /// failure go through Confirm/Notify, matching ChooseAsync's own "pick one first"
+    /// message.
     ///
     /// Deliberately does not close the dialog -- unlike Load (a whole-dialog confirm), this
     /// is a one-off action against a single row; the person may want to delete several, or
@@ -150,9 +122,16 @@ public class LoadPayrollGroupViewModel : ReactiveViewModel
     /// (PayrollViewModel.ActivePayrollRunId), deleting it here has no effect on that
     /// tab's already-loaded period/checklist/figures -- see ActivePayrollRunId's own doc
     /// comment: it's write-only, set once a run is saved/loaded and never read back to
-    /// re-fetch anything, so there's nothing on PayrollPage for this to invalidate.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> DeletePayrollRunCommand { get; }
-
+    /// re-fetch anything, so there's nothing on PayrollPage for this to invalidate.
+    ///
+    /// Enabled once a run is picked and nothing's loading -- the same !IsLoading guard as
+    /// PayrollViewModel's own busy-gated commands follow against _busy.IsRunning, for the
+    /// same reason: LoadRunsAsync (whether from the dialog opening or this method's own
+    /// post-delete reload) reads through the same shared, app-lifetime-scoped
+    /// ScheduleDbContext DeleteAsync itself writes through, so letting a second click fire
+    /// mid-load/mid-delete would risk the same race _busy exists to prevent over on
+    /// PayrollPage.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canDeletePayrollRun))]
     private async Task DeletePayrollRunAsync()
     {
         if (SelectedRun is not { } item) return;
@@ -178,18 +157,26 @@ public class LoadPayrollGroupViewModel : ReactiveViewModel
         await LoadRunsAsync();
     }
 
-    /// <summary>Same !IsLoading-only guard as PayrollViewModel's own busy-gated commands
-    /// follow against _busy.IsRunning, for the same reason -- LoadRunsAsync (whether from
-    /// the initial Loaded handler or this method's own post-delete reload) reads through
-    /// the same shared, app-lifetime-scoped ScheduleDbContext DeleteAsync itself writes
-    /// through, so letting a second click fire mid-load/mid-delete would risk the same race
-    /// _busy exists to prevent over on PayrollPage.</summary>
-    private bool CanDeleteRun() => SelectedRun is not null && !IsLoading;
+    /// <summary>The dialog's Load button, and double-clicking a row: settles ChosenRun on the
+    /// picked run and reports true, which closes the dialog. With nothing picked it says so
+    /// (Notify) and reports false, leaving the dialog open.</summary>
+    [ReactiveCommand]
+    private async Task<bool> ChooseAsync()
+    {
+        if (SelectedRun is not { } item)
+        {
+            await NotifyAsync("Select a payroll run to load.", "Choose a run", NoticeKind.Warning);
+            return false;
+        }
+
+        ChosenRun = item.Run;
+        return true;
+    }
 }
 
 /// <summary>One row in LoadPayrollGroupDialog's list -- a thin display wrapper around a
 /// saved PayrollRun, not a copy of its data, so nothing here can drift out of sync with
-/// what LoadPayrollGroupDialog.SelectedRun eventually reads. Exists purely so
+/// what LoadPayrollGroupViewModel.ChosenRun eventually hands back. Exists purely so
 /// EmployeeCountText can apply the same "1 employee" vs "N employees" pluralization
 /// PayslipScopeViewModel.SelectionScopeText/PayrollWizardViewModel.SelectionScopeText
 /// already use for their own employee counts, without a value converter for what's a

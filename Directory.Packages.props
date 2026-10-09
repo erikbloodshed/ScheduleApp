@@ -37,11 +37,11 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <!-- ScheduleApp.Excel -->
-    <PackageVersion Include="EPPlus" Version="8.7.0" />
+    <PackageVersion Include="EPPlus" Version="8.7.1" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.12" />
     <!-- ScheduleApp.Payroll.Pdf -->
-    <PackageVersion Include="QuestPDF" Version="2026.8.0" />
-    <PackageVersion Include="SkiaSharp" Version="4.152.0" />
+    <PackageVersion Include="QuestPDF" Version="2026.9.1" />
+    <PackageVersion Include="SkiaSharp" Version="4.153.1" />
     <!-- ScheduleApp.PushListener -->
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
@@ -50,8 +50,10 @@
     <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <PackageVersion Include="Serilog.Sinks.EventLog" Version="4.0.0" />
     <!-- ScheduleApp.Attendance.Tests, ScheduleApp.Payroll.Tests -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <!-- ScheduleApp.Desktop.Tests: stand-ins for the repositories and services a ViewModel takes -->
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
   </ItemGroup>
 </Project>

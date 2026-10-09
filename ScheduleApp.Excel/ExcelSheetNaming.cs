@@ -10,7 +10,7 @@ namespace ScheduleApp.Excel;
 /// </summary>
 internal static class ExcelSheetNaming
 {
-    private static readonly char[] InvalidSheetNameChars = { '\\', '/', '?', '*', '[', ']', ':' };
+    private static readonly char[] InvalidSheetNameChars = ['\\', '/', '?', '*', '[', ']', ':'];
 
     public static string SanitizeSheetName(string name)
     {

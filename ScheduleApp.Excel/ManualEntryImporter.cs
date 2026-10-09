@@ -62,10 +62,10 @@ public static class ManualEntryImporter
             .ToList();
         if (missingRequired.Count > 0)
         {
-            throw new ManualEntryImportException(new[]
-            {
+            throw new ManualEntryImportException(
+            [
                 $"The workbook is missing required column(s): {string.Join(", ", missingRequired)}."
-            });
+            ]);
         }
 
         var idCol = headerMap[IdHeader];

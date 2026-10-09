@@ -1,36 +1,39 @@
-using System.Windows.Controls;
+using ReactiveUI;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
 
 namespace ScheduleApp.Desktop.Views;
 
 /// <summary>One of the three pages the "Attendance" drawer item's submenu navigates
 /// between (see MainWindow.xaml) -- Summary, Punch Records (PunchRecordsPage), and
-/// Manual Entries (ManualEntriesPage), replacing the old single AttendancePage's
-/// internal TabControl. All three take the exact same DI-Scoped AttendanceViewModel
-/// instance (see App.xaml.cs's own comment on that registration -- Scoped behaves like
-/// a per-session Singleton here, since the app only ever creates one IServiceScope), so
-/// navigating between them keeps whatever was already loaded rather than re-querying
-/// the database, the same as switching TabItems used to.</summary>
-public partial class AttendanceSummaryPage : Page, INavigationAware
+/// Manual Entries (ManualEntriesPage). All three take the exact same DI-Scoped
+/// AttendanceViewModel instance (Scoped behaves like a per-session Singleton here, since the
+/// app only ever creates one IServiceScope), so navigating between them keeps whatever was
+/// already loaded rather than re-querying the database.</summary>
+public partial class AttendanceSummaryPage : INavigationAware
 {
-    private readonly AttendanceViewModel _viewModel;
-
     public AttendanceSummaryPage(AttendanceViewModel viewModel)
     {
-        _viewModel = viewModel;
-        DataContext = viewModel;
         InitializeComponent();
+        ViewModel = viewModel;
+        SummaryView.ViewModel = viewModel;
+
+        // The punch lists, the export's save picker, Add Manual Entry/Edit Punches from a row.
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            ViewInteractions.Register(viewModel.Report, this).DisposeWith(d);
+            ViewInteractions.Register(viewModel.ManualEntryEditor, this).DisposeWith(d);
+        });
     }
 
-    // EnsureInitializedAsync is idempotent (see its own doc comment) -- whichever of the
-    // three Attendance pages the person navigates to first is the one that actually pays
-    // for the employee-tree load; the other two's own calls are then no-ops. Awaited here
-    // regardless, so ActivateSummaryTab below never runs before the tab-activation gate
-    // it depends on is open.
+    // EnsureInitializedAsync is idempotent -- whichever of the three Attendance pages is
+    // visited first pays for the employee-tree load. Awaited regardless, so ActivateSummaryTab
+    // never runs before the tab-activation gate it depends on is open.
     public async Task OnNavigatedToAsync()
     {
-        await _viewModel.EnsureInitializedAsync();
-        _viewModel.ActivateSummaryTab();
+        await ViewModel!.EnsureInitializedAsync();
+        ViewModel.ActivateSummaryTab();
     }
 
     public Task OnNavigatedFromAsync() => Task.CompletedTask;

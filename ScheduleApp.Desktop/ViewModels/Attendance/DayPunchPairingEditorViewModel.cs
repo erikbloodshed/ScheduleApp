@@ -1,14 +1,14 @@
 ﻿using System.Collections.ObjectModel;
-using System.Windows;
 using System.Globalization;
+using System.Reactive.Linq;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Enums;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Utilities;
-using ScheduleApp.Desktop.Views;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -34,7 +34,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// what the Summary grid will say after saving, including the Complete/Partial
 /// verdict.
 /// </summary>
-public class DayPunchPairingEditorViewModel : ReactiveViewModel
+public partial class DayPunchPairingEditorViewModel : ReactiveViewModel
 {
     private readonly ScheduleEntry _schedule;
     private readonly AttendancePolicy _policy;
@@ -90,6 +90,9 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
         int RowCount,
         IReadOnlyDictionary<PunchKey, (int Segment, PairingRole Role)> Placement);
 
+    private readonly IObservable<bool> _canRemoveEmptySegments;
+    private readonly IObservable<bool> _canUndo;
+
     public DayPunchPairingEditorViewModel(
         Employee employee,
         ScheduleEntry schedule,
@@ -106,7 +109,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
         _manualLogRepository = manualLogRepository;
         _candidateWindows = candidateWindows;
         _displayWindow = displayWindow;
-        _dayPunches = dayPunches.OrderBy(p => p.Timestamp).ToList();
+        _dayPunches = [.. dayPunches.OrderBy(p => p.Timestamp)];
 
         EmployeeName = employee.DisplayName;
         EmployeePin = employee.Pin;
@@ -149,12 +152,83 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
             : $"A {ScheduleTypeText} day is matched against its scheduled window, so re-pairing " +
               "here isn't saved. Adding, correcting, or removing a punch does fix the day.";
 
+        // Named for what it does here, matching the menu item that opened it: "Edit Punch
+        // Pairing" for a Flexible day, "Edit Punches" for an editable non-Flexible one (the
+        // drag isn't saved there, but the punch edits are), "Punches" for a read-only view.
+        var titleVerb = IsReadOnly ? "Punches" : PairingAffectsResult ? "Edit Punch Pairing" : "Edit Punches";
+        Title = $"{titleVerb} — {EmployeeName}, {Date:MMM d, yyyy}";
+
+        // "Reset to Automatic" clears a *saved* pairing, so it's offered only where one is
+        // saved -- a Flexible day. Save persists the pairing, which only a Flexible day does;
+        // anywhere else, punches save themselves the moment they're added, and the one
+        // remaining button just closes.
+        ShowsResetToAutomatic = HasSavedOverride && PairingAffectsResult;
+        ShowsSave = PairingAffectsResult;
+        CloseText = PairingAffectsResult ? "Cancel" : "Close";
+
+        // Both follow the grid's layout, which OnRowsChanged stamps after every change.
+        _canRemoveEmptySegments = this.WhenAnyValue(x => x.LayoutVersion).Select(_ => CanRemoveEmptySegments());
+        _canUndo = this.WhenAnyValue(x => x.LayoutVersion).Select(_ => _undoStack.Count > 0);
+
         SeedRows(existingPairing);
         Recompute();
 
-        AddRowCommand = ReactiveCommand.Create(AddRow);
-        RemoveEmptySegmentsCommand = ReactiveCommand.Create(RemoveEmptySegments, CanExecuteFrom(CanRemoveEmptySegments));
-        UndoCommand = ReactiveCommand.Create(Undo, CanExecuteFrom(CanUndo));
+        // A manual punch write that fails says why, rather than escaping from a menu click.
+        foreach (var command in new IHandleObservableErrors[] { AddManualPunchCommand, EditManualPunchCommand, DeleteManualPunchCommand })
+        {
+            command.ThrownExceptions.Subscribe(ex =>
+                _ = NotifyAsync($"Couldn't save the punch: {ex.Message}", "Punch not saved", NoticeKind.Error));
+        }
+    }
+
+    /// <summary>The dialog's title -- see the constructor.</summary>
+    public string Title { get; }
+
+    /// <summary>Whether "Reset to Automatic" is offered -- see the constructor.</summary>
+    public bool ShowsResetToAutomatic { get; }
+
+    /// <summary>Whether Save is offered -- see the constructor.</summary>
+    public bool ShowsSave { get; }
+
+    /// <summary>"Cancel" beside Save, "Close" when it's the only button.</summary>
+    public string CloseText { get; }
+
+    /// <summary>How the person left the dialog -- meaningful once Save or Reset to Automatic
+    /// has returned true.</summary>
+    public DayPunchPairingOutcome Outcome { get; private set; } = DayPunchPairingOutcome.Save;
+
+    /// <summary>Bumped after every change to the grid's layout -- what Remove Empty and Undo's
+    /// CanExecute follow, since nothing else observes the rows' emptiness or the undo
+    /// history.</summary>
+    [Reactive]
+    internal partial int LayoutVersion { get; private set; }
+
+    /// <summary>Save: persist the grid as it stands. A still-Partial layout is allowed on
+    /// purpose -- a day can be genuinely incomplete, and forcing it whole before it can be
+    /// recorded would lose the re-pairing already done; the footer says Partial, so it isn't
+    /// silent.</summary>
+    [ReactiveCommand]
+    private bool Save()
+    {
+        Outcome = DayPunchPairingOutcome.Save;
+        return true;
+    }
+
+    /// <summary>Drop this day's saved pairing and go back to pairing in punch-time order,
+    /// after asking.</summary>
+    [ReactiveCommand]
+    private async Task<bool> ResetToAutomaticAsync()
+    {
+        if (!await ConfirmAsync(
+                $"Discard the saved punch pairing for {EmployeeName} on {Date:MMM d, yyyy}?\n\n" +
+                "The day goes back to being paired automatically, in punch-time order.",
+                "Reset to automatic"))
+        {
+            return false;
+        }
+
+        Outcome = DayPunchPairingOutcome.ResetToAutomatic;
+        return true;
     }
 
     public string EmployeeName { get; }
@@ -193,78 +267,38 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
 
     public ObservableCollection<DayPunchPairingRowViewModel> Rows { get; } = [];
 
-    public string WorkedText
-    {
-        get => _workedText;
-        set => this.RaiseAndSetIfChanged(ref _workedText, value);
-    }
+    [Reactive]
+    public partial string WorkedText { get; set; } = "—";
 
-    private string _workedText = "—";
-
-    public string RemainderText
-    {
-        get => _remainderText;
-        set => this.RaiseAndSetIfChanged(ref _remainderText, value);
-    }
-
-    private string _remainderText = "—";
+    [Reactive]
+    public partial string RemainderText { get; set; } = "—";
 
     /// <summary>"Remaining" when short of the day's required hours, "Overtime"
     /// when past it -- the footer label next to <see cref="RemainderText"/>, so
     /// the same figure doesn't need two separate rows.</summary>
-    public string RemainderLabel
-    {
-        get => _remainderLabel;
-        set => this.RaiseAndSetIfChanged(ref _remainderLabel, value);
-    }
+    [Reactive]
+    public partial string RemainderLabel { get; set; } = "Remaining";
 
-    private string _remainderLabel = "Remaining";
+    [Reactive]
+    public partial PunchStatus PreviewStatus { get; set; } = PunchStatus.Absent;
 
-    public PunchStatus PreviewStatus
-    {
-        get => _previewStatus;
-        set => this.RaiseAndSetIfChanged(ref _previewStatus, value);
-    }
-
-    private PunchStatus _previewStatus = PunchStatus.Absent;
-
-    public string PreviewStatusText
-    {
-        get => _previewStatusText;
-        set => this.RaiseAndSetIfChanged(ref _previewStatusText, value);
-    }
-
-    private string _previewStatusText = PunchStatus.Absent.ToText();
+    [Reactive]
+    public partial string PreviewStatusText { get; set; } = PunchStatus.Absent.ToText();
 
     /// <summary>How many punches are currently sitting in a half-open segment.
     /// Zero is what makes the day Complete.</summary>
-    public int UnpairedCount
-    {
-        get => _unpairedCount;
-        set => this.RaiseAndSetIfChanged(ref _unpairedCount, value);
-    }
+    [Reactive]
+    public partial int UnpairedCount { get; set; }
 
-    private int _unpairedCount;
-
-    public bool HasUnpairedPunches
-    {
-        get => _hasUnpairedPunches;
-        set => this.RaiseAndSetIfChanged(ref _hasUnpairedPunches, value);
-    }
-
-    private bool _hasUnpairedPunches;
+    [Reactive]
+    public partial bool HasUnpairedPunches { get; set; }
 
     /// <summary>"3 punches recorded" -- what the footer shows in place of the
     /// Worked/Required/status preview on a day whose pairing isn't read back (see
     /// <see cref="PairingAffectsResult"/>), where those figures would be computed
     /// with rules that day isn't actually calculated by.</summary>
-    public string PunchCountText
-    {
-        get => _punchCountText;
-        set => this.RaiseAndSetIfChanged(ref _punchCountText, value);
-    }
-
-    private string _punchCountText = "No punches recorded";
+    [Reactive]
+    public partial string PunchCountText { get; set; } = "No punches recorded";
 
     // ---- Layout -------------------------------------------------------------
 
@@ -383,7 +417,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     /// the pool every pairing and preview here is computed over, mirroring the
     /// filtered list the Flexible strategies build before pairing.</summary>
     private List<AttendanceLog> EligiblePunches() =>
-        _dayPunches.Where(IsWithinScheduleWindow).ToList();
+        [.. _dayPunches.Where(IsWithinScheduleWindow)];
 
     private void EnsureTrailingEmptyRow()
     {
@@ -400,7 +434,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     private void OnRowsChanged()
     {
         EnsureTrailingEmptyRow();
-        RequeryCanExecute();
+        LayoutVersion++;
     }
 
     // ---- Drag & drop --------------------------------------------------------
@@ -513,8 +547,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
             _undoStack.RemoveAt(0);
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> AddRowCommand { get; }
-
+    [ReactiveCommand]
     private void AddRow()
     {
         PushUndoSnapshot();
@@ -526,8 +559,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     /// This is the manual cleanup for the working rows a drag leaves behind now that
     /// a vacated row stays put (see <see cref="MoveCell"/>) instead of collapsing
     /// under the pointer. Bound to the "Remove Empty" button.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> RemoveEmptySegmentsCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canRemoveEmptySegments))]
     private void RemoveEmptySegments()
     {
         PushUndoSnapshot();
@@ -583,32 +615,30 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     /// at this time," and the same thing happens today when Add Manual Entry… is
     /// used from anywhere else.
     /// </summary>
-    public async Task AddManualPunchAsync(DayPunchPairingRowViewModel row, ColumnSlot slot)
+    [ReactiveCommand]
+    private async Task AddManualPunchAsync((DayPunchPairingRowViewModel Row, ColumnSlot Slot) target)
     {
+        var (row, slot) = target;
         if (IsReadOnly)
             return; // backstop -- the view offers no way to reach this
         if (row[slot] is not null)
             return; // occupied -- Add is only offered on an empty slot
 
-        var dialog = new PunchTimeEntryDialog(
-            EmployeeName, Date, SlotLabel(slot), SuggestTimeFor(row, slot))
-        {
-            Owner = Application.Current.MainWindow,
-        };
-        if (dialog.ShowDialog() != true)
+        var entry = new PunchTimeEntryViewModel(EmployeeName, Date, SlotLabel(slot), SuggestTimeFor(row, slot));
+        if (!await ShowDialogAsync(entry))
             return;
 
         var saved = await _manualLogRepository.AddAsync(new ManualAttendanceLog
         {
             EmployeeId = EmployeePin,
-            Timestamp = ResolveTimestamp(dialog.TimeOfDay),
+            Timestamp = ResolveTimestamp(entry.AcceptedTime),
             // 0 = Clock In, 1 = Clock Out -- taken from the slot being filled rather
             // than asked for, since the column already says which it is. Matching
             // punch types isn't what pairing keys off (see ManualAttendanceLog.PunchType),
             // but a person reading the raw entry later should still see the right one.
             PunchType = slot == ColumnSlot.In ? 0 : 1,
-            Reason = dialog.Reason,
-            EnteredBy = dialog.EnteredBy,
+            Reason = entry.AcceptedReason,
+            EnteredBy = entry.AcceptedEnteredBy,
         });
 
         var punch = saved.ToAttendanceLog();
@@ -639,7 +669,8 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     /// punch: a device punch is what the clock actually reported and stays
     /// untouched (the same rule the Punch Records grid enforces by having no Edit
     /// button for one) -- see ManualAttendanceLog's own doc comment.</summary>
-    public async Task EditManualPunchAsync(DayPunchPairingCellViewModel cell)
+    [ReactiveCommand]
+    private async Task EditManualPunchAsync(DayPunchPairingCellViewModel cell)
     {
         if (IsReadOnly || !cell.IsManual)
             return;
@@ -657,17 +688,14 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
             EnteredBy = cell.Punch.EnteredBy ?? string.Empty,
         };
 
-        var dialog = new PunchTimeEntryDialog(
-            EmployeeName, Date, slotLabel, TimeOnly.FromDateTime(cell.Punch.Timestamp), existing)
-        {
-            Owner = Application.Current.MainWindow,
-        };
-        if (dialog.ShowDialog() != true)
+        var entry = new PunchTimeEntryViewModel(
+            EmployeeName, Date, slotLabel, TimeOnly.FromDateTime(cell.Punch.Timestamp), existing);
+        if (!await ShowDialogAsync(entry))
             return;
 
-        existing.Timestamp = ResolveTimestamp(dialog.TimeOfDay);
-        existing.Reason = dialog.Reason;
-        existing.EnteredBy = dialog.EnteredBy;
+        existing.Timestamp = ResolveTimestamp(entry.AcceptedTime);
+        existing.Reason = entry.AcceptedReason;
+        existing.EnteredBy = entry.AcceptedEnteredBy;
         await _manualLogRepository.UpdateAsync(existing);
 
         // Mutated in place rather than rebuilt: the cell (and the saved pairing's
@@ -695,7 +723,8 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     /// manual-only restriction as <see cref="EditManualPunchAsync"/>, and the same
     /// reason: AttendanceLogs is meant to stay an untouched record of what the
     /// clock reported, while a manual entry is this app's own typed data.</summary>
-    public async Task DeleteManualPunchAsync(DayPunchPairingCellViewModel cell)
+    [ReactiveCommand]
+    private async Task DeleteManualPunchAsync(DayPunchPairingCellViewModel cell)
     {
         if (IsReadOnly || !cell.IsManual)
             return;
@@ -861,8 +890,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
     /// added or deleted (see <see cref="AddManualPunchAsync"/>), since those hit the
     /// database and Undo can't reverse them. Cancelling the dialog still throws the
     /// whole layout away regardless -- this is for stepping back mid-edit.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> UndoCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canUndo))]
     private void Undo()
     {
         if (_undoStack.Count == 0)
@@ -876,8 +904,6 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
         OnRowsChanged();
         Recompute();
     }
-
-    private bool CanUndo() => _undoStack.Count > 0;
 
     /// <summary>Rebuilds <see cref="Rows"/> from a snapshot: the recorded row count
     /// (so empty working segments come back, not just punch positions), each named
@@ -984,7 +1010,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
             EmployeeId = EmployeePin,
             Date = Date,
             EditedBy = editedBy,
-            Slots = map
+            Slots = [.. map
                 .Select(entry => new DayPunchPairingSlot
                 {
                     PunchId = entry.Key.PunchId,
@@ -993,8 +1019,7 @@ public class DayPunchPairingEditorViewModel : ReactiveViewModel
                     Role = entry.Value.Role,
                 })
                 .OrderBy(s => s.SegmentIndex)
-                .ThenBy(s => s.Role)
-                .ToList(),
+                .ThenBy(s => s.Role)],
         };
     }
 

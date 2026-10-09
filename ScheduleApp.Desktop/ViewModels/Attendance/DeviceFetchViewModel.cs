@@ -1,9 +1,11 @@
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Desktop.Services;
+using System.Reactive.Linq;
 using ScheduleApp.ZkTeco;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -17,7 +19,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// connection dialog, since a deployment only ever talks to one device and a separate
 /// dialog asking for the same IP/port/comm key/transport Settings already has was just a
 /// redundant place to edit the same four fields.</summary>
-public class DeviceFetchViewModel : ViewModelBase
+public partial class DeviceFetchViewModel : ViewModelBase
 {
     private readonly IAttendanceLogRepository _attendanceLogRepository;
     private readonly AttendanceBusyState _busy;
@@ -32,6 +34,8 @@ public class DeviceFetchViewModel : ViewModelBase
     private readonly int _devicePort;
     private readonly uint _deviceCommKey;
     private readonly bool _deviceUseUdp;
+
+    private readonly IObservable<bool> _canFetchFromDevice;
 
     public DeviceFetchViewModel(
         IAttendanceLogRepository attendanceLogRepository,
@@ -53,17 +57,13 @@ public class DeviceFetchViewModel : ViewModelBase
         _deviceCommKey = initialDeviceCommKey;
         _deviceUseUdp = string.Equals(initialDeviceTransport, "Udp", StringComparison.OrdinalIgnoreCase);
 
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
-                RequeryCanExecute();
-        };
+        _canFetchFromDevice = _busy.WhenAnyValue(b => b.IsRunning).Select(isRunning => !isRunning);
 
-        FetchFromDeviceCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(FetchFromDeviceAsync), CanExecuteFrom(CanFetchFromDevice));
+        ReportFailuresOf(FetchFromDeviceCommand);
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> FetchFromDeviceCommand { get; }
-
+    /// <summary>Enabled while nothing else on the shared busy state is running.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canFetchFromDevice))]
     private async Task FetchFromDeviceAsync()
     {
         // No connection dialog -- see the class doc comment above. A blank IP means
@@ -131,8 +131,6 @@ public class DeviceFetchViewModel : ViewModelBase
         },
         onError: ex => ShowFailure(ex));
     }
-
-    private bool CanFetchFromDevice() => !_busy.IsRunning;
 
     /// <summary>Cheap, synchronous checks only -- deliberately doesn't touch the
     /// network, so this can run before setting IsRunning.</summary>

@@ -7,7 +7,7 @@ namespace ScheduleApp.Core.Attendance;
 /// file reports back as visibly different from an import that actually added
 /// something, instead of both looking identical to whoever clicked Import.
 /// </summary>
-public class ManualEntryImportResult
+public record ManualEntryImportResult
 {
     public int TotalInFile { get; init; }
     public int NewRecords { get; init; }

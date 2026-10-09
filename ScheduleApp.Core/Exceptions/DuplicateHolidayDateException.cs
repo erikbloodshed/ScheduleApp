@@ -8,16 +8,9 @@ namespace ScheduleApp.Core.Exceptions;
 /// against the same database at the same time. Same shape as
 /// DuplicateEmployeeIdException/DuplicateUsernameException.
 /// </summary>
-public class DuplicateHolidayDateException : Exception
-{
-    public DateOnly Date { get; }
-    public string ExistingName { get; }
-
-    public DuplicateHolidayDateException(DateOnly date, string existingName)
-        : base($"{date:MMMM d, yyyy} is already listed as a holiday (\"{existingName}\"). " +
+public class DuplicateHolidayDateException(DateOnly date, string existingName) : Exception($"{date:MMMM d, yyyy} is already listed as a holiday (\"{existingName}\"). " +
                "Edit or delete the existing one instead of adding another.")
-    {
-        Date = date;
-        ExistingName = existingName;
-    }
+{
+    public DateOnly Date { get; } = date;
+    public string ExistingName { get; } = existingName;
 }

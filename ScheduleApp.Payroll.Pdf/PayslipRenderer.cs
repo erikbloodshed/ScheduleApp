@@ -9,7 +9,7 @@ namespace ScheduleApp.Payroll.Pdf;
 /// page instead of sharing a quarter-page cell with three others (see
 /// Print_Feature.md's Layout section: "flagged in the export result").
 /// </summary>
-public sealed class PayslipRenderResult
+public sealed record PayslipRenderResult
 {
     public required byte[] PdfBytes { get; init; }
 
@@ -29,7 +29,7 @@ public sealed class PayslipRenderResult
 /// one document composition. See <see cref="PayslipRenderResult"/> for the
 /// equivalent shape around actual PDF bytes.
 /// </summary>
-public sealed class PayslipPreviewResult
+public sealed record PayslipPreviewResult
 {
     /// <summary>One PNG per physical page, in print order.</summary>
     public required IReadOnlyList<byte[]> PageImages { get; init; }
@@ -96,7 +96,7 @@ public static class PayslipRenderer
 
         return new PayslipPreviewResult
         {
-            PageImages = document.GenerateImages().ToList(),
+            PageImages = [.. document.GenerateImages()],
             OverflowEmployeeNames = document.OverflowEmployeeNames,
         };
     }

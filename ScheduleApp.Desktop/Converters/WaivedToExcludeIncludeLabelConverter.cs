@@ -4,7 +4,7 @@ using System.Windows.Data;
 namespace ScheduleApp.Desktop.Converters;
 
 /// <summary>
-/// Undertime's waive toggle in PayrollSummaryView's DeductionLineTemplate -- shows
+/// Undertime's waive toggle in PayrollSummaryView's LineItemTemplate -- shows
 /// the action a click will take, not the current state: "Exclude" while Waived is
 /// false (the line still counts toward Total Deductions), "Include" once it's
 /// true. ConvertBack unused -- the toggle button's Click handler reads and inverts

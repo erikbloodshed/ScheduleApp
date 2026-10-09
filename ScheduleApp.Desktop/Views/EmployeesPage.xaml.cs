@@ -1,74 +1,123 @@
+using System.Collections.Specialized;
 using System.Globalization;
+using System.Reactive;
+using System.Reactive.Linq;
 using System.Threading;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using Syncfusion.UI.Xaml.Grid;
 using Syncfusion.UI.Xaml.Grid.Helpers;
 using Syncfusion.UI.Xaml.ScrollAxis;
 using Syncfusion.UI.Xaml.TreeView;
+using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.Views;
 
-/// <summary>Hosts the Departments/Employees command card plus its own department
-/// tree and employee grid. Deliberately takes the same MainViewModel SchedulePage
-/// does (both are Scoped -- see App.xaml.cs's registration comment -- so DI hands
-/// back the exact same instance) rather than a ViewModel of its own: the commands
-/// here (Add/Delete Department, Add/Edit/Delete/Import Employee) and the
-/// SelectedEmployee/SelectedDepartment they act on already live on MainViewModel,
-/// and splitting that state across two ViewModels would just need two-way syncing
-/// for no benefit.
+/// <summary>Department and employee management: a department tree, the selected department's
+/// employee grid, and the commands that edit them -- over the same shared ViewModel and
+/// selection as the Schedule tab (<see cref="MainViewModel"/>), so picking someone here picks
+/// them there. No load of its own: the Schedule page, the app's default, has already loaded
+/// the tree by the time this one can be opened.
 ///
-/// DepartmentTree and EmployeesGrid are a second, independent view over the same
-/// MainViewModel.Departments collection the Schedule tab's tree reads -- selecting
-/// a department here sets SelectedDepartment, selecting a row in the grid sets
-/// SelectedEmployee, same as SchedulePage's tree does for its own tree. No load call
-/// of its own -- by the time this page can be navigated to, SchedulePage (the app's
-/// default page, see MainWindow.xaml.cs) has already populated Departments.
-///
-/// SfTreeView and SfDataGrid raise SelectionChanged only for the user's own clicks, not
-/// when this code sets SelectedItem, so every place below that selects something in
-/// code also tells the ViewModel itself (ShowDepartment/ShowEmployee).</summary>
-public partial class EmployeesPage : Page, INavigationAware
+/// SfTreeView and SfDataGrid raise SelectionChanged only for clicks, not when this code sets
+/// SelectedItem, so every place below that selects something in code also tells the
+/// ViewModel itself.</summary>
+public partial class EmployeesPage : INavigationAware
 {
-    private readonly MainViewModel _viewModel;
     private readonly IStatusBarService _statusBarService;
 
     public EmployeesPage(MainViewModel viewModel, IStatusBarService statusBarService)
     {
-        _viewModel = viewModel;
+        ViewModel = viewModel;
         _statusBarService = statusBarService;
-        DataContext = viewModel;
         InitializeComponent();
-
-        // Delete/Blacklist ask first; the questions are the tree ViewModel's.
-        MessageBoxInteractions.Register(viewModel.Tree, this);
 
         EmployeeSearchBox.Filter = EmployeeSuggestionFilter;
 
-        // Departments gets torn down and rebuilt wholesale on every load (see
-        // EmployeeTreeViewModel.LoadAsync) -- including the reloads that Add/Edit/Delete
-        // Department/Employee trigger from this page's own toolbar -- which drops whatever
-        // was selected along with the old DepartmentGroupViewModel instance it belonged to.
-        // Without re-selecting afterward, EmployeesGrid (which reads off
-        // DepartmentTree.SelectedItem) would just go blank every time one of those buttons
-        // was used. The search box's suggestions are rebuilt from the new roster too.
-        _viewModel.Departments.CollectionChanged += (_, _) =>
+        this.WhenActivated((MultipleDisposable d) =>
         {
-            RebuildSuggestions();
-            DispatchRestoreTreeSelection();
-        };
+            var tree = viewModel.Tree;
+
+            // Delete/Blacklist ask first, and Import can have problems to list.
+            ViewInteractions.Register(tree, this).DisposeWith(d);
+            ViewInteractions.Register(viewModel.ImportExport, this).DisposeWith(d);
+
+            DepartmentTree.ItemsSource = tree.Departments;
+
+            this.BindCommand(ViewModel, vm => vm.Tree.AddDepartmentCommand, v => v.AddDepartmentButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.Tree.DeleteDepartmentCommand, v => v.DeleteDepartmentButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.Tree.AddEmployeeCommand, v => v.AddEmployeeButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.Tree.EditEmployeeCommand, v => v.EditEmployeeButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.Tree.DeleteEmployeeCommand, v => v.DeleteEmployeeButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.Tree.BlacklistEmployeeCommand, v => v.BlacklistButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.Tree.UnblacklistEmployeeCommand, v => v.UnblacklistButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.ImportExport.ImportEmployeesCommand, v => v.ImportEmployeesButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.ImportExport.ExportEmployeesCommand, v => v.ExportEmployeesButton).DisposeWith(d);
+
+            // A department picked: none of its employees yet.
+            Observable.FromEventPattern<EventHandler<ItemSelectionChangedEventArgs>, ItemSelectionChangedEventArgs>(
+                    handler => DepartmentTree.SelectionChanged += handler,
+                    handler => DepartmentTree.SelectionChanged -= handler)
+                .Select(_ => DepartmentTree.SelectedItem)
+                .Where(item => item is DepartmentGroupViewModel)
+                .InvokeCommand(tree.SelectNodeCommand)
+                .DisposeWith(d);
+
+            Observable.FromEventPattern<EventHandler<GridSelectionChangedEventArgs>, GridSelectionChangedEventArgs>(
+                    handler => EmployeesGrid.SelectionChanged += handler,
+                    handler => EmployeesGrid.SelectionChanged -= handler)
+                .Select(_ => EmployeesGrid.SelectedItem)
+                .InvokeCommand(tree.SelectNodeCommand)
+                .DisposeWith(d);
+
+            // Double-clicking a row is a shortcut for selecting it and clicking Edit.
+            Observable.FromEventPattern<EventHandler<GridCellDoubleTappedEventArgs>, GridCellDoubleTappedEventArgs>(
+                    handler => EmployeesGrid.CellDoubleTapped += handler,
+                    handler => EmployeesGrid.CellDoubleTapped -= handler)
+                .Where(e => e.EventArgs.Record is EmployeeNodeViewModel)
+                .Select(_ => RxVoid.Default)
+                .InvokeCommand(tree.EditEmployeeCommand)
+                .DisposeWith(d);
+
+            Observable.Merge(
+                    Observable.FromEventPattern<RoutedEventHandler, RoutedEventArgs>(
+                            handler => SearchButton.Click += handler,
+                            handler => SearchButton.Click -= handler)
+                        .Select(_ => Unit.Default),
+                    Observable.FromEventPattern<KeyEventHandler, KeyEventArgs>(
+                            handler => EmployeeSearchBox.KeyDown += handler,
+                            handler => EmployeeSearchBox.KeyDown -= handler)
+                        .Where(e => e.EventArgs.Key == Key.Enter)
+                        .Do(e => e.EventArgs.Handled = true)
+                        .Select(_ => Unit.Default))
+                .Subscribe(_ => SearchEmployee())
+                .DisposeWith(d);
+
+            // Every load replaces the departments wholesale -- including the reloads this
+            // page's own buttons trigger -- dropping the selected one along with its old
+            // instance; without reselecting, the grid (which reads the tree's selection) would
+            // go blank after every edit. The search suggestions are rebuilt from the new roster.
+            Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
+                    handler => tree.Departments.CollectionChanged += handler,
+                    handler => tree.Departments.CollectionChanged -= handler)
+                .Subscribe(_ =>
+                {
+                    RebuildSuggestions();
+                    DispatchRestoreTreeSelection();
+                })
+                .DisposeWith(d);
+        });
     }
 
-    // Unlike SchedulePage's once-per-run restore, this runs on every visit --
-    // MainViewModel.SelectedEmployee/SelectedDepartment can change from the
-    // Schedule tab while this page isn't visible, and the tree/grid here should
-    // pick up whatever's currently selected each time this page is shown.
-    // Dispatched rather than called inline so DepartmentTree's nodes have actually been
-    // generated from Departments by the time this runs.
+    /// <summary>Every visit picks up whatever's selected now -- the Schedule tab may have
+    /// changed it meanwhile.</summary>
     public Task OnNavigatedToAsync()
     {
         RebuildSuggestions();
@@ -78,20 +127,12 @@ public partial class EmployeesPage : Page, INavigationAware
 
     public Task OnNavigatedFromAsync() => Task.CompletedTask;
 
-    /// <summary>Dispatches RestoreTreeSelection with ExecutionContext flow suppressed for
-    /// just this one BeginInvoke call -- same fix, same reasoning, and same history as
-    /// PayrollPage.DispatchRestorePayrollGroupSelection (see that method's own doc comment
-    /// for the full mechanism and why this is scoped here rather than reintroduced in
-    /// AttendanceBusyState.RunAction). The dangerous call site is the
-    /// Departments.CollectionChanged subscription above: it fires synchronously from inside
-    /// EmployeeTreeViewModel's own AttendanceBusyState.RunAsync action (Departments.Clear()/
-    /// Add() there triggers it), so without suppression this BeginInvoke would capture
-    /// _isNestedCall.Value == true, and RestoreTreeSelection's own SelectedEmployee/
-    /// SelectedDepartment assignments -- reached once this deferred callback actually runs,
-    /// well after that action has finished -- would let whatever AttendanceBusyState.RunAsync
-    /// call they trigger downstream (e.g. ScheduleCalendarViewModel's own SelectedEmployee
-    /// subscription) wrongly ride along unserialized instead of correctly queuing on
-    /// _gate.</summary>
+    /// <summary>Restores the selection once the tree has generated its nodes, with
+    /// ExecutionContext flow suppressed for just this BeginInvoke. A reload replaces the
+    /// departments from inside the busy state's RunAsync, whose AsyncLocal "nested call" flag
+    /// this callback would otherwise capture as true -- and the selection it sets, which
+    /// starts a calendar reload under the busy state, would then ride along unserialized
+    /// instead of queuing. Same fix as PayrollPage.DispatchRestorePayrollGroupSelection.</summary>
     private void DispatchRestoreTreeSelection()
     {
         if (ExecutionContext.IsFlowSuppressed())
@@ -106,52 +147,44 @@ public partial class EmployeesPage : Page, INavigationAware
         }
     }
 
-    /// <summary>Best-effort only -- if the department/employee no longer exists, the tree
-    /// just starts unselected. Prefers matching on SelectedEmployee (and the department it
-    /// belongs to) over SelectedDepartment alone, so a specific employee stays highlighted
-    /// rather than just the department row.
-    ///
-    /// One known gap: MainViewModel.SelectedDepartment is null both when nothing's
-    /// selected and when the "(Unassigned)" bucket is selected (it has no
-    /// RealDepartment) -- that ambiguity is pre-existing, not introduced here, and
-    /// this treats both as "nothing to restore" rather than guessing wrong.</summary>
+    /// <summary>Best effort -- a department or employee that's gone leaves the tree
+    /// unselected. Prefers the employee (and their department) over the department alone, so a
+    /// specific person stays highlighted. A selected "(Unassigned)" bucket has no department to
+    /// restore and reads like nothing selected -- it's left alone rather than guessed
+    /// at.</summary>
     private void RestoreTreeSelection()
     {
-        var employeeToRestore = _viewModel.SelectedEmployee;
-        var departmentToRestore = _viewModel.SelectedDepartment;
+        var tree = ViewModel!.Tree;
+        var employeeToRestore = tree.SelectedEmployee;
+        var departmentToRestore = tree.SelectedDepartment;
 
         if (employeeToRestore is null && departmentToRestore is null) return;
 
-        foreach (var departmentGroup in _viewModel.Departments)
+        foreach (var departmentGroup in tree.Departments)
         {
-            bool isMatch = employeeToRestore is not null
-                ? departmentGroup.Employees.Any(n => n.Employee.Id == employeeToRestore.Id)
-                : departmentGroup.RealDepartment?.Id == departmentToRestore!.Id;
-
-            if (!isMatch) continue;
-
             var node = employeeToRestore is not null
                 ? departmentGroup.Employees.FirstOrDefault(n => n.Employee.Id == employeeToRestore.Id)
                 : null;
+            var isMatch = employeeToRestore is not null
+                ? node is not null
+                : departmentGroup.RealDepartment?.Id == departmentToRestore!.Id;
+
+            if (!isMatch) continue;
 
             SelectDepartmentAndEmployee(departmentGroup, node);
             return;
         }
     }
 
-    /// <summary>Selects departmentGroup in DepartmentTree, then -- if employeeToSelect is
-    /// given -- dispatches to select and scroll to that employee's row in EmployeesGrid
-    /// too. Shared by RestoreTreeSelection (reselecting after a Departments reload) and
-    /// the search box (jumping to a match): both need exactly this "select the department
-    /// now, the employee once the grid has caught up" two-step. The dispatch is required,
-    /// not just convenient -- EmployeesGrid.ItemsSource only catches up with the new
-    /// DepartmentTree.SelectedItem once the binding engine and grid have had a turn, so
-    /// selecting a row synchronously here would still be against the *previous*
+    /// <summary>Selects the department in the tree now and the employee's row once the grid
+    /// has caught up -- its ItemsSource follows the tree's selection only after the binding
+    /// engine has had a turn, so selecting a row right away would be against the previous
     /// department's roster.</summary>
     private void SelectDepartmentAndEmployee(DepartmentGroupViewModel departmentGroup, EmployeeNodeViewModel? employeeToSelect)
     {
+        var tree = ViewModel!.Tree;
         DepartmentTree.SelectedItem = departmentGroup;
-        ShowDepartment(departmentGroup);
+        tree.SelectNode(departmentGroup);
         if (DepartmentTree.Nodes.FirstOrDefault(n => n.Content == departmentGroup) is { } treeNode)
             DepartmentTree.BringIntoView(treeNode);
 
@@ -160,49 +193,12 @@ public partial class EmployeesPage : Page, INavigationAware
         Dispatcher.BeginInvoke(() =>
         {
             EmployeesGrid.SelectedItem = employeeToSelect;
-            ShowEmployee(employeeToSelect);
+            tree.SelectNode(employeeToSelect);
 
             var rowIndex = EmployeesGrid.ResolveToRowIndex(employeeToSelect);
             if (rowIndex >= 0)
                 EmployeesGrid.ScrollInView(new RowColumnIndex(rowIndex, 0));
         }, DispatcherPriority.ContextIdle);
-    }
-
-    private void DepartmentTree_SelectionChanged(object? sender, ItemSelectionChangedEventArgs e)
-    {
-        if (DepartmentTree.SelectedItem is DepartmentGroupViewModel group)
-            ShowDepartment(group);
-    }
-
-    private void EmployeesGrid_SelectionChanged(object? sender, GridSelectionChangedEventArgs e)
-    {
-        if (EmployeesGrid.SelectedItem is EmployeeNodeViewModel node)
-            ShowEmployee(node);
-        else
-            _viewModel.SelectedEmployee = null;
-    }
-
-    /// <summary>A department picked in the tree: no employee selected in it yet.</summary>
-    private void ShowDepartment(DepartmentGroupViewModel group)
-    {
-        _viewModel.SelectedDepartment = group.RealDepartment;
-        _viewModel.SelectedEmployee = null;
-    }
-
-    private void ShowEmployee(EmployeeNodeViewModel node)
-    {
-        _viewModel.SelectedEmployee = node.Employee;
-        _viewModel.SelectedDepartment = node.Employee.Department;
-    }
-
-    /// <summary>Double-clicking a row is a shortcut for selecting it and then clicking Edit.</summary>
-    private void EmployeesGrid_CellDoubleTapped(object? sender, GridCellDoubleTappedEventArgs e)
-    {
-        if (e.Record is not EmployeeNodeViewModel) return;
-
-        ICommand edit = _viewModel.EditEmployeeCommand;
-        if (edit.CanExecute(null))
-            edit.Execute(null);
     }
 
     // ---- Search ----
@@ -218,7 +214,7 @@ public partial class EmployeesPage : Page, INavigationAware
     /// <summary>Every employee, blacklisted included (see SearchEmployee), alphabetized by
     /// "LastName, FirstName (PIN)"; the box shows the first 8 matches.</summary>
     private void RebuildSuggestions() =>
-        EmployeeSearchBox.AutoCompleteSource = _viewModel.Departments
+        EmployeeSearchBox.AutoCompleteSource = ViewModel!.Tree.Departments
             .SelectMany(department => department.Employees.Select(node => new EmployeeSuggestion(
                 $"{node.Employee.LastName}, {node.Employee.FirstName} ({node.Employee.Pin})", department, node)))
             .OrderBy(s => s.Display, StringComparer.OrdinalIgnoreCase)
@@ -246,34 +242,18 @@ public partial class EmployeesPage : Page, INavigationAware
             SelectDepartmentAndEmployee(suggestion.Department, suggestion.Node);
     }
 
-    private void SearchEmployeeButton_Click(object sender, RoutedEventArgs e) => SearchEmployee();
-
-    private void EmployeeSearchBox_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter) return;
-
-        SearchEmployee();
-        e.Handled = true;
-    }
-
-    /// <summary>Jumps to the first employee across every department matching the box's
-    /// text -- selects (and scrolls to) their department in DepartmentTree and their row in
-    /// EmployeesGrid, via the same SelectDepartmentAndEmployee two-step RestoreTreeSelection
-    /// uses. Text that is exactly a picked suggestion goes straight to that person.
-    /// Deliberately a one-shot "find and jump to it" rather than a live filter the way the
-    /// Schedule/Attendance trees' own search boxes work (EmployeeTreeSearchFilter.Apply):
-    /// see DepartmentTree's own comment in the XAML for why silently hiding a department
-    /// here is exactly what this page was built to avoid. A miss leaves the tree/grid
-    /// showing whatever they already were, not an empty state.
+    /// <summary>
+    /// Jumps to the first employee matching the box's text -- their department in the tree,
+    /// their row in the grid -- or, with no employee matching, the first department whose name
+    /// does. Text that is exactly a picked suggestion goes straight to that person. A
+    /// one-shot find, not a live filter like the Schedule/Attendance trees' search boxes:
+    /// silently hiding a department is exactly what this page avoids. A miss leaves the tree
+    /// and grid as they were.
     ///
-    /// Matching reuses EmployeeTreeSearchFilter.EmployeeMatchesSearchTerm -- the same
-    /// exact-Pin-or-substring-on-name rule those other trees' search boxes use per
-    /// term -- rather than a second copy of it. Unlike Apply, a blacklisted employee is
-    /// not excluded here: this grid is deliberately the one place a blacklisted
-    /// employee still shows, specifically so they can be found and unblacklisted later.
-    ///
-    /// Falls back to a department-name match (selecting just the department, no
-    /// specific row) when no employee matches.</summary>
+    /// Matching is EmployeeTreeSearchFilter.EmployeeMatchesSearchTerm, the per-term rule those
+    /// trees use -- except that a blacklisted employee is found too: this grid is the one place
+    /// they still show, so they can be unblacklisted.
+    /// </summary>
     private void SearchEmployee()
     {
         var term = EmployeeSearchBox.Text.Trim();
@@ -289,7 +269,8 @@ public partial class EmployeesPage : Page, INavigationAware
             return;
         }
 
-        foreach (var departmentGroup in _viewModel.Departments)
+        var departments = ViewModel!.Tree.Departments;
+        foreach (var departmentGroup in departments)
         {
             var node = departmentGroup.Employees.FirstOrDefault(
                 n => EmployeeTreeSearchFilter.EmployeeMatchesSearchTerm(n.Employee, term));
@@ -300,11 +281,9 @@ public partial class EmployeesPage : Page, INavigationAware
             return;
         }
 
-        foreach (var departmentGroup in _viewModel.Departments)
+        if (departments.FirstOrDefault(g => g.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) is { } department)
         {
-            if (!departmentGroup.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) continue;
-
-            SelectDepartmentAndEmployee(departmentGroup, null);
+            SelectDepartmentAndEmployee(department, null);
             return;
         }
 

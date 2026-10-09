@@ -13,7 +13,7 @@ namespace ScheduleApp.Desktop.Services;
 /// -- which, since PushListener is meant to run headless on the SQL Server Express box
 /// independent of whether anyone has this Desktop app open, it very well might be.
 /// </summary>
-public class PushListenerApiClient : IDisposable
+public class PushListenerApiClient : IPushListenerApiClient
 {
     // ASP.NET Core's controllers serialize JSON with camelCase property names by default
     // (e.g. "serialNumber", not "SerialNumber"). The DTOs here are PascalCase, matching

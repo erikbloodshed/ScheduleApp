@@ -1,33 +1,26 @@
-<Page x:Class="ScheduleApp.Desktop.Views.EmployeesPage"
+<rxui:ReactivePage x:Class="ScheduleApp.Desktop.Views.EmployeesPage"
+      x:TypeArguments="vm:MainViewModel"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:rxui="http://reactiveui.net"
+      xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
       xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
       xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
       ScrollViewer.CanContentScroll="False"
       Title="Employees">
     <Page.Resources>
         <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
-        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
 
-        <Style x:Key="GroupLabel" TargetType="TextBlock">
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
-
-        <Style x:Key="ToolbarButton" TargetType="syncfusion:ButtonAdv">
-            <Setter Property="SizeMode" Value="Normal" />
+        <Style x:Key="ToolbarButton" TargetType="syncfusion:ButtonAdv" BasedOn="{StaticResource {x:Type syncfusion:ButtonAdv}}">
             <Setter Property="Margin" Value="0,0,6,0" />
         </Style>
     </Page.Resources>
 
     <Grid Margin="8">
         <!-- The Add/Delete Department and Add/Edit/Delete/Blacklist/Import Employee buttons sit
-             in the tree's and grid's own header rows. They act on
-             MainViewModel.SelectedDepartment/SelectedEmployee, which the tree and grid drive
-             directly (see DepartmentTree_SelectionChanged/EmployeesGrid_SelectionChanged in the
-             code-behind), so there's no hopping to the Schedule tab to pick something first. -->
+             in the tree's and grid's own header rows. They act on the shared selection, which
+             the tree and grid drive directly, so there's no hopping to the Schedule tab to pick
+             something first. -->
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="280" />
             <ColumnDefinition Width="*" />
@@ -37,24 +30,23 @@
              a department's employees show in the grid on the right instead of as nested rows,
              so the tree has no ChildPropertyName.
 
-             Departments is the same ObservableCollection of DepartmentGroupViewModel the
-             Schedule tab's tree reads (MainViewModel is Scoped and shared, see this page's
-             code-behind), so a lingering search filter typed into that tab's search box
+             Departments is the same collection the Schedule tab's tree reads (the page
+             ViewModel is shared), so a lingering search filter typed into that tab's search box
              (EmployeeTreeSearchFilter) could leave some of these with IsVisible=false. That's
              deliberately not honoured here: management shouldn't silently hide a department
              because of a filter left over from a different tab. The search box below is a
              page-local find-and-jump instead (see SearchEmployee in the code-behind). -->
         <DockPanel Grid.Column="0" Margin="0,0,8,0">
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="Departments" Style="{StaticResource GroupLabel}" />
-                <syncfusion:ButtonAdv Label="Add"
+                <TextBlock Text="Departments" Style="{StaticResource GroupLabelStyle}" />
+                <syncfusion:ButtonAdv x:Name="AddDepartmentButton"
+                                      Label="Add"
                                       IconTemplate="{StaticResource AddIconTemplate}"
-                                      Style="{StaticResource ToolbarButton}"
-                                      Command="{Binding AddDepartmentCommand}" />
-                <syncfusion:ButtonAdv Label="Delete"
+                                      Style="{StaticResource ToolbarButton}" />
+                <syncfusion:ButtonAdv x:Name="DeleteDepartmentButton"
+                                      Label="Delete"
                                       IconTemplate="{StaticResource DeleteIconTemplate}"
-                                      Style="{StaticResource ToolbarButton}"
-                                      Command="{Binding DeleteDepartmentCommand}" />
+                                      Style="{StaticResource ToolbarButton}" />
             </StackPanel>
 
             <!-- Find-and-jump-to search, not a live filter: a match selects (and scrolls to)
@@ -65,12 +57,11 @@
                  one jumps straight to that person, and Enter or Search jumps to the first
                  match for whatever's typed. -->
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                <syncfusion:ButtonAdv DockPanel.Dock="Right"
+                <syncfusion:ButtonAdv x:Name="SearchButton"
+                                      DockPanel.Dock="Right"
                                       Label="Search"
                                       IconTemplate="{StaticResource SearchIconTemplate}"
-                                      SizeMode="Normal"
-                                      Margin="6,0,0,0"
-                                      Click="SearchEmployeeButton_Click" />
+                                      Margin="6,0,0,0" />
                 <syncfusion:SfTextBoxExt x:Name="EmployeeSearchBox"
                                          Watermark="PIN, name or department"
                                          AutoCompleteMode="Suggest"
@@ -78,16 +69,13 @@
                                          SearchItemPath="Display"
                                          MaximumSuggestionsCount="8"
                                          SelectedItemChanged="EmployeeSearchBox_SelectedItemChanged"
-                                         KeyDown="EmployeeSearchBox_KeyDown"
                                          ToolTip="A PIN, name, or department -- Enter or Search jumps to it; or pick a name from the list." />
             </DockPanel>
 
             <syncfusion:SfTreeView x:Name="DepartmentTree"
-                                   ItemsSource="{Binding Departments}"
                                    SelectionMode="Single"
                                    FullRowSelect="True"
-                                   FocusVisualStyle="{x:Null}"
-                                   SelectionChanged="DepartmentTree_SelectionChanged">
+                                   FocusVisualStyle="{x:Null}">
                 <syncfusion:SfTreeView.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -101,10 +89,8 @@
         </DockPanel>
 
         <!-- Right: employees of whichever department is selected on the left. EmployeesGrid's
-             ItemsSource reads straight off DepartmentTree's own SelectedItem;
-             EmployeesGrid_SelectionChanged (code-behind) is what pushes a row selection back
-             into MainViewModel.SelectedEmployee/SelectedDepartment, the same way
-             DepartmentTree_SelectionChanged does for the tree. -->
+             ItemsSource reads straight off DepartmentTree's own SelectedItem; picking a row
+             selects that employee, as picking a department in the tree selects it. -->
         <DockPanel Grid.Column="1">
             <!-- Employee action buttons pinned to the right of this row; the status text sits at
                  the left - the "select a department" prompt while nothing's picked, the
@@ -114,34 +100,33 @@
                  exists. -->
             <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,8">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <syncfusion:ButtonAdv Label="Add"
+                    <syncfusion:ButtonAdv x:Name="AddEmployeeButton"
+                                          Label="Add"
                                           IconTemplate="{StaticResource AddIconTemplate}"
-                                          Style="{StaticResource ToolbarButton}"
-                                          Command="{Binding AddEmployeeCommand}" />
-                    <syncfusion:ButtonAdv Label="Edit"
+                                          Style="{StaticResource ToolbarButton}" />
+                    <syncfusion:ButtonAdv x:Name="EditEmployeeButton"
+                                          Label="Edit"
                                           IconTemplate="{StaticResource EditIconTemplate}"
-                                          Style="{StaticResource ToolbarButton}"
-                                          Command="{Binding EditEmployeeCommand}" />
-                    <syncfusion:ButtonAdv Label="Delete"
+                                          Style="{StaticResource ToolbarButton}" />
+                    <syncfusion:ButtonAdv x:Name="DeleteEmployeeButton"
+                                          Label="Delete"
                                           IconTemplate="{StaticResource DeleteIconTemplate}"
-                                          Style="{StaticResource ToolbarButton}"
-                                          Command="{Binding DeleteEmployeeCommand}" />
-                    <syncfusion:ButtonAdv Label="Blacklist"
+                                          Style="{StaticResource ToolbarButton}" />
+                    <syncfusion:ButtonAdv x:Name="BlacklistButton"
+                                          Label="Blacklist"
                                           IconTemplate="{StaticResource BlacklistIconTemplate}"
-                                          Style="{StaticResource ToolbarButton}"
-                                          Command="{Binding BlacklistEmployeeCommand}" />
-                    <syncfusion:ButtonAdv Label="Unblacklist"
+                                          Style="{StaticResource ToolbarButton}" />
+                    <syncfusion:ButtonAdv x:Name="UnblacklistButton"
+                                          Label="Unblacklist"
                                           IconTemplate="{StaticResource UnblacklistIconTemplate}"
-                                          Style="{StaticResource ToolbarButton}"
-                                          Command="{Binding UnblacklistEmployeeCommand}" />
-                    <syncfusion:ButtonAdv Label="Import"
+                                          Style="{StaticResource ToolbarButton}" />
+                    <syncfusion:ButtonAdv x:Name="ImportEmployeesButton"
+                                          Label="Import"
                                           IconTemplate="{StaticResource ImportIconTemplate}"
-                                          Style="{StaticResource ToolbarButton}"
-                                          Command="{Binding ImportEmployeesCommand}" />
-                    <syncfusion:ButtonAdv Label="Export"
-                                          IconTemplate="{StaticResource ExportIconTemplate}"
-                                          SizeMode="Normal"
-                                          Command="{Binding ExportEmployeesCommand}" />
+                                          Style="{StaticResource ToolbarButton}" />
+                    <syncfusion:ButtonAdv x:Name="ExportEmployeesButton"
+                                          Label="Export"
+                                          IconTemplate="{StaticResource ExportIconTemplate}" />
                 </StackPanel>
 
                 <!-- Trimmed: on a narrow window the buttons keep their room and this ends in
@@ -168,9 +153,9 @@
             <!-- Read-only. A blacklisted employee's row is greyed out rather than hidden:
                  unlike the Schedule/Attendance trees (EmployeeTreeSearchFilter), this grid is the
                  one place a blacklisted employee should still be visible, so they can be found
-                 and unblacklisted later (see Employee.IsBlacklisted's own doc comment). The row
-                 style is based on the theme's (Themes/SyncfusionBases.xaml), so the selection
-                 highlight stays. Double-clicking a row is Edit. -->
+                 and unblacklisted later (see Employee.IsBlacklisted's own doc comment). The theme
+                 still draws the rows under this RowStyle, selection highlight included.
+                 Double-clicking a row is Edit. -->
             <syncfusion:SfDataGrid x:Name="EmployeesGrid"
                                    ItemsSource="{Binding SelectedItem.Employees, ElementName=DepartmentTree}"
                                    AutoGenerateColumns="False"
@@ -179,11 +164,9 @@
                                    AllowDraggingColumns="False"
                                    SelectionMode="Single"
                                    NavigationMode="Row"
-                                   GridLinesVisibility="Horizontal"
-                                   SelectionChanged="EmployeesGrid_SelectionChanged"
-                                   CellDoubleTapped="EmployeesGrid_CellDoubleTapped">
+                                   GridLinesVisibility="Horizontal">
                 <syncfusion:SfDataGrid.RowStyle>
-                    <Style TargetType="syncfusion:VirtualizingCellsControl" BasedOn="{StaticResource GridRowStyle}">
+                    <Style TargetType="syncfusion:VirtualizingCellsControl">
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Employee.IsBlacklisted}" Value="True">
                                 <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
@@ -222,4 +205,4 @@
             </syncfusion:SfDataGrid>
         </DockPanel>
     </Grid>
-</Page>
+</rxui:ReactivePage>

@@ -1,6 +1,9 @@
-<UserControl x:Class="ScheduleApp.Desktop.Views.PunchRecordsView"
+<rxui:ReactiveUserControl x:Class="ScheduleApp.Desktop.Views.PunchRecordsView"
+             x:TypeArguments="vm:AttendanceViewModel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:rxui="http://reactiveui.net"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
              xmlns:syncfusion="http://schemas.syncfusion.com/wpf">
     <!-- One of three views the "Attendance" drawer item's sub-items navigate between - see
          AttendanceSummaryView.xaml's own doc comment for the shared AttendanceViewModel/
@@ -10,19 +13,6 @@
          ways of getting punches into/out of the grid beneath them. Generate Reports
          (AttendanceSummaryView) picks up whatever a fetch/import here added via the shared
          AttendanceDataVersion.DeviceLogsVersion counter. -->
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-
-        <!-- A Range date: "October 1, 2026", typed or picked from the drop-down calendar. -->
-        <Style x:Key="RangeDate" TargetType="syncfusion:DateTimeEdit">
-            <Setter Property="Pattern" Value="CustomPattern" />
-            <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
-            <Setter Property="IsEmptyDateEnabled" Value="True" />
-            <Setter Property="NullValue" Value="{x:Null}" />
-            <Setter Property="ShowMaskOnNullValue" Value="False" />
-            <Setter Property="Width" Value="190" />
-        </Style>
-    </UserControl.Resources>
 
     <Grid Margin="10" RowDefinitions="Auto,Auto,*">
         <!-- Two groups in a WrapPanel: on a narrow window the buttons drop to a second line
@@ -32,23 +22,23 @@
             <TextBlock Text="Start" Width="40" VerticalAlignment="Center" />
             <!-- Steps LogViewStart/LogViewEnd to the adjacent cut-off period and reloads
                  immediately; see PunchRecordsViewModel.PreviousPeriodAsync. -->
-            <syncfusion:ButtonAdv SizeMode="Small"
+            <syncfusion:ButtonAdv x:Name="PreviousPeriodButton"
+                                  SizeMode="Small"
                                   Tag="&#xE76B;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  Command="{Binding PreviousLogViewPeriodCommand}"
                                   Margin="0,0,6,0"
                                   ToolTip="Previous cut-off period." />
-            <syncfusion:DateTimeEdit Style="{StaticResource RangeDate}"
-                                     DateTime="{Binding LogViewStart, Mode=TwoWay}"
+            <syncfusion:DateTimeEdit x:Name="StartPicker"
+                                     Width="190"
                                      Margin="0,0,24,0" />
             <TextBlock Text="End" Width="32" VerticalAlignment="Center" />
-            <syncfusion:DateTimeEdit Style="{StaticResource RangeDate}"
-                                     DateTime="{Binding LogViewEnd, Mode=TwoWay}"
+            <syncfusion:DateTimeEdit x:Name="EndPicker"
+                                     Width="190"
                                      Margin="0,0,6,0" />
-            <syncfusion:ButtonAdv SizeMode="Small"
+            <syncfusion:ButtonAdv x:Name="NextPeriodButton"
+                                  SizeMode="Small"
                                   Tag="&#xE76C;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  Command="{Binding NextLogViewPeriodCommand}"
                                   Margin="0,0,18,0"
                                   ToolTip="Next cut-off period." />
             <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -59,14 +49,13 @@
                 <syncfusion:SfTextBoxExt x:Name="PunchSearchTextBox"
                                          Width="220"
                                          Watermark="ID, name or department"
-                                         Text="{Binding LogViewSearchText, UpdateSourceTrigger=PropertyChanged}"
                                          ToolTip="Filter by Employee ID, name, or department -- doesn't change what Export saves." />
-                <Popup PlacementTarget="{Binding ElementName=PunchSearchTextBox}"
+                <Popup x:Name="SuggestionsPopup"
+                       PlacementTarget="{Binding ElementName=PunchSearchTextBox}"
                        Placement="Bottom"
                        Width="220"
                        StaysOpen="False"
-                       AllowsTransparency="True"
-                       IsOpen="{Binding IsLogViewSuggestionsOpen, Mode=TwoWay}">
+                       AllowsTransparency="True">
                     <Border Background="{DynamicResource SurfaceBackgroundBrush}"
                             BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
@@ -77,7 +66,6 @@
                             <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.2" />
                         </Border.Effect>
                         <ListBox x:Name="PunchSearchSuggestionList"
-                                 ItemsSource="{Binding LogViewSuggestions}"
                                  BorderThickness="0"
                                  MaxHeight="160"
                                  PreviewMouseLeftButtonUp="PunchSearchSuggestionList_PreviewMouseLeftButtonUp">
@@ -94,21 +82,16 @@
           </StackPanel>
           <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <!-- Doubles as a Cancel button while anything's running (see
-                 RefreshOrCancelStoredLogsCommand/PunchRecordsRefreshOrCancelContent/Icon/
-                 ToolTip on AttendanceViewModel), same pattern as AttendanceSummaryView's own
-                 Period-row button. Also the one place to cancel Import…/Fetch from Device. -->
-            <syncfusion:ButtonAdv Label="{Binding PunchRecordsRefreshOrCancelContent}"
-                                  Tag="{Binding PunchRecordsRefreshOrCancelIcon}"
+                 PunchRecordsViewModel.RefreshOrCancelStoredLogsCommand), same pattern as
+                 AttendanceSummaryView's own Period-row button. Also the one place to cancel
+                 Import…/Fetch from Device. -->
+            <syncfusion:ButtonAdv x:Name="RefreshOrCancelButton"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding RefreshOrCancelStoredLogsCommand}"
                                   MinWidth="90"
-                                  Margin="12,0,0,0"
-                                  ToolTip="{Binding PunchRecordsRefreshOrCancelToolTip}" />
-            <syncfusion:ButtonAdv Label="Export"
+                                  Margin="12,0,0,0" />
+            <syncfusion:ButtonAdv x:Name="ExportButton"
+                                  Label="Export"
                                   IconTemplate="{StaticResource ExportIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding ExportStoredLogsCommand}"
                                   Margin="8,0,0,0"
                                   ToolTip="Save these punches to Excel, independent of any report -- opens automatically." />
             <!-- .dat import and ZKTeco device fetch. Both call the same underlying import, so
@@ -117,32 +100,30 @@
                  straight to the terminal configured in Settings - no per-fetch dialog, since a
                  deployment only ever talks to one device (see
                  DeviceFetchViewModel.FetchFromDeviceAsync). -->
-            <syncfusion:ButtonAdv Label="Import"
+            <syncfusion:ButtonAdv x:Name="ImportButton"
+                                  Label="Import"
                                   IconTemplate="{StaticResource ImportIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding ImportPunchLogCommand}"
                                   Margin="12,0,0,0"
                                   ToolTip="Add punches from a .dat file to the database -- Generate Reports and this grid both need at least one import first." />
-            <syncfusion:ButtonAdv Label="Fetch from Device"
+            <syncfusion:ButtonAdv x:Name="FetchButton"
+                                  Label="Fetch from Device"
                                   Tag="&#xE896;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding FetchFromDeviceCommand}"
                                   Margin="6,0,0,0"
                                   ToolTip="Pull the full log from the device configured in Settings -- same as Import, without a file. Already-known punches are skipped, so it's safe to re-run." />
           </StackPanel>
         </WrapPanel>
 
-        <TextBlock Grid.Row="1"
+        <TextBlock x:Name="CountLine"
+                   Grid.Row="1"
                    Margin="0,0,0,6"
-                   Foreground="{DynamicResource MutedForegroundBrush}"
-                   Visibility="{Binding HasLoadedStoredLogs, Converter={StaticResource BoolToVisibility}}">
-            <Run Text="{Binding StoredLogsCount, Mode=OneWay}" FontWeight="Bold" />
+                   Foreground="{DynamicResource MutedForegroundBrush}">
+            <Run x:Name="CountRun" FontWeight="Bold" />
             <Run Text="punch(es) found in range." />
         </TextBlock>
 
-        <syncfusion:SfDataGrid Grid.Row="2"
-                               ItemsSource="{Binding StoredLogsView}"
+        <syncfusion:SfDataGrid x:Name="LogsGrid"
+                               Grid.Row="2"
                                AutoGenerateColumns="False"
                                AllowEditing="False"
                                AllowDraggingColumns="False"
@@ -164,4 +145,4 @@
             </syncfusion:SfDataGrid.Columns>
         </syncfusion:SfDataGrid>
     </Grid>
-</UserControl>
+</rxui:ReactiveUserControl>

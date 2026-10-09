@@ -386,7 +386,7 @@ public class Employee
     /// parsed rows. Empty (not null) on an Employee nothing has populated it for --
     /// same "empty means nothing loaded this, not nothing exists" convention as
     /// every other collection here.</summary>
-    public ICollection<ScheduleEntry> ScheduleEntries { get; set; } = new List<ScheduleEntry>();
+    public ICollection<ScheduleEntry> ScheduleEntries { get; set; } = [];
 
     /// <summary>Matches the "LastName; FirstName" convention used in the source workbook.</summary>
     public string DisplayName => $"{LastName}, {FirstName}";

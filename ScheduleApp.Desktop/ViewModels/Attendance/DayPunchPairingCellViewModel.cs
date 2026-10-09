@@ -1,7 +1,10 @@
+using System.Reactive.Linq;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Desktop.Utilities;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -17,8 +20,14 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// <see cref="DayPunchPairingEditorViewModel.MoveCell"/>). That's what lets the
 /// same instance be dragged from one In/Out slot to another without rebuilding it.
 /// </summary>
-public class DayPunchPairingCellViewModel : ReactiveObject
+public partial class DayPunchPairingCellViewModel : ReactiveObject
 {
+    public DayPunchPairingCellViewModel() =>
+        // ReasonText folds the out-of-window note in.
+        this.WhenAnyValue(x => x.IsOutsideScheduleWindow)
+            .Skip(1)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(ReasonText)));
+
     public required AttendanceLog Punch { get; init; }
 
     /// <summary>How this punch is referred to in a saved
@@ -55,24 +64,8 @@ public class DayPunchPairingCellViewModel : ReactiveObject
     /// DayPunchPairingEditorViewModel.EditManualPunchAsync, which re-evaluates this
     /// the same way it refreshes TimeText.
     /// </summary>
-    public bool IsOutsideScheduleWindow
-    {
-        get => _isOutsideScheduleWindow;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isOutsideScheduleWindow, value)) return;
-            this.RaisePropertyChanging();
-            _isOutsideScheduleWindow = value;
-            OnIsOutsideScheduleWindowChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private bool _isOutsideScheduleWindow;
-
-    /// <summary>ReasonText folds the out-of-window note in, so it has to be
-    /// re-read whenever that flag moves.</summary>
-    private void OnIsOutsideScheduleWindowChanged(bool value) => this.RaisePropertyChanged(nameof(ReasonText));
+    [Reactive]
+    public partial bool IsOutsideScheduleWindow { get; set; }
 
     /// <summary>Why a manual entry was needed, shown as the card's tooltip. Null
     /// for a real device punch with nothing else to say about it -- the tooltip is
@@ -93,25 +86,15 @@ public class DayPunchPairingCellViewModel : ReactiveObject
     /// <summary>Set by the editor control while this cell is the one being
     /// dragged, so its card can dim. Reset in the drag source's finally block
     /// whether the drop landed or was cancelled.</summary>
-    public bool IsBeingDragged
-    {
-        get => _isBeingDragged;
-        set => this.RaiseAndSetIfChanged(ref _isBeingDragged, value);
-    }
-
-    private bool _isBeingDragged;
+    [Reactive]
+    public partial bool IsBeingDragged { get; set; }
 
     /// <summary>True when this punch's segment has no partner for it -- an in
     /// with no out, or an out with no in. Recomputed on every move (see
     /// <see cref="DayPunchPairingEditorViewModel"/>); this is the orphan the
     /// whole editor exists to let someone resolve.</summary>
-    public bool IsUnpaired
-    {
-        get => _isUnpaired;
-        set => this.RaiseAndSetIfChanged(ref _isUnpaired, value);
-    }
-
-    private bool _isUnpaired;
+    [Reactive]
+    public partial bool IsUnpaired { get; set; }
 
     /// <summary>Re-reads every property projected off <see cref="Punch"/>. Needed
     /// because editing a manual punch's time corrects the underlying

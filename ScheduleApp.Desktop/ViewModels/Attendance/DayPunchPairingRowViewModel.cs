@@ -1,5 +1,8 @@
-﻿using ScheduleApp.Core.Attendance;
+using System.Reactive.Linq;
+using ScheduleApp.Core.Attendance;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -12,6 +15,19 @@ public enum ColumnSlot
     Out,
 }
 
+/// <summary>How the person left the Day Punch Pairing dialog -- see
+/// DayPunchPairingEditorViewModel.Outcome.</summary>
+public enum DayPunchPairingOutcome
+{
+    /// <summary>Persist the grid as it stands (see
+    /// <see cref="DayPunchPairingEditorViewModel.BuildPairing"/>).</summary>
+    Save,
+
+    /// <summary>Drop this day's saved pairing entirely and go back to the default
+    /// time-order pairing.</summary>
+    ResetToAutomatic,
+}
+
 /// <summary>
 /// One work segment in the Day Punch Pairing editor: the punch that opened it and
 /// the punch that closed it, either of which may be missing (an empty slot -- a
@@ -21,43 +37,28 @@ public enum ColumnSlot
 /// working space (see <see cref="DayPunchPairingEditorViewModel.MoveCell"/>); only
 /// "Remove Empty" or a save clears one out.
 /// </summary>
-public class DayPunchPairingRowViewModel : ReactiveObject
+public partial class DayPunchPairingRowViewModel : ReactiveObject
 {
-    public DayPunchPairingCellViewModel? InPunch
+    public DayPunchPairingRowViewModel()
     {
-        get => _inPunch;
-        set
-        {
-            if (EqualityComparer<DayPunchPairingCellViewModel?>.Default.Equals(_inPunch, value)) return;
-            this.RaisePropertyChanging();
-            _inPunch = value;
-            OnInPunchChanged(value);
-            this.RaisePropertyChanged();
-        }
+        var slots = this.WhenAnyValue(x => x.InPunch, x => x.OutPunch, (inPunch, outPunch) => (In: inPunch, Out: outPunch));
+        _isIncompleteHelper = slots.Select(s => (s.In is null) != (s.Out is null)).ToProperty(this, x => x.IsIncomplete);
+        _isEmptyHelper = slots.Select(s => s.In is null && s.Out is null).ToProperty(this, x => x.IsEmpty);
     }
 
-    private DayPunchPairingCellViewModel? _inPunch;
+    [Reactive]
+    public partial DayPunchPairingCellViewModel? InPunch { get; set; }
 
-    public DayPunchPairingCellViewModel? OutPunch
-    {
-        get => _outPunch;
-        set
-        {
-            if (EqualityComparer<DayPunchPairingCellViewModel?>.Default.Equals(_outPunch, value)) return;
-            this.RaisePropertyChanging();
-            _outPunch = value;
-            OnOutPunchChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private DayPunchPairingCellViewModel? _outPunch;
+    [Reactive]
+    public partial DayPunchPairingCellViewModel? OutPunch { get; set; }
 
     /// <summary>True when exactly one of the two slots is filled -- the row is a
     /// half-open segment, i.e. the orphan. Drives the row's warning styling.</summary>
-    public bool IsIncomplete => (InPunch is null) != (OutPunch is null);
+    [ObservableAsProperty]
+    public partial bool IsIncomplete { get; }
 
-    public bool IsEmpty => InPunch is null && OutPunch is null;
+    [ObservableAsProperty(InitialValue = "true")]
+    public partial bool IsEmpty { get; }
 
     public DayPunchPairingCellViewModel? this[ColumnSlot slot]
     {
@@ -67,15 +68,5 @@ public class DayPunchPairingRowViewModel : ReactiveObject
             if (slot == ColumnSlot.In) InPunch = value;
             else OutPunch = value;
         }
-    }
-
-    private void OnInPunchChanged(DayPunchPairingCellViewModel? value) => NotifyFillStateChanged();
-
-    private void OnOutPunchChanged(DayPunchPairingCellViewModel? value) => NotifyFillStateChanged();
-
-    private void NotifyFillStateChanged()
-    {
-        this.RaisePropertyChanged(nameof(IsIncomplete));
-        this.RaisePropertyChanged(nameof(IsEmpty));
     }
 }

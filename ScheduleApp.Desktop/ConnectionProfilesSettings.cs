@@ -16,5 +16,5 @@ namespace ScheduleApp.Desktop;
 /// </summary>
 public class ConnectionProfilesSettings
 {
-    public List<ConnectionProfile> Profiles { get; set; } = new();
+    public List<ConnectionProfile> Profiles { get; set; } = [];
 }

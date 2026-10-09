@@ -5,11 +5,11 @@
         <ResourceDictionary>
             <!-- Fixed to Syncfusion's Windows11Light theme, applied to every window by
                  SfSkinManager.ApplicationTheme in App.xaml.cs - no in-app theme switcher.
-                 These are the app's own resources around it: the Latte colour scale, the
-                 design tokens named from it, and the shared styles that use them. -->
+                 These are the app's own resources around it: the defaults for the controls
+                 the views use, the Latte colour scale, the design tokens named from it, and
+                 the shared styles that use them. -->
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Themes/FrameworkFallbacks.xaml" />
-                <ResourceDictionary Source="Themes/SyncfusionBases.xaml" />
+                <ResourceDictionary Source="Themes/ControlDefaults.xaml" />
                 <ResourceDictionary Source="Themes/Tokens.xaml" />
                 <ResourceDictionary Source="Themes/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>

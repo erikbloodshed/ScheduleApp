@@ -1,14 +1,14 @@
-using System.Windows.Controls;
 using ScheduleApp.Desktop.ViewModels;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class PushListenerPage : Page, INavigationAware
+public partial class PushListenerPage : INavigationAware
 {
     public PushListenerPage(PushListenerViewModel viewModel)
     {
-        DataContext = viewModel;
         InitializeComponent();
+        ViewModel = viewModel;
+        ListenerView.ViewModel = viewModel;
     }
 
     // Deliberately does NOT test the connection (or pull the device list) on navigation --

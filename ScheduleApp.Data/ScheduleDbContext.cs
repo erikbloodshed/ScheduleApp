@@ -7,12 +7,8 @@ using ScheduleApp.Core.Users;
 
 namespace ScheduleApp.Data;
 
-public class ScheduleDbContext : DbContext
+public class ScheduleDbContext(DbContextOptions<ScheduleDbContext> options) : DbContext(options)
 {
-    public ScheduleDbContext(DbContextOptions<ScheduleDbContext> options) : base(options)
-    {
-    }
-
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Holiday> Holidays => Set<Holiday>();
     public DbSet<Employee> Employees => Set<Employee>();

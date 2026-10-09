@@ -1,27 +1,41 @@
-using System.ComponentModel;
-using System.Reactive.Linq;
 using ReactiveUI;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
 /// <summary>
-/// A ReactiveObject whose commands' CanExecute is a plain bool method (CanSaveX()), re-asked
-/// whenever this ViewModel's own properties change and whenever <see cref="RequeryCanExecute"/>
-/// is called -- so a command's CanExecute stays a method the rest of the class can read --
-/// and the Yes/No questions and
-/// notices a ViewModel asks (Confirm, Notify). The base of ViewModelBase, and of the few
-/// ViewModels with commands but nothing to report on the status bar.
+/// A ReactiveObject that asks the person things through Interactions its View answers
+/// (Views/ViewInteractions.cs) -- a Yes/No question, a notice, a dialog of its own, a file to
+/// open or save to -- so the ViewModel never shows a window itself, and a test can answer them.
+/// The base of ViewModelBase, and of dialogs with nothing to report on the status bar.
 /// </summary>
 public abstract class ReactiveViewModel : ReactiveObject
 {
     /// <summary>A Yes/No question; the output is true for Yes. The View answers it with a
-    /// MessageBox (Views/MessageBoxInteractions.cs), so the ViewModel never shows a window.</summary>
+    /// MessageBox (Views/ViewInteractions.cs), so the ViewModel never shows a window.</summary>
     public Interaction<Confirmation, bool> Confirm { get; } = new();
 
     /// <summary>A message the user has to acknowledge (OK only), for one too long or too
     /// important for the status bar, such as the problems an import found.</summary>
     public Interaction<Notice, RxVoid> Notify { get; } = new();
+
+    /// <summary>Shows the dialog for a ViewModel this one built, modally, and answers true if
+    /// it was accepted. The View resolves the dialog through the view locator (whichever
+    /// window is the IViewFor of that ViewModel's type), so this ViewModel never touches a
+    /// window; whatever the dialog settled on is read back off the dialog's own ViewModel.</summary>
+    public Interaction<ReactiveViewModel, bool> ShowDialog { get; } = new();
+
+    /// <summary>Asks for a file to open; the output is its path, or null if the person
+    /// cancelled.</summary>
+    public Interaction<FileRequest, string?> PickFileToOpen { get; } = new();
+
+    /// <summary>Asks where to save a file; the output is its path, or null if the person
+    /// cancelled.</summary>
+    public Interaction<FileRequest, string?> PickFileToSave { get; } = new();
+
+    /// <summary>Opens a file in whatever the system has registered for its type, such as a
+    /// just-saved workbook in Excel.</summary>
+    public Interaction<string, RxVoid> OpenFile { get; } = new();
 
     /// <summary>Asks <paramref name="message"/> as a Yes/No question (see <see cref="Confirm"/>).</summary>
     protected async Task<bool> ConfirmAsync(string message, string title, bool isWarning = false) =>
@@ -31,47 +45,20 @@ public abstract class ReactiveViewModel : ReactiveObject
     protected async Task NotifyAsync(string message, string title, NoticeKind kind = NoticeKind.Information) =>
         await Notify.Handle(new Notice(title, message, kind));
 
-    /// <summary>Raised by <see cref="RequeryCanExecute"/>.</summary>
-    private event EventHandler? Requeried;
+    /// <summary>Shows <paramref name="dialog"/>'s dialog (see <see cref="ShowDialog"/>); true if it
+    /// was accepted.</summary>
+    protected async Task<bool> ShowDialogAsync(ReactiveViewModel dialog) => await ShowDialog.Handle(dialog);
 
-    /// <summary>Re-asks every command built with <see cref="CanExecuteFrom"/> whether it can
-    /// run now -- for a change to something the commands read that this ViewModel doesn't
-    /// raise PropertyChanged for itself, such as shared state another object owns.</summary>
-    protected void RequeryCanExecute() => Requeried?.Invoke(this, EventArgs.Empty);
+    /// <summary>A file to open (see <see cref="PickFileToOpen"/>), or null if cancelled.</summary>
+    protected async Task<string?> PickFileToOpenAsync(
+        string filter, string? fileName = null, string? title = null, string? initialDirectory = null) =>
+        await PickFileToOpen.Handle(new FileRequest(filter, fileName, title, initialDirectory));
 
-    /// <summary>
-    /// A command's CanExecute from <paramref name="canExecute"/>, re-asked whenever this
-    /// ViewModel raises PropertyChanged, <see cref="RequeryCanExecute"/> is called, or any of
-    /// <paramref name="sources"/> raises PropertyChanged. Asked first when the command
-    /// subscribes, not when this is called, so it can be built before every field the condition
-    /// reads is set.
-    /// </summary>
-    protected IObservable<bool> CanExecuteFrom(Func<bool> canExecute, params INotifyPropertyChanged[] sources) =>
-        Observable.Defer(() => Observable.Return(canExecute()))
-            .Concat(Observable.Merge(
-                    [
-                        Observable.FromEventPattern(handler => Requeried += handler, handler => Requeried -= handler)
-                            .Select(_ => RxVoid.Default),
-                        PropertyChangedOf(this),
-                        .. sources.Select(PropertyChangedOf),
-                    ])
-                .Select(_ => canExecute()))
-            .DistinctUntilChanged();
+    /// <summary>Where to save a file (see <see cref="PickFileToSave"/>), or null if cancelled.</summary>
+    protected async Task<string?> PickFileToSaveAsync(
+        string filter, string? fileName = null, string? title = null, string? initialDirectory = null) =>
+        await PickFileToSave.Handle(new FileRequest(filter, fileName, title, initialDirectory));
 
-    /// <summary>
-    /// A command's CanExecute that re-asks <paramref name="canExecute"/> whenever any of
-    /// <paramref name="sources"/> raises PropertyChanged -- for a condition read off shared state
-    /// some other object owns (AttendanceBusyState.IsRunning, MultiSelectModeState, a sibling's
-    /// selection), where a WhenAnyValue on this ViewModel's own properties can't see the change.
-    /// </summary>
-    protected static IObservable<bool> CanExecuteWhen(Func<bool> canExecute, params INotifyPropertyChanged[] sources) =>
-        Observable.Defer(() => Observable.Return(canExecute()))
-            .Concat(sources.Select(PropertyChangedOf).Merge().Select(_ => canExecute()))
-            .DistinctUntilChanged();
-
-    private static IObservable<RxVoid> PropertyChangedOf(INotifyPropertyChanged source) =>
-        Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
-                handler => source.PropertyChanged += handler,
-                handler => source.PropertyChanged -= handler)
-            .Select(_ => RxVoid.Default);
+    /// <summary>Opens <paramref name="path"/> in its default app (see <see cref="OpenFile"/>).</summary>
+    protected async Task OpenFileAsync(string path) => await OpenFile.Handle(path);
 }

@@ -8,13 +8,7 @@ namespace ScheduleApp.Core.Exceptions;
 /// defense for anything that calls the repository directly, e.g. two people
 /// using the app against the same database at the same time.
 /// </summary>
-public class DuplicateEmployeeIdException : Exception
+public class DuplicateEmployeeIdException(int employeeId) : Exception($"Employee ID {employeeId} is already assigned to another employee.")
 {
-    public int EmployeeId { get; }
-
-    public DuplicateEmployeeIdException(int employeeId)
-        : base($"Employee ID {employeeId} is already assigned to another employee.")
-    {
-        EmployeeId = employeeId;
-    }
+    public int EmployeeId { get; } = employeeId;
 }

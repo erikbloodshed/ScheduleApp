@@ -8,9 +8,9 @@ namespace ScheduleApp.PushListener.Models;
 /// "send" it a command (e.g. reboot, re-sync) is to queue text here and wait for the device's
 /// next poll of /iclock/getrequest -- ported from AdmsServer unchanged.
 /// </summary>
-public class DeviceState
+public class DeviceState(string serialNumber)
 {
-    public string SerialNumber { get; }
+    public string SerialNumber { get; } = serialNumber;
     public DateTime LastSeenUtc { get; set; }
 
     // Simplified sync counters. Real ADMS firmware manages its own stamp progression; this is
@@ -21,11 +21,6 @@ public class DeviceState
     public ConcurrentQueue<(int Id, string Text)> PendingCommands { get; } = new();
 
     private int _commandCounter;
-
-    public DeviceState(string serialNumber)
-    {
-        SerialNumber = serialNumber;
-    }
 
     public int NextCommandId() => Interlocked.Increment(ref _commandCounter);
 }

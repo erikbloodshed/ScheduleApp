@@ -1,94 +1,77 @@
-<UserControl x:Class="ScheduleApp.Desktop.Views.ManualEntriesView"
+<rxui:ReactiveUserControl x:Class="ScheduleApp.Desktop.Views.ManualEntriesView"
+             x:TypeArguments="vm:AttendanceViewModel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
-             xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters">
+             xmlns:rxui="http://reactiveui.net"
+             xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
+             xmlns:views="clr-namespace:ScheduleApp.Desktop.Views"
+             xmlns:syncfusion="http://schemas.syncfusion.com/wpf">
     <!-- One of three views the "Attendance" drawer item's sub-items navigate between - see
          AttendanceSummaryView.xaml's own doc comment for the shared AttendanceViewModel/
          page-navigation story all three follow. Scoped by date range, reading
          ManualAttendanceLogs rather than AttendanceLogs (see ManualEntriesViewModel's own doc
          comment for why it's kept separate from Punch Records). -->
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
-
-        <!-- A Range date: "October 1, 2026", typed or picked from the drop-down calendar. -->
-        <Style x:Key="RangeDate" TargetType="syncfusion:DateTimeEdit">
-            <Setter Property="Pattern" Value="CustomPattern" />
-            <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
-            <Setter Property="IsEmptyDateEnabled" Value="True" />
-            <Setter Property="NullValue" Value="{x:Null}" />
-            <Setter Property="ShowMaskOnNullValue" Value="False" />
-            <Setter Property="Width" Value="190" />
-        </Style>
-    </UserControl.Resources>
 
     <Grid Margin="10" RowDefinitions="Auto,Auto,*">
         <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
             <!-- Doubles as a Cancel button while anything's running (see
-                 RefreshOrCancelManualEntriesCommand/ManualEntriesRefreshOrCancelGlyph/
-                 ManualEntriesRefreshOrCancelToolTip on AttendanceViewModel) - the same in-place
+                 ManualEntriesViewModel.RefreshOrCancelManualEntriesCommand) - the same in-place
                  Refresh<->Cancel toggle as AttendanceSummaryView's own Period-row button,
                  pinned to this row's right edge. -->
-            <syncfusion:ButtonAdv DockPanel.Dock="Right"
+            <syncfusion:ButtonAdv x:Name="RefreshOrCancelButton"
+                                  DockPanel.Dock="Right"
                                   SizeMode="Small"
-                                  Tag="{Binding ManualEntriesRefreshOrCancelGlyph}"
-                                  IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  Command="{Binding RefreshOrCancelManualEntriesCommand}"
-                                  ToolTip="{Binding ManualEntriesRefreshOrCancelToolTip}" />
+                                  IconTemplate="{StaticResource TagGlyphIconTemplate}" />
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                 <TextBlock Text="Start" Width="40" VerticalAlignment="Center" />
                 <!-- Steps ManualEntriesStart/ManualEntriesEnd to the adjacent cut-off period
                      and reloads immediately; see ManualEntriesViewModel.PreviousPeriodAsync. -->
-                <syncfusion:ButtonAdv SizeMode="Small"
+                <syncfusion:ButtonAdv x:Name="PreviousPeriodButton"
+                                      SizeMode="Small"
                                       Tag="&#xE76B;"
                                       IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                      Command="{Binding PreviousManualEntriesPeriodCommand}"
                                       Margin="0,0,6,0"
                                       ToolTip="Previous cut-off period." />
-                <syncfusion:DateTimeEdit Style="{StaticResource RangeDate}"
-                                         DateTime="{Binding ManualEntriesStart, Mode=TwoWay}"
+                <syncfusion:DateTimeEdit x:Name="StartPicker"
+                                         Width="190"
                                          Margin="0,0,24,0" />
                 <TextBlock Text="End" Width="32" VerticalAlignment="Center" />
-                <syncfusion:DateTimeEdit Style="{StaticResource RangeDate}"
-                                         DateTime="{Binding ManualEntriesEnd, Mode=TwoWay}"
+                <syncfusion:DateTimeEdit x:Name="EndPicker"
+                                         Width="190"
                                          Margin="0,0,6,0" />
-                <syncfusion:ButtonAdv SizeMode="Small"
+                <syncfusion:ButtonAdv x:Name="NextPeriodButton"
+                                      SizeMode="Small"
                                       Tag="&#xE76C;"
                                       IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                      Command="{Binding NextManualEntriesPeriodCommand}"
                                       Margin="0,0,18,0"
                                       ToolTip="Next cut-off period." />
-                <syncfusion:ButtonAdv Label="Add"
+                <syncfusion:ButtonAdv x:Name="AddButton"
+                                      Label="Add"
                                       IconTemplate="{StaticResource AddIconTemplate}"
-                                      SizeMode="Normal"
-                                      Command="{Binding AddManualEntryCommand}"
                                       ToolTip="Log a missed punch by hand -- shown here only (not Punch Records), but still counted in attendance summaries." />
-                <syncfusion:ButtonAdv Label="Export"
+                <syncfusion:ButtonAdv x:Name="ExportButton"
+                                      Label="Export"
                                       IconTemplate="{StaticResource ExportIconTemplate}"
-                                      SizeMode="Normal"
-                                      Command="{Binding ExportManualEntriesCommand}"
                                       Margin="12,0,0,0"
                                       ToolTip="Save these entries to Excel (includes Reason/Entered By) -- opens automatically." />
-                <syncfusion:ButtonAdv Label="Import"
+                <syncfusion:ButtonAdv x:Name="ImportButton"
+                                      Label="Import"
                                       IconTemplate="{StaticResource ImportIconTemplate}"
-                                      SizeMode="Normal"
-                                      Command="{Binding ImportManualEntriesCommand}"
                                       Margin="12,0,0,0"
                                       ToolTip="Bulk-add every row in an Excel workbook. Use Export's file as a template -- the whole file must be valid, or nothing is added." />
             </StackPanel>
         </DockPanel>
 
-        <TextBlock Grid.Row="1"
+        <TextBlock x:Name="CountLine"
+                   Grid.Row="1"
                    Margin="0,0,0,6"
-                   Foreground="{DynamicResource MutedForegroundBrush}"
-                   Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource BoolToVisibility}}">
-            <Run Text="{Binding ManualEntriesCount, Mode=OneWay}" FontWeight="Bold" />
+                   Foreground="{DynamicResource MutedForegroundBrush}">
+            <Run x:Name="CountRun" FontWeight="Bold" />
             <Run Text="manual entry(ies) found in range." />
         </TextBlock>
 
-        <syncfusion:SfDataGrid Grid.Row="2"
-                               ItemsSource="{Binding ManualEntries}"
+        <syncfusion:SfDataGrid x:Name="EntriesGrid"
+                               Grid.Row="2"
                                FooterColumnCount="1"
                                AutoGenerateColumns="False"
                                AllowEditing="False"
@@ -117,14 +100,12 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <syncfusion:ButtonAdv Label="Edit"
                                                       IconTemplate="{StaticResource EditIconTemplate}"
-                                                      SizeMode="Normal"
                                                       Margin="0,0,4,0"
-                                                      Command="{Binding DataContext.EditManualEntryCommand, RelativeSource={RelativeSource AncestorType=syncfusion:SfDataGrid}}"
+                                                      Command="{Binding ViewModel.ManualEntryEditor.EditManualEntryCommand, RelativeSource={RelativeSource AncestorType=views:ManualEntriesView}}"
                                                       CommandParameter="{Binding}" />
                                 <syncfusion:ButtonAdv Label="Delete"
                                                       IconTemplate="{StaticResource DeleteIconTemplate}"
-                                                      SizeMode="Normal"
-                                                      Command="{Binding DataContext.DeleteManualEntryCommand, RelativeSource={RelativeSource AncestorType=syncfusion:SfDataGrid}}"
+                                                      Command="{Binding ViewModel.ManualEntryEditor.DeleteManualEntryCommand, RelativeSource={RelativeSource AncestorType=views:ManualEntriesView}}"
                                                       CommandParameter="{Binding}" />
                             </StackPanel>
                         </DataTemplate>
@@ -133,11 +114,11 @@
             </syncfusion:SfDataGrid.Columns>
         </syncfusion:SfDataGrid>
 
-        <TextBlock Grid.Row="2"
+        <TextBlock x:Name="EmptyText"
+                   Grid.Row="2"
                    Text="No manual entries in range -- use Add Manual Entry… above, or on Punch Records' Punches toolbar, or widen the date range."
                    Foreground="{DynamicResource MutedForegroundBrush}"
                    HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   Visibility="{Binding HasLoadedManualEntries, Converter={StaticResource InverseBoolToVisibility}}" />
+                   VerticalAlignment="Center" />
     </Grid>
-</UserControl>
+</rxui:ReactiveUserControl>

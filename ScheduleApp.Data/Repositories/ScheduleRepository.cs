@@ -124,7 +124,7 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
 
     public async Task DeleteDepartmentAsync(int departmentId, CancellationToken cancellationToken = default)
     {
-        var department = await db.Departments.FindAsync(new object?[] { departmentId }, cancellationToken);
+        var department = await db.Departments.FindAsync([departmentId], cancellationToken);
         if (department is null) return;
 
         // The FK is configured with ON DELETE SET NULL, so this unassigns rather
@@ -227,7 +227,7 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
         decimal? defaultWorkTimeHours = null, bool exemptFromUndertimeDeduction = false,
         CancellationToken cancellationToken = default)
     {
-        var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
+        var employee = await db.Employees.FindAsync([employeeId], cancellationToken);
         if (employee is null) return;
 
         if (await db.Employees.AnyAsync(e => e.Pin == pin && e.Id != employeeId, cancellationToken))
@@ -328,7 +328,7 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
     /// referencing it is gone.</summary>
     public async Task DeleteEmployeeAsync(int employeeId, CancellationToken cancellationToken = default)
     {
-        var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
+        var employee = await db.Employees.FindAsync([employeeId], cancellationToken);
         if (employee is null) return;
 
         db.Employees.Remove(employee);
@@ -337,7 +337,7 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
 
     public async Task SetEmployeeBlacklistAsync(int employeeId, bool isBlacklisted, CancellationToken cancellationToken = default)
     {
-        var employee = await db.Employees.FindAsync(new object?[] { employeeId }, cancellationToken);
+        var employee = await db.Employees.FindAsync([employeeId], cancellationToken);
         if (employee is null) return;
 
         employee.IsBlacklisted = isBlacklisted;
@@ -382,7 +382,7 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
         // FlexibleSegment instances (a segment belongs to exactly one ScheduleEntry),
         // not shared references to the same objects.
         var segmentList = flexibleSegments?.ToList()
-            ?? new List<(TimeOnly TimeIn, TimeOnly TimeOut, double? ClockInBufferHours, double? ClockOutBufferHours)>();
+            ?? [];
 
         // FlexibleSegments must be loaded here (not AsNoTracking) so that clearing
         // the collection below is recognized by EF as deleting the old rows, rather
@@ -490,13 +490,13 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
             existing.RestrictedTimeOut = restrictedTimeOut;
 
             existing.FlexibleSegments.Clear();
-            foreach (var seg in segments)
+            foreach (var (TimeIn, TimeOut, ClockInBufferHours, ClockOutBufferHours) in segments)
                 existing.FlexibleSegments.Add(new FlexibleSegment
                 {
-                    TimeIn = seg.TimeIn,
-                    TimeOut = seg.TimeOut,
-                    ClockInBufferHours = seg.ClockInBufferHours,
-                    ClockOutBufferHours = seg.ClockOutBufferHours,
+                    TimeIn = TimeIn,
+                    TimeOut = TimeOut,
+                    ClockInBufferHours = ClockInBufferHours,
+                    ClockOutBufferHours = ClockOutBufferHours,
                 });
 
             existing.ValidateScheduleTypeShape();
@@ -524,13 +524,13 @@ public class ScheduleRepository(ScheduleDbContext db) : IScheduleRepository
             RestrictedTimeOut = restrictedTimeOut,
         };
 
-        foreach (var seg in segments)
+        foreach (var (TimeIn, TimeOut, ClockInBufferHours, ClockOutBufferHours) in segments)
             newEntry.FlexibleSegments.Add(new FlexibleSegment
             {
-                TimeIn = seg.TimeIn,
-                TimeOut = seg.TimeOut,
-                ClockInBufferHours = seg.ClockInBufferHours,
-                ClockOutBufferHours = seg.ClockOutBufferHours,
+                TimeIn = TimeIn,
+                TimeOut = TimeOut,
+                ClockInBufferHours = ClockInBufferHours,
+                ClockOutBufferHours = ClockOutBufferHours,
             });
 
         newEntry.ValidateScheduleTypeShape();

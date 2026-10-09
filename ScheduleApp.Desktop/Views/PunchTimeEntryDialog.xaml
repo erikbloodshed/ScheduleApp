@@ -1,9 +1,10 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PunchTimeEntryDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.PunchTimeEntryDialog" ShowMinimizeButton="False" ShowMaximizeButton="False"
+        x:TypeArguments="attendance:PunchTimeEntryViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
-        Title="Add Manual Punch"
+        xmlns:attendance="clr-namespace:ScheduleApp.Desktop.ViewModels.Attendance"
         Width="380" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -41,7 +42,7 @@
         </Border>
 
         <TextBlock Grid.Row="1" Text="Time" Margin="0,0,0,4" />
-        <controls:TimeInput x:Name="TimeBox" Grid.Row="2" Density="Compact" Margin="0,0,0,12" />
+        <controls:TimeInput x:Name="TimeBox" Grid.Row="2" Margin="0,0,0,12" />
 
         <TextBlock Grid.Row="4" Text="Reason" Margin="0,0,0,4" />
         <syncfusion:SfTextBoxExt x:Name="ReasonBox" Grid.Row="5" Margin="0,0,0,12"
@@ -54,12 +55,12 @@
                    Visibility="Collapsed" Margin="0,8,0,0" />
 
         <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <syncfusion:ButtonAdv x:Name="SaveButton" Label="Add" MinWidth="86" Margin="0,0,8,0"
-                                  IconTemplate="{StaticResource ApplyIconTemplate}" SizeMode="Normal"
-                                  IsDefault="True" Click="SaveButton_Click" />
+            <syncfusion:ButtonAdv x:Name="SaveButton" MinWidth="86" Margin="0,0,8,0"
+                                  IconTemplate="{StaticResource ApplyIconTemplate}"
+                                  IsDefault="True" />
             <syncfusion:ButtonAdv Label="Cancel" MinWidth="86" IsCancel="True"
-                                  IconTemplate="{StaticResource CancelIconTemplate}" SizeMode="Normal" />
+                                  IconTemplate="{StaticResource CancelIconTemplate}" />
         </StackPanel>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

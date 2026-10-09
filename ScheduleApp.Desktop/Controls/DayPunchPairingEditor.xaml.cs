@@ -1,7 +1,13 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Converters;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 
 namespace ScheduleApp.Desktop.Controls;
@@ -17,15 +23,14 @@ namespace ScheduleApp.Desktop.Controls;
 /// (AllowDrop plus the Drop handler below). The Border's DataContext is the row it
 /// belongs to and its Tag is "In"/"Out", which together identify the slot; the
 /// dragged <see cref="DayPunchPairingCellViewModel"/> travels in the DataObject.
-/// All this code-behind does is turn the gesture into a single
-/// <see cref="DayPunchPairingEditorViewModel.MoveCell"/> call -- the swap itself,
-/// and the recompute that follows it, live in the view model.
+/// All this code-behind does is turn gestures into ViewModel calls -- the move and
+/// the recompute that follows it live in the ViewModel.
 /// </summary>
-public partial class DayPunchPairingEditor : UserControl
+public partial class DayPunchPairingEditor
 {
-    private static readonly Brush DefaultSlotBorder = new SolidColorBrush(Color.FromRgb(0xE2, 0xE5, 0xEA));
-    private static readonly Brush HoverSlotBorder = new SolidColorBrush(Color.FromRgb(0x2D, 0x6C, 0xDF));
-    private static readonly Brush HoverSlotFill = new SolidColorBrush(Color.FromArgb(0x22, 0x2D, 0x6C, 0xDF));
+    private static readonly Brush DefaultSlotBorder = Frozen(Color.FromRgb(0xE2, 0xE5, 0xEA));
+    private static readonly Brush HoverSlotBorder = Frozen(Color.FromRgb(0x2D, 0x6C, 0xDF));
+    private static readonly Brush HoverSlotFill = Frozen(Color.FromArgb(0x22, 0x2D, 0x6C, 0xDF));
 
     private Point _pressPosition;
     private DayPunchPairingCellViewModel? _dragCandidate;
@@ -33,9 +38,46 @@ public partial class DayPunchPairingEditor : UserControl
     public DayPunchPairingEditor()
     {
         InitializeComponent();
+
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            this.OneWayBind(ViewModel, vm => vm.EmployeeName, v => v.EmployeeNameText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.DateText, v => v.DateText.Text).DisposeWith(d);
+
+            // Every toolbar button changes the grid, so the strip is gone in a read-only open.
+            this.OneWayBind(ViewModel, vm => vm.IsReadOnly, v => v.Toolbar.Visibility, readOnly => VisibleWhen(!readOnly)).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.AddRowCommand, v => v.AddSegmentButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.RemoveEmptySegmentsCommand, v => v.RemoveEmptyButton).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.UndoCommand, v => v.UndoButton).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Rows, v => v.RowsList.ItemsSource).DisposeWith(d);
+
+            // Footer: the live preview where the pairing is read back, the punch count and a
+            // note saying why there's no verdict everywhere else.
+            this.OneWayBind(ViewModel, vm => vm.PairingAffectsResult, v => v.PreviewFooter.Visibility, VisibleWhen).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PairingAffectsResult, v => v.PunchCountFooter.Visibility, affects => VisibleWhen(!affects)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PunchCountText, v => v.PunchCountText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PairingNote, v => v.PairingNoteText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.WorkedText, v => v.WorkedText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RequiredText, v => v.RequiredText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RemainderLabel, v => v.RemainderLabel.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RemainderText, v => v.RemainderText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PreviewStatusText, v => v.PreviewStatusText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PreviewStatus, v => v.PreviewStatusText.Foreground, status => PunchStatusToBrushConverter.For(status)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.PreviewStatus, v => v.StatusDot.Fill, status => PunchStatusToBrushConverter.For(status)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.UnpairedCount, v => v.UnpairedText.Text,
+                count => string.Format(CultureInfo.CurrentCulture, "{0} punch still unpaired", count)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.HasUnpairedPunches, v => v.UnpairedText.Visibility, VisibleWhen).DisposeWith(d);
+        });
     }
 
-    private DayPunchPairingEditorViewModel? ViewModel => DataContext as DayPunchPairingEditorViewModel;
+    private static Visibility VisibleWhen(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+
+    private static SolidColorBrush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
 
     // The (row, slot) a given slot Border stands for -- its DataContext is the
     // row, its Tag ("In"/"Out") the column. Null only if a handler somehow fires
@@ -48,26 +90,19 @@ public partial class DayPunchPairingEditor : UserControl
     private void Slot_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // A "View Punches…" open is read-only: no drag, no double-click-to-add.
-        // Bailing here is what stops both -- nothing downstream captures a drag
-        // candidate or dispatches AddManualPunchAsync.
-        if (ViewModel?.IsReadOnly == true)
+        if (ViewModel is not { IsReadOnly: false } viewModel)
             return;
 
         var slot = ResolveSlot(sender);
 
-        // Double-click mirrors the two enabled items on this slot's own right-click
-        // menu (see Slot_MouseRightButtonUp): empty -> "Add Manual Punch…", occupied
-        // by a manual entry -> "Edit Time…". A device punch's time can't be edited
-        // (same rule the menu enforces with its disabled note), so double-clicking
-        // one is left alone -- it just falls through to the drag-candidate tracking
-        // below, same as it always has.
-        //
-        // Handled here rather than via MouseDoubleClick because that event is
-        // declared on Control, and a Border is a Decorator. Dispatched rather than
-        // awaited inline so this handler stays synchronous: it's also the start of
-        // the drag gesture, and an async void in that path would let a drag begin
-        // against a slot the dialog is concurrently filling.
-        if (e.ClickCount == 2 && ViewModel is not null && slot is { } target)
+        // Double-click mirrors the slot's right-click menu: empty -> "Add Manual Punch…", a
+        // manual entry -> "Edit Time…". A device punch's time can't be edited, so
+        // double-clicking one falls through to the drag tracking below. Handled here rather
+        // than via MouseDoubleClick, which is declared on Control (a Border is a Decorator).
+        // Through the commands' ICommand.Execute, which reports a failure rather than
+        // throwing -- and doesn't await, so this handler, also the start of the drag gesture,
+        // stays synchronous.
+        if (e.ClickCount == 2 && slot is { } target)
         {
             var cell = target.Row[target.Slot];
 
@@ -75,7 +110,7 @@ public partial class DayPunchPairingEditor : UserControl
             {
                 _dragCandidate = null;
                 e.Handled = true;
-                _ = Dispatcher.InvokeAsync(() => ViewModel.AddManualPunchAsync(target.Row, target.Slot));
+                ((ICommand)viewModel.AddManualPunchCommand).Execute(target);
                 return;
             }
 
@@ -83,14 +118,14 @@ public partial class DayPunchPairingEditor : UserControl
             {
                 _dragCandidate = null;
                 e.Handled = true;
-                _ = Dispatcher.InvokeAsync(() => ViewModel.EditManualPunchAsync(cell));
+                ((ICommand)viewModel.EditManualPunchCommand).Execute(cell);
                 return;
             }
         }
 
-        // Remember what's under the pointer, but don't start a drag yet -- a plain
-        // click shouldn't move anything. Slot_PreviewMouseMove promotes this to a
-        // real drag once the pointer has travelled past the drag threshold.
+        // Remember what's under the pointer, but don't start a drag yet -- a plain click
+        // shouldn't move anything. Slot_PreviewMouseMove promotes this to a real drag once the
+        // pointer has travelled past the drag threshold.
         _pressPosition = e.GetPosition(null);
         _dragCandidate = slot is { } s ? s.Row[s.Slot] : null;
     }
@@ -120,70 +155,48 @@ public partial class DayPunchPairingEditor : UserControl
     }
 
     /// <summary>
-    /// Right-click a slot: type a missing punch into an empty one, or correct/remove
-    /// one that was typed before. A device punch offers only a disabled note saying
-    /// why nothing can be done to it -- AttendanceLogs is meant to stay an untouched
-    /// record of what the clock reported (see ManualAttendanceLog's own doc comment),
-    /// and a menu that simply didn't open would leave someone wondering whether they
-    /// had missed a gesture rather than telling them the rule. A "View Punches…" open
-    /// is read-only throughout, so the menu is just that one disabled note.
+    /// Right-click a slot: type a missing punch into an empty one, or correct/remove one that
+    /// was typed before. A device punch offers only a disabled note saying why nothing can be
+    /// done to it -- AttendanceLogs stays an untouched record of what the clock reported --
+    /// rather than a menu that silently didn't open. A "View Punches…" open is read-only
+    /// throughout, so the menu is just that one note.
     ///
-    /// Built in code-behind rather than declared in XAML for the same reason
-    /// MonthCalendarControl.BuildDayContextMenu is: a XAML ContextMenu is a separate
-    /// visual tree with no DataContext to inherit, so reaching both the clicked slot
-    /// and the view model means exactly this kind of PlacementTarget tunnel anyway.
-    /// Rebuilt on every click so the items always match what's in the slot now.
+    /// Built here, like MonthCalendarControl.BuildDayContextMenu, because a XAML ContextMenu
+    /// is a separate visual tree with no DataContext to inherit; rebuilt on every click so the
+    /// items match what's in the slot now.
     /// </summary>
     private void Slot_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (ViewModel is null || sender is not Border border) return;
+        if (ViewModel is not { } viewModel || sender is not Border border) return;
         if (ResolveSlot(sender) is not { } target) return;
 
         var menu = new ContextMenu();
 
-        if (ViewModel.IsReadOnly)
+        if (viewModel.IsReadOnly)
         {
-            // Same "say why rather than open nothing" reasoning as the device-punch
-            // note below -- a punch is changed from the day's own menu, not here.
             menu.Items.Add(new MenuItem
             {
                 Header = "Viewing only — use “Add Manual Entry…” on the day to change a punch",
                 IsEnabled = false,
             });
         }
+        else if (target.Row[target.Slot] is not { } cell)
+        {
+            menu.Items.Add(new MenuItem { Header = "Add Manual Punch…", Command = viewModel.AddManualPunchCommand, CommandParameter = target });
+        }
+        else if (cell.IsManual)
+        {
+            menu.Items.Add(new MenuItem { Header = "Edit Time…", Command = viewModel.EditManualPunchCommand, CommandParameter = cell });
+            menu.Items.Add(new MenuItem { Header = "Delete Manual Punch", Command = viewModel.DeleteManualPunchCommand, CommandParameter = cell });
+        }
         else
         {
-            var cell = target.Row[target.Slot];
-
-            if (cell is null)
-            {
-                var add = new MenuItem { Header = "Add Manual Punch…" };
-                add.Click += async (_, _) => await ViewModel.AddManualPunchAsync(target.Row, target.Slot);
-                menu.Items.Add(add);
-            }
-            else if (cell.IsManual)
-            {
-                var edit = new MenuItem { Header = "Edit Time…" };
-                edit.Click += async (_, _) => await ViewModel.EditManualPunchAsync(cell);
-                menu.Items.Add(edit);
-
-                var delete = new MenuItem { Header = "Delete Manual Punch" };
-                delete.Click += async (_, _) => await ViewModel.DeleteManualPunchAsync(cell);
-                menu.Items.Add(delete);
-            }
-            else
-            {
-                menu.Items.Add(new MenuItem
-                {
-                    Header = "Device punch — time can't be edited",
-                    IsEnabled = false,
-                });
-            }
+            menu.Items.Add(new MenuItem { Header = "Device punch — time can't be edited", IsEnabled = false });
         }
 
         border.ContextMenu = menu;
-        border.ContextMenu.PlacementTarget = border;
-        border.ContextMenu.IsOpen = true;
+        menu.PlacementTarget = border;
+        menu.IsOpen = true;
         e.Handled = true;
     }
 

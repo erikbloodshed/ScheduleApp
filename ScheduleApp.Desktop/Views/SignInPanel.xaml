@@ -1,5 +1,8 @@
-<UserControl x:Class="ScheduleApp.Desktop.Views.SignInPanel"
+<rxui:ReactiveUserControl x:Class="ScheduleApp.Desktop.Views.SignInPanel"
+             x:TypeArguments="accounts:SignInViewModel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:rxui="http://reactiveui.net"
+             xmlns:accounts="clr-namespace:ScheduleApp.Desktop.ViewModels.Accounts"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
              Width="380">
@@ -39,17 +42,14 @@
         <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <syncfusion:ButtonAdv x:Name="SignInButton"
                                   Label="Sign In"
-                                  SizeMode="Normal"
                                   IconTemplate="{StaticResource ApplyIconTemplate}"
                                   MinWidth="90"
                                   Margin="0,0,8,0"
-                                  IsDefault="True"
-                                  Click="SignInButton_Click" />
-            <syncfusion:ButtonAdv Label="Exit"
-                                  SizeMode="Normal"
+                                  IsDefault="True" />
+            <syncfusion:ButtonAdv x:Name="ExitButton"
+                                  Label="Exit"
                                   IconTemplate="{StaticResource CancelIconTemplate}"
-                                  MinWidth="90"
-                                  Click="ExitButton_Click" />
+                                  MinWidth="90" />
         </StackPanel>
     </Grid>
-</UserControl>
+</rxui:ReactiveUserControl>

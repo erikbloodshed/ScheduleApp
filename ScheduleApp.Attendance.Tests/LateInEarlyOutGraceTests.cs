@@ -170,10 +170,10 @@ public class LateInEarlyOutGraceTests
         Employee = employee,
         ScheduleType = ScheduleType.SplitShift,
         Date = Date,
-        FlexibleSegments = new List<FlexibleSegment>
-        {
+        FlexibleSegments =
+        [
             new() { TimeIn = segmentIn, TimeOut = segmentOut },
-        },
+        ],
     };
 
     [Fact]

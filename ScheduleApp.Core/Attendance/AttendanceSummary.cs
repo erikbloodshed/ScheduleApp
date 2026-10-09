@@ -24,12 +24,15 @@ public enum PunchStatus
 /// </summary>
 public static class PunchStatusLabel
 {
-    public static string ToText(this PunchStatus status) => status switch
+    extension(PunchStatus status)
     {
-        PunchStatus.OfficialBusiness => "Official Business",
-        PunchStatus.RestDay => "Rest Day",
-        _ => status.ToString()
-    };
+        public string ToText() => status switch
+        {
+            PunchStatus.OfficialBusiness => "Official Business",
+            PunchStatus.RestDay => "Rest Day",
+            _ => status.ToString()
+        };
+    }
 }
 
 /// <summary>

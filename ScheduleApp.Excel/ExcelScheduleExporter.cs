@@ -64,10 +64,10 @@ namespace ScheduleApp.Excel;
 public static class ExcelScheduleExporter
 {
     private static readonly string[] Headers =
-    {
+    [
         "Id", "FirstName", "ScheduleType", "StartDate", "EndDate", "WorkTime", "TimeIn", "TimeOut",
         "ClockInBufferBefore", "ClockInBufferAfter", "ClockOutBufferBefore", "ClockOutBufferAfter"
-    };
+    ];
 
     private const string WorkTimeNumberFormat = "_-* #,##0.0_-;\\-* #,##0.0_-;_-* \"-\"?_-;_-@_-";
 
@@ -114,7 +114,7 @@ public static class ExcelScheduleExporter
                 // the class doc comment's per-ScheduleType column table.
                 var segmentsToEmit = run.ScheduleType == ScheduleType.SplitShift && run.Segments.Count > 0
                     ? run.Segments
-                    : new List<RunSegment> { default };
+                    : [default];
 
                 foreach (var segment in segmentsToEmit)
                 {
@@ -309,10 +309,9 @@ public static class ExcelScheduleExporter
         entry.RestrictedTimeIn, entry.RestrictedTimeOut,
         entry.ClockInBufferBeforeHours, entry.ClockInBufferAfterHours,
         entry.ClockOutBufferBeforeHours, entry.ClockOutBufferAfterHours,
-        entry.FlexibleSegments
+        [.. entry.FlexibleSegments
             .OrderBy(s => s.TimeIn)
-            .Select(s => new RunSegment(s.TimeIn, s.TimeOut, s.ClockInBufferHours, s.ClockOutBufferHours))
-            .ToList());
+            .Select(s => new RunSegment(s.TimeIn, s.TimeOut, s.ClockInBufferHours, s.ClockOutBufferHours))]);
 
     /// <summary>Order-independent equality between two entries' segment sets --
     /// both are sorted by TimeIn first so a day whose segments were saved/loaded
@@ -344,7 +343,7 @@ public static class ExcelScheduleExporter
 
     private static string SanitizeTableName(string name)
     {
-        var cleaned = new string(name.Where(char.IsLetterOrDigit).ToArray());
+        var cleaned = new string([.. name.Where(char.IsLetterOrDigit)]);
         return "Tbl_" + (string.IsNullOrEmpty(cleaned) ? "Sheet" : cleaned) + "_" + Guid.NewGuid().ToString("N")[..6];
     }
 }

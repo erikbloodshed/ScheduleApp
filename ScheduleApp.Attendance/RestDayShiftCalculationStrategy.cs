@@ -243,5 +243,5 @@ internal sealed class RestDayShiftCalculationStrategy : IShiftCalculationStrateg
     }
 
     private static DateTime TruncateToMinute(DateTime dt) =>
-        new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0, dt.Kind);
+        new(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0, dt.Kind);
 }

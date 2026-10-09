@@ -8,7 +8,7 @@ namespace ScheduleApp.Attendance;
 /// time a new input is needed -- add a property here instead of changing the
 /// method signature (and therefore every implementer and every caller) again.
 /// </summary>
-public sealed class AttendanceRunRequest
+public sealed record AttendanceRunRequest
 {
     public required AttendancePolicy Policy { get; init; }
     public required DateOnly PeriodStart { get; init; }

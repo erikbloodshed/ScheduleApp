@@ -6,7 +6,7 @@ namespace ScheduleApp.Core.Attendance;
 /// visibly different from an actual import of new punches, rather than both
 /// silently succeeding the same way.
 /// </summary>
-public class PunchRecordImportResult
+public record PunchRecordImportResult
 {
     public int TotalInFile { get; init; }
     public int NewRecords { get; init; }

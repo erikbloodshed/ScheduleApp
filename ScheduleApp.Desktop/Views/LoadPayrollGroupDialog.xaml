@@ -1,4 +1,5 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.LoadPayrollGroupDialog" ShowMinimizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.LoadPayrollGroupDialog" ShowMinimizeButton="False"
+        x:TypeArguments="vm:LoadPayrollGroupViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
@@ -10,9 +11,6 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
 >
-    <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -33,10 +31,10 @@
              global indicator (see that file), just scoped to this dialog's own
              IsLoading rather than a shared busy state - a single ListAsync round trip
              has nothing else running alongside it to share state with. -->
-        <StackPanel Grid.Row="1"
+        <StackPanel x:Name="LoadingIndicator"
+                    Grid.Row="1"
                     Orientation="Horizontal"
-                    Margin="0,0,0,8"
-                    Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}">
+                    Margin="0,0,0,8">
             <ProgressBar IsIndeterminate="True"
                          Width="120"
                          Height="4"
@@ -48,20 +46,17 @@
                  - see LoadPayrollGroupViewModel.HasNoRuns's own doc comment for why this
                  is distinct from the loading state above rather than folded into one
                  "list is empty" check. -->
-            <TextBlock Text="No saved payroll runs yet -- use &quot;New Payroll Run…&quot; to create one."
+            <TextBlock x:Name="NoRunsText"
+                       Text="No saved payroll runs yet -- use &quot;New Payroll Run…&quot; to create one."
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource MutedForegroundBrush}"
                        HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Visibility="{Binding HasNoRuns, Converter={StaticResource BoolToVisibility}}" />
+                       VerticalAlignment="Center" />
 
             <ListBox x:Name="RunsListBox"
-                     ItemsSource="{Binding Runs}"
-                     SelectedItem="{Binding SelectedRun}"
                      BorderThickness="1"
                      BorderBrush="{DynamicResource CardBorderBrush}"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     MouseDoubleClick="RunsListBox_OnMouseDoubleClick">
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Padding" Value="8,6" />
@@ -107,12 +102,11 @@
                  ManageUsersDialog's own Delete button uses, so it can't be
                  mis-clicked in place of Load. Disabled state (nothing selected, or a
                  load/delete already in flight) comes from
-                 LoadPayrollGroupViewModel.CanDeleteRun, not anything in this file. -->
-            <syncfusion:ButtonAdv Grid.Column="0"
+                 LoadPayrollGroupViewModel.DeletePayrollRunCommand's own CanExecute. -->
+            <syncfusion:ButtonAdv x:Name="DeleteButton"
+                                  Grid.Column="0"
                                   Label="Delete…"
                                   IconTemplate="{StaticResource DeleteIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding DeletePayrollRunCommand}"
                                   HorizontalAlignment="Left"
                                   MinWidth="90"
                                   ToolTip="Permanently deletes this saved payroll run -- doesn't affect the employees' own payroll figures for that period." />
@@ -122,18 +116,15 @@
                 <syncfusion:ButtonAdv x:Name="LoadButton"
                                       Label="Load"
                                       IconTemplate="{StaticResource FolderIconTemplate}"
-                                      SizeMode="Normal"
                                       MinWidth="90"
                                       Margin="0,0,8,0"
-                                      IsDefault="True"
-                                      Click="LoadButton_Click" />
+                                      IsDefault="True" />
                 <syncfusion:ButtonAdv Label="Cancel"
                                       IconTemplate="{StaticResource CancelIconTemplate}"
-                                      SizeMode="Normal"
                                       MinWidth="80"
                                       IsCancel="True" />
             </StackPanel>
         </Grid>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

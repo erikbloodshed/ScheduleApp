@@ -1,7 +1,5 @@
-using System.Collections.ObjectModel;
 using System.IO;
-using System.Windows;
-using Microsoft.Win32;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Exceptions;
 using ScheduleApp.Core.Models;
@@ -9,7 +7,8 @@ using ScheduleApp.Data.Attendance;
 using ScheduleApp.Excel;
 using ScheduleApp.Desktop.Services;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -37,7 +36,7 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// entirely -- this Import… is paired with this class's own Export…, the same way
 /// ScheduleImportExportViewModel pairs Import Schedule…/Export Schedule… together
 /// in one class rather than splitting them.</summary>
-public class ManualEntriesViewModel : ViewModelBase
+public partial class ManualEntriesViewModel : ViewModelBase
 {
     private readonly IManualAttendanceLogRepository _manualAttendanceLogRepository;
     private readonly AttendanceBusyState _busy;
@@ -50,6 +49,9 @@ public class ManualEntriesViewModel : ViewModelBase
     /// loaded for, as of the last successful load -- null until the first one. See
     /// ShouldAutoReload, the only reader.</summary>
     private (DateTime? Start, DateTime? End, int ManualLogsVersion)? _loadedSnapshot;
+
+    private readonly IObservable<bool> _notBusy;
+    private readonly IObservable<bool> _canRefreshOrCancel;
 
     public ManualEntriesViewModel(
         IManualAttendanceLogRepository manualAttendanceLogRepository,
@@ -71,53 +73,38 @@ public class ManualEntriesViewModel : ViewModelBase
         _saveViewState = saveViewState;
         _tabActivationGate = tabActivationGate;
 
-        _manualEntriesStart = initialManualEntriesStart;
-        _manualEntriesEnd = initialManualEntriesEnd;
-        _isManualEntriesTabSelected = initialIsManualEntriesTabSelected;
+        ManualEntriesStart = initialManualEntriesStart;
+        ManualEntriesEnd = initialManualEntriesEnd;
+        IsManualEntriesTabSelected = initialIsManualEntriesTabSelected;
 
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
-            {
-                RequeryCanExecute();
-            }
-            else if (e.PropertyName == nameof(AttendanceBusyState.IsVisiblyRunning))
-            {
-                // See RefreshOrCancelGlyph/RefreshOrCancelToolTip's own doc comment --
-                // this is what flips the toolbar's icon Refresh button between Refresh
-                // and Cancel, same mechanism ReportViewModel's own analogous handler
-                // uses for the Attendance Summary tab's Refresh/Cancel button.
-                this.RaisePropertyChanged(nameof(RefreshOrCancelGlyph));
-                this.RaisePropertyChanged(nameof(RefreshOrCancelToolTip));
-                RequeryCanExecute();
-            }
-        };
+        // The toolbar's icon button: Cancel while anything's visibly running, Refresh
+        // otherwise -- same as ReportViewModel's Refresh/Cancel on the Summary tab.
+        _refreshOrCancelGlyphHelper = _busy.WhenAnyValue(b => b.IsVisiblyRunning)
+            .Select(running => running ? "\uE711" : "\uE72C")
+            .ToProperty(this, x => x.RefreshOrCancelGlyph);
+        _refreshOrCancelToolTipHelper = _busy.WhenAnyValue(b => b.IsVisiblyRunning)
+            .Select(running => running ? "Stop whatever's currently running." : "Reload manual entries for this period.")
+            .ToProperty(this, x => x.RefreshOrCancelToolTip);
 
-        PreviousPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(PreviousPeriodAsync), CanExecuteFrom(CanLoad));
-        NextPeriodCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(NextPeriodAsync), CanExecuteFrom(CanLoad));
-        LoadManualEntriesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(LoadManualEntriesAsync), CanExecuteFrom(CanLoad));
-        RefreshOrCancelManualEntriesCommand = ReactiveCommand.Create(RefreshOrCancelManualEntries, CanExecuteFrom(CanRefreshOrCancelManualEntries));
-        ExportManualEntriesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ExportManualEntriesAsync), CanExecuteFrom(CanExportManualEntries));
-        ImportManualEntriesCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportManualEntriesAsync), CanExecuteFrom(CanImportManualEntries));
+        _notBusy = _busy.WhenAnyValue(b => b.IsRunning).Select(running => !running);
+
+        // Always fine to try to cancel; otherwise only when a load could start -- not
+        // disabled during a run something else started, at exactly the moment the button
+        // reads as Cancel.
+        _canRefreshOrCancel = Observable.CombineLatest(
+            _busy.WhenAnyValue(b => b.IsVisiblyRunning), _notBusy, (visiblyRunning, idle) => visiblyRunning || idle);
+
+        ReportFailuresOf(PreviousPeriodCommand, NextPeriodCommand, LoadManualEntriesCommand,
+            RefreshOrCancelManualEntriesCommand, ExportManualEntriesCommand, ImportManualEntriesCommand);
+
+        this.WhenAnyValue(x => x.ManualEntriesStart, x => x.ManualEntriesEnd).Skip(1).Subscribe(_ => _saveViewState());
+        this.WhenAnyValue(x => x.IsManualEntriesTabSelected).Skip(1).Subscribe(OnIsManualEntriesTabSelectedChanged);
     }
 
-    /// <summary>Bound to the Manual Entries TabItem's IsSelected -- mirrors
-    /// PunchRecordsViewModel.IsPunchRecordsTabSelected's role, just for
-    /// LoadManualEntriesCoreAsync.</summary>
-    public bool IsManualEntriesTabSelected
-    {
-        get => _isManualEntriesTabSelected;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isManualEntriesTabSelected, value)) return;
-            this.RaisePropertyChanging();
-            _isManualEntriesTabSelected = value;
-            OnIsManualEntriesTabSelectedChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private bool _isManualEntriesTabSelected;
+    /// <summary>Whether the Manual Entries page is the one showing -- switching to it
+    /// reloads the grid if anything it shows has changed (see ShouldAutoReload).</summary>
+    [Reactive]
+    public partial bool IsManualEntriesTabSelected { get; set; }
 
     private void OnIsManualEntriesTabSelectedChanged(bool value)
     {
@@ -146,57 +133,20 @@ public class ManualEntriesViewModel : ViewModelBase
     private bool ShouldAutoReload() =>
         _loadedSnapshot != (ManualEntriesStart, ManualEntriesEnd, _dataVersion.ManualLogsVersion);
 
-    public int ManualEntriesCount
-    {
-        get => _manualEntriesCount;
-        set => this.RaiseAndSetIfChanged(ref _manualEntriesCount, value);
-    }
+    [Reactive]
+    public partial int ManualEntriesCount { get; private set; }
 
-    private int _manualEntriesCount;
+    [Reactive]
+    public partial bool HasLoadedManualEntries { get; private set; }
 
-    public bool HasLoadedManualEntries
-    {
-        get => _hasLoadedManualEntries;
-        set => this.RaiseAndSetIfChanged(ref _hasLoadedManualEntries, value);
-    }
+    public RangeObservableCollection<StoredPunchLogRow> ManualEntries { get; } = [];
 
-    private bool _hasLoadedManualEntries;
+    /// <summary>The range shown -- remembered across sessions.</summary>
+    [Reactive]
+    public partial DateTime? ManualEntriesStart { get; set; }
 
-    public ObservableCollection<StoredPunchLogRow> ManualEntries { get; } = new();
-
-    public DateTime? ManualEntriesStart
-    {
-        get => _manualEntriesStart;
-        set
-        {
-            if (EqualityComparer<DateTime?>.Default.Equals(_manualEntriesStart, value)) return;
-            this.RaisePropertyChanging();
-            _manualEntriesStart = value;
-            OnManualEntriesStartChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private DateTime? _manualEntriesStart;
-
-    private void OnManualEntriesStartChanged(DateTime? value) => _saveViewState();
-
-    public DateTime? ManualEntriesEnd
-    {
-        get => _manualEntriesEnd;
-        set
-        {
-            if (EqualityComparer<DateTime?>.Default.Equals(_manualEntriesEnd, value)) return;
-            this.RaisePropertyChanging();
-            _manualEntriesEnd = value;
-            OnManualEntriesEndChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private DateTime? _manualEntriesEnd;
-
-    private void OnManualEntriesEndChanged(DateTime? value) => _saveViewState();
+    [Reactive]
+    public partial DateTime? ManualEntriesEnd { get; set; }
 
     /// <summary>Backs the Manual Entries tab's own "◀"/"▶" period-nav buttons -- same
     /// AttendancePeriodNavigation.AdjacentCutoffPeriod step ReportViewModel/
@@ -207,8 +157,7 @@ public class ManualEntriesViewModel : ViewModelBase
     /// property-changed handler to notice; showFeedback: true, same as a direct ↻ Refresh
     /// click, since stepping the period is just as much an explicit action as pressing
     /// it.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> PreviousPeriodCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private Task PreviousPeriodAsync()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(ManualEntriesStart ?? ManualEntriesEnd ?? DateTime.Today, forward: false);
@@ -219,8 +168,7 @@ public class ManualEntriesViewModel : ViewModelBase
 
     /// <summary>See PreviousPeriodCommand's doc comment -- same step, the other
     /// direction.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> NextPeriodCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private Task NextPeriodAsync()
     {
         var (start, end) = AttendancePeriodNavigation.AdjacentCutoffPeriod(ManualEntriesStart ?? ManualEntriesEnd ?? DateTime.Today, forward: true);
@@ -229,26 +177,13 @@ public class ManualEntriesViewModel : ViewModelBase
         return LoadManualEntriesCoreAsync(showFeedback: true);
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> LoadManualEntriesCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private Task LoadManualEntriesAsync() => LoadManualEntriesCoreAsync(showFeedback: true);
 
-    /// <summary>What ManualEntriesView's toolbar button is actually wired to now -- see
-    /// ReportViewModel.RefreshOrCancelSummary's own doc comment for the fuller reasoning.
-    /// This replaces a separate "Cancel" button that used to sit docked to the right of
-    /// this same toolbar row, visible only while _busy.IsVisiblyRunning, with one button
-    /// that toggles in place instead of two buttons appearing/disappearing next to each
-    /// other -- see RefreshOrCancelGlyph's own doc comment for its current look/placement.
-    ///
-    /// CanExecute is IsVisiblyRunning (always fine to try to cancel) OR CanLoad() -- needed
-    /// because CanLoad() alone would leave the button disabled during a run it didn't
-    /// itself start (an Import/Export here, or an Import/Fetch started from Punch Records)
-    /// at exactly the moment IsVisiblyRunning makes it look like a live Cancel
-    /// button.</summary>
-    private bool CanRefreshOrCancelManualEntries() => _busy.IsVisiblyRunning || CanLoad();
-
-    public ReactiveCommand<RxVoid, RxVoid> RefreshOrCancelManualEntriesCommand { get; }
-
+    /// <summary>The toolbar's one button that toggles in place between Cancel (while
+    /// anything's visibly running) and Refresh -- see ReportViewModel.RefreshOrCancelSummary.
+    /// Synchronous, so it stays enabled, as Cancel, while the load it starts runs.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canRefreshOrCancel))]
     private void RefreshOrCancelManualEntries()
     {
         if (_busy.IsVisiblyRunning)
@@ -257,22 +192,15 @@ public class ManualEntriesViewModel : ViewModelBase
             _ = LoadManualEntriesCoreAsync(showFeedback: true);
     }
 
-    /// <summary>Segoe Fluent Icons glyphs for RefreshOrCancelManualEntriesCommand's
-    /// button -- see ReportViewModel.RefreshOrCancelGlyph's own doc comment for why these
-    /// two specific codepoints (Refresh/Cancel). Icon-only, same IconHeaderActionButton
-    /// look as AttendanceSummaryView's own Period-row button, now that this button is
-    /// docked to this row's own right edge rather than sitting inline among the other
-    /// (text) buttons in the toolbar's left-docked StackPanel.</summary>
-    public string RefreshOrCancelGlyph => _busy.IsVisiblyRunning ? "" : "";
+    /// <summary>Segoe Fluent Icons Cancel/Refresh for RefreshOrCancelManualEntriesCommand's
+    /// icon-only button -- see ReportViewModel.RefreshOrCancelGlyph.</summary>
+    [ObservableAsProperty(InitialValue = "")]
+    public partial string RefreshOrCancelGlyph { get; }
 
-    /// <summary>Generic on purpose, not "Stop this load" -- same reasoning as the old
-    /// Cancel button's own ToolTip, which this replaces: IsVisiblyRunning can be true
-    /// because of literally anything on the Attendance page (an Import/Fetch started from
-    /// Punch Records, a manual entry save/delete, or this tab's own Load), not only a
-    /// click on this same button.</summary>
-    public string RefreshOrCancelToolTip => _busy.IsVisiblyRunning
-        ? "Stop whatever's currently running."
-        : "Reload manual entries for this period.";
+    /// <summary>Generic on purpose, not "Stop this load": IsVisiblyRunning can be true
+    /// because of anything on the Attendance page, not only this button.</summary>
+    [ObservableAsProperty]
+    public partial string RefreshOrCancelToolTip { get; }
 
     /// <summary>Exports manual entries in [ManualEntriesStart, ManualEntriesEnd] to Excel
     /// -- same range PunchRecordsViewModel.ExportStoredLogsAsync validates, just against
@@ -280,8 +208,7 @@ public class ManualEntriesViewModel : ViewModelBase
     /// rather than ExportLogsToExcel, so Reason and EnteredBy -- the two columns that
     /// only exist on a manual entry, and the actual point of exporting this grid
     /// separately from Punch Records -- make it into the file.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> ExportManualEntriesCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private async Task ExportManualEntriesAsync()
     {
         var validationError = ValidateManualEntriesRange();
@@ -291,15 +218,12 @@ public class ManualEntriesViewModel : ViewModelBase
             return;
         }
 
-        var dialog = new SaveFileDialog
+        if (await PickFileToSaveAsync("Excel Workbook (*.xlsx)|*.xlsx",
+                $"Manual_Entries_{ManualEntriesStart!.Value:MMddyy}_{ManualEntriesEnd!.Value:MMddyy}.xlsx",
+                "Save Manual Entries") is not { } path)
         {
-            Title = "Save Manual Entries",
-            Filter = "Excel Workbook (*.xlsx)|*.xlsx",
-            FileName = $"Manual_Entries_{ManualEntriesStart!.Value:MMddyy}_{ManualEntriesEnd!.Value:MMddyy}.xlsx",
-        };
-
-        if (dialog.ShowDialog() != true)
             return;
+        }
 
         // visibly: true -- always an explicit click, never a silent auto-load.
         await _busy.RunAsync(visibly: true, async cancellationToken =>
@@ -310,15 +234,13 @@ public class ManualEntriesViewModel : ViewModelBase
             // Everything above is cancellable; ExportManualLogsToExcel itself is not, so
             // a Cancel click always lands before any file is written, never partway
             // through one.
-            AttendanceExcelExporter.ExportManualLogsToExcel(dialog.FileName, entries, employees);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
+            AttendanceExcelExporter.ExportManualLogsToExcel(path, entries, employees);
+            await OpenFileAsync(path);
             _saveViewState();
-            StatusBar.ShowSuccess($"Saved {entries.Count} manual entry(ies) to {dialog.FileName}.");
+            StatusBar.ShowSuccess($"Saved {entries.Count} manual entry(ies) to {path}.");
         },
         onError: ex => ShowFailure(ex));
     }
-
-    private bool CanExportManualEntries() => !_busy.IsRunning;
 
     /// <summary>Bulk-adds every row in an Excel workbook to ManualAttendanceLogs in
     /// one go -- see this class's own doc comment for how this relates to
@@ -331,12 +253,10 @@ public class ManualEntriesViewModel : ViewModelBase
     /// well-formed but already on file is a separate, ordinary case handled by
     /// AddRangeAsync's own dedup rather than treated as a problem here -- see
     /// ManualEntryImportResult's own doc comment for that split.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> ImportManualEntriesCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_notBusy))]
     private async Task ImportManualEntriesAsync()
     {
-        var dialog = new OpenFileDialog { Filter = "Excel workbook (*.xlsx)|*.xlsx" };
-        if (dialog.ShowDialog() != true)
+        if (await PickFileToOpenAsync("Excel workbook (*.xlsx)|*.xlsx") is not { } path)
             return;
 
         // Shown once the busy run is over: onError can't wait for the user to read it.
@@ -346,7 +266,7 @@ public class ManualEntriesViewModel : ViewModelBase
         await _busy.RunAsync(visibly: true, async cancellationToken =>
         {
             var employees = await _employeeDirectory.GetAllAsync(cancellationToken);
-            var rows = ManualEntryImporter.Import(dialog.FileName, employees);
+            var rows = ManualEntryImporter.Import(path, employees);
 
             var logs = rows.Select(r => new ManualAttendanceLog
             {
@@ -369,7 +289,7 @@ public class ManualEntriesViewModel : ViewModelBase
                 _dataVersion.BumpManualLogs();
 
             StatusBar.ShowSuccess(
-                $"Imported {result.NewRecords} new manual entry(ies) from {Path.GetFileName(dialog.FileName)} " +
+                $"Imported {result.NewRecords} new manual entry(ies) from {Path.GetFileName(path)} " +
                 $"({result.DuplicateRecords} already on file, {result.TotalInFile} total in the file).");
 
             // Refresh the grid if it's currently showing something, same effect
@@ -403,8 +323,6 @@ public class ManualEntriesViewModel : ViewModelBase
         if (importProblems is not null)
             await NotifyAsync(importProblems.Message, "Import problems found", NoticeKind.Warning);
     }
-
-    private bool CanImportManualEntries() => !_busy.IsRunning;
 
     /// <summary>Called by ManualEntryEditorViewModel after adding or editing a manual
     /// entry, so a just-added/edited entry shows up immediately if this grid is already
@@ -458,9 +376,7 @@ public class ManualEntriesViewModel : ViewModelBase
             var entries = await QueryFilteredManualEntriesAsync(cancellationToken);
             var employeeInfo = StoredPunchLogRowFactory.BuildEmployeeInfoByPin(employees);
 
-            ManualEntries.Clear();
-            foreach (var entry in entries)
-                ManualEntries.Add(StoredPunchLogRowFactory.BuildRow(entry.ToAttendanceLog(), employeeInfo));
+            ManualEntries.ReplaceAll(entries.Select(entry => StoredPunchLogRowFactory.BuildRow(entry.ToAttendanceLog(), employeeInfo)));
 
             ManualEntriesCount = ManualEntries.Count;
             HasLoadedManualEntries = true;
@@ -506,8 +422,7 @@ public class ManualEntriesViewModel : ViewModelBase
         return null;
     }
 
-    /// <summary>Internal (not private) so both LoadManualEntriesCommand's CanExecute
-    /// wiring and AttendanceViewModel.ActivateInitialTabAsync's initial-tab check can
-    /// share the one implementation.</summary>
+    /// <summary>Whether a load could start now -- AttendanceViewModel.ActivateInitialTabAsync's
+    /// initial-tab check reads it too.</summary>
     internal bool CanLoad() => !_busy.IsRunning;
 }

@@ -14,15 +14,9 @@ namespace ScheduleApp.Core.Exceptions;
 /// the pre-existing convention for schedule-workbook import (ExcelScheduleImporter/
 /// MainViewModel.ImportScheduleAsync).
 /// </summary>
-public class EmployeeImportException : Exception
+public class EmployeeImportException(IReadOnlyList<string> errors) : Exception(BuildMessage(errors))
 {
-    public IReadOnlyList<string> Errors { get; }
-
-    public EmployeeImportException(IReadOnlyList<string> errors)
-        : base(BuildMessage(errors))
-    {
-        Errors = errors;
-    }
+    public IReadOnlyList<string> Errors { get; } = errors;
 
     private static string BuildMessage(IReadOnlyList<string> errors)
         => errors.Count == 1

@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Models;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
@@ -31,7 +33,7 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// ActiveRosterProvider from whichever ViewModel opens the dialog
 /// (PayrollViewModel's PrintExport/Run children, or Schedule's own ImportExport).
 /// </summary>
-public class PayslipScopeViewModel : ReactiveViewModel
+public partial class PayslipScopeViewModel : ReactiveViewModel
 {
     /// <summary>Replaces the raw IScheduleRepository this class used to read
     /// GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync through
@@ -41,41 +43,86 @@ public class PayslipScopeViewModel : ReactiveViewModel
     /// tree loads.</summary>
     private readonly ActiveRosterProvider _rosterProvider;
 
-    public PayslipScopeViewModel(ActiveRosterProvider rosterProvider)
+    private readonly IObservable<bool> _canSelectAllTree;
+    private readonly IObservable<bool> _canClearTreeSelection;
+
+    /// <summary>Passed through to GetSelectedEmployees -- see that method's own doc comment.</summary>
+    private readonly bool _requirePin;
+
+    public PayslipScopeViewModel(ActiveRosterProvider rosterProvider, bool requirePin = true)
     {
         _rosterProvider = rosterProvider;
+        _requirePin = requirePin;
 
-        LoadEmployeeTreeCommand = ReactiveCommand.CreateFromTask<IReadOnlyCollection<Employee>?>(async p => await LoadEmployeeTreeAsync(p));
-        SelectAllTreeCommand = ReactiveCommand.Create(SelectAllTree, CanExecuteFrom(CanSelectAllTree));
-        ClearTreeSelectionCommand = ReactiveCommand.Create(ClearTreeSelection, CanExecuteFrom(CanClearTreeSelection));
+        // Something about the selection may have moved: a new tree arrived, or one of the
+        // current tree's checkboxes changed. A discarded tree's checkboxes no longer count.
+        var selectionMoved = Observable.Switch(this.WhenAnyValue(x => x.LoadedTree)
+            .Select(tree => EmployeeTreeBuilder.SelectionChanges(tree).StartWith(RxVoid.Default)));
+
+        _totalEmployeeCountHelper = this.WhenAnyValue(x => x.LoadedTree)
+            .Select(tree => tree.Sum(d => d.Employees.Count))
+            .ToProperty(this, x => x.TotalEmployeeCount);
+        _selectedEmployeeCountHelper = selectionMoved
+            .Select(_ => CountSelected())
+            .ToProperty(this, x => x.SelectedEmployeeCount);
+        // Recomputed on every checkbox change, not just on a new count: unchecking one
+        // employee and checking another keeps the count but can change which departments
+        // are fully checked.
+        _selectionScopeTextHelper = selectionMoved
+            .Select(_ => DescribeSelection())
+            .ToProperty(this, x => x.SelectionScopeText);
+
+        _canSelectAllTree = this.WhenAnyValue(x => x.SelectedEmployeeCount, x => x.TotalEmployeeCount,
+            (selected, total) => selected < total);
+        _canClearTreeSelection = this.WhenAnyValue(x => x.SelectedEmployeeCount).Select(selected => selected > 0);
+
+        this.WhenAnyValue(x => x.SearchText)
+            .Skip(1)
+            .Subscribe(searchText => EmployeeTreeSearchFilter.Apply(Departments, searchText, VisibleDepartments));
     }
 
-    public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
+    /// <summary>The dialog's window title -- the only things that differ between its callers
+    /// are this, the description above the period pickers, and the confirm button's caption and
+    /// tooltip (see PayslipScopeDialog's own doc comment).</summary>
+    public string Title { get; init; } = "Print Payslips";
+
+    public string Description { get; init; } = string.Empty;
+
+    public string ConfirmText { get; init; } = "Print…";
+
+    public string ConfirmToolTip { get; init; } = string.Empty;
+
+    /// <summary>The employees to start checked, or null for everyone -- what the dialog loads
+    /// the tree with when it opens (see LoadEmployeeTreeAsync).</summary>
+    public IReadOnlyCollection<Employee>? PresetSelection { get; init; }
+
+    /// <summary>The period the run covers. Its opener starts it at the Payroll tab's current
+    /// period; either end may be cleared in the pickers, which Accept turns away.</summary>
+    [Reactive]
+    public partial DateTime? PeriodStart { get; set; }
+
+    [Reactive]
+    public partial DateTime? PeriodEnd { get; set; }
+
+    /// <summary>What Accept settled on -- null until it succeeds.</summary>
+    public PayslipScope? AcceptedScope { get; private set; }
+
+    public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = [];
+
+    /// <summary>The tree LoadEmployeeTreeAsync last built, once it's in Departments -- what
+    /// the selection counts and scope text follow.</summary>
+    [Reactive]
+    internal partial IReadOnlyList<DepartmentGroupViewModel> LoadedTree { get; private set; } = [];
 
     /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
     /// what this dialog's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).</summary>
-    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = [];
 
     /// <summary>Same comma-separated Employee ID/first name/last name/department
     /// matching as ReportScopeViewModel.SearchText -- see
     /// <see cref="EmployeeTreeSearchFilter"/>, shared between both.</summary>
-    public string SearchText
-    {
-        get => _searchText;
-        set
-        {
-            if (EqualityComparer<string>.Default.Equals(_searchText, value)) return;
-            this.RaisePropertyChanging();
-            _searchText = value;
-            OnSearchTextChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private string _searchText = string.Empty;
-
-    private void OnSearchTextChanged(string value) =>
-        EmployeeTreeSearchFilter.Apply(Departments, value, VisibleDepartments);
+    [Reactive]
+    public partial string SearchText { get; set; } = string.Empty;
 
     /// <summary>presetSelection is null for both the "whole company" default described in
     /// this class's own doc comment (PayslipScopeDialog's own default, used any time there's
@@ -87,8 +134,7 @@ public class PayslipScopeViewModel : ReactiveViewModel
     /// Employee instances come from BatchScopeEmployees, a different repository round trip
     /// than the tree this method just built, so they're never the same objects even when
     /// they represent the same row.</summary>
-    public ReactiveCommand<IReadOnlyCollection<Employee>?, RxVoid> LoadEmployeeTreeCommand { get; }
-
+    [ReactiveCommand]
     private async Task LoadEmployeeTreeAsync(IReadOnlyCollection<Employee>? presetSelection)
     {
         Departments.Clear();
@@ -106,8 +152,10 @@ public class PayslipScopeViewModel : ReactiveViewModel
         // ReportScopeViewModel/PayrollWizardViewModel already take, for the same reason.
         var (departments, unassigned) = await _rosterProvider.GetAsync();
 
-        foreach (var group in EmployeeTreeBuilder.Build(departments, unassigned, OnEmployeeNodeSelectionChanged))
+        var tree = EmployeeTreeBuilder.Build(departments, unassigned);
+        foreach (var group in tree)
             Departments.Add(group);
+        LoadedTree = tree;
 
         if (presetSelection is null)
         {
@@ -123,74 +171,86 @@ public class PayslipScopeViewModel : ReactiveViewModel
                 node.IsSelected = presetIds.Contains(node.Employee.Id);
         }
 
-        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
-        this.RaisePropertyChanged(nameof(SelectionScopeText));
-        RequeryCanExecute();
-
         EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
     }
 
-    private void OnEmployeeNodeSelectionChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(EmployeeNodeViewModel.IsSelected)) return;
+    [ObservableAsProperty]
+    public partial int SelectedEmployeeCount { get; }
 
-        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
-        this.RaisePropertyChanged(nameof(SelectionScopeText));
-        RequeryCanExecute();
-    }
-
-    public int SelectedEmployeeCount => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
-
-    public int TotalEmployeeCount => Departments.Sum(d => d.Employees.Count);
+    [ObservableAsProperty]
+    public partial int TotalEmployeeCount { get; }
 
     /// <summary>Same wording/logic as ReportScopeViewModel.SelectionScopeText -- see
     /// that property's own doc comment.</summary>
-    public string SelectionScopeText
+    [ObservableAsProperty(InitialValue = "No employees loaded yet")]
+    public partial string SelectionScopeText { get; }
+
+    private int CountSelected() => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
+
+    private string DescribeSelection()
     {
-        get
+        int total = CountSelected();
+        int all = Departments.Sum(d => d.Employees.Count);
+
+        if (all == 0) return "No employees loaded yet";
+        if (total == all) return "Whole company (all employees checked)";
+        if (total == 0) return "Nothing selected -- check at least one employee to print";
+
+        var fullyCheckedDepartments = Departments
+            .Where(d => d.IsSelected == true && d.Employees.Count > 0)
+            .ToList();
+
+        if (fullyCheckedDepartments.Count > 0 && fullyCheckedDepartments.Sum(d => d.Employees.Count) == total)
         {
-            int total = SelectedEmployeeCount;
-            int all = TotalEmployeeCount;
-
-            if (all == 0) return "No employees loaded yet";
-            if (total == all) return "Whole company (all employees checked)";
-            if (total == 0) return "Nothing selected -- check at least one employee to print";
-
-            var fullyCheckedDepartments = Departments
-                .Where(d => d.IsSelected == true && d.Employees.Count > 0)
-                .ToList();
-
-            if (fullyCheckedDepartments.Count > 0 && fullyCheckedDepartments.Sum(d => d.Employees.Count) == total)
-            {
-                return fullyCheckedDepartments.Count == 1
-                    ? $"Department: {fullyCheckedDepartments[0].Name}"
-                    : $"{fullyCheckedDepartments.Count} departments: " +
-                        string.Join(", ", fullyCheckedDepartments.Select(d => d.Name));
-            }
-
-            return total == 1 ? "1 employee selected" : $"{total} employees selected";
+            return fullyCheckedDepartments.Count == 1
+                ? $"Department: {fullyCheckedDepartments[0].Name}"
+                : $"{fullyCheckedDepartments.Count} departments: " +
+                    string.Join(", ", fullyCheckedDepartments.Select(d => d.Name));
         }
+
+        return total == 1 ? "1 employee selected" : $"{total} employees selected";
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canSelectAllTree))]
     private void SelectAllTree()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
             node.IsSelected = true;
     }
 
-    private bool CanSelectAllTree() => SelectedEmployeeCount < TotalEmployeeCount;
-
-    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canClearTreeSelection))]
     private void ClearTreeSelection()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
             node.IsSelected = false;
     }
 
-    private bool CanClearTreeSelection() => SelectedEmployeeCount > 0;
+    /// <summary>The dialog's confirm button (Print/Export): checks there's a whole, forward
+    /// period and at least one employee checked, and if so settles AcceptedScope and reports
+    /// true, which closes the dialog. Otherwise it says what's missing (Notify) and reports
+    /// false, leaving the dialog open.</summary>
+    [ReactiveCommand]
+    private async Task<bool> AcceptAsync()
+    {
+        if (PeriodStart?.Date is not DateTime start || PeriodEnd?.Date is not DateTime end)
+            return await RefuseAsync("Choose a period start and end date.");
+
+        if (end < start)
+            return await RefuseAsync("Period end can't be before period start.");
+
+        var selected = GetSelectedEmployees(_requirePin);
+        if (selected.Count == 0)
+            return await RefuseAsync("Check at least one employee to continue.");
+
+        AcceptedScope = new PayslipScope(selected, start, end);
+        return true;
+    }
+
+    private async Task<bool> RefuseAsync(string message)
+    {
+        await NotifyAsync(message, "Check your selection", NoticeKind.Warning);
+        return false;
+    }
 
     /// <summary>Every currently-checked employee -- unlike ReportScopeViewModel.
     /// GetSelectedPins, always the explicit resolved list (never null-meaning-
@@ -205,9 +265,11 @@ public class PayslipScopeViewModel : ReactiveViewModel
     /// PayslipScopeDialog's own _requirePin field doesn't need touching for what's now a
     /// no-op distinction.</summary>
     public List<Employee> GetSelectedEmployees(bool requirePin = true) =>
-        Departments
+        [.. Departments
             .SelectMany(d => d.Employees)
             .Where(n => n.IsSelected)
-            .Select(n => n.Employee)
-            .ToList();
+            .Select(n => n.Employee)];
 }
+
+/// <summary>What PayslipScopeDialog hands back once accepted: who, and for which period.</summary>
+public sealed record PayslipScope(List<Employee> Employees, DateTime PeriodStart, DateTime PeriodEnd);

@@ -51,6 +51,12 @@ internal static class PayslipFonts
 
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // Since QuestPDF 2026.9.0 a document sees only the fonts registered with
+        // it, not the machine's, and an unavailable family stops generation. The
+        // payslip's family is an installed one by design (see this class's own
+        // doc comment), so the installed fonts are opted back in.
+        QuestPDF.Settings.UseSystemFonts = true;
+
         // SKFontManager.Default is the same system font catalog QuestPDF's
         // own rendering falls back on for any FontFamily(...) name that
         // isn't explicitly registered, so checking it here for Iosevka's

@@ -1,7 +1,7 @@
 <ResourceDictionary
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls">
+        xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters">
 
     <!--
       Shared resources for ScheduleApp.Desktop's own views/dialogs/controls - merged into
@@ -10,9 +10,17 @@
       use the token brushes.
 
       Syncfusion controls are never styled here: they get the Windows11Light theme and the
-      app's accent from SfSkinManager (see App.xaml.cs), and a Style on one would replace the
-      theme's.
+      app's accent from SfSkinManager (see App.xaml.cs), and their sizes and defaults from
+      Themes/ControlDefaults.xaml.
     -->
+
+    <!-- The converters more than one view binds through; one used by a single view stays
+         in that view's resources. -->
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+    <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
+    <converters:PunchStatusToBrushConverter x:Key="StatusToBrush" />
+    <converters:NumberConverter x:Key="Number" />
 
     <FontFamily x:Key="IconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
@@ -96,15 +104,24 @@
                    Style="{StaticResource IconGlyphStyle}" />
     </DataTemplate>
 
-    <!-- Generic card-like grouping container - the shared replacement for the plain
-         <Border Background="#F..." BorderBrush="#E../#C.."> pattern repeated across most
-         pages/dialogs before this file existed. -->
+    <!-- The card a page groups things on: a toolbar or command strip, a status strip, a
+         totals panel. Its bottom margin spaces it from whatever follows; a card that sits
+         last, or alone, sets its own Margin. -->
     <Style x:Key="CardBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Padding" Value="16" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <!-- The muted bold label in front of a group of controls on a card ("Period", "Show"). -->
+    <Style x:Key="GroupLabelStyle" TargetType="TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
     <!-- Muted/caption text - the shared replacement for a one-off

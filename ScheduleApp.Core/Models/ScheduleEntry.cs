@@ -85,7 +85,7 @@ public class ScheduleEntry
     /// still be non-empty on a Flexible row loaded from an older save -- treat
     /// that as legacy data, not a shape new code should produce.
     /// </summary>
-    public List<FlexibleSegment> FlexibleSegments { get; set; } = new();
+    public List<FlexibleSegment> FlexibleSegments { get; set; } = [];
 
     /// <summary>
     /// Only meaningful for Flexible: optionally bounds the day's single allowed

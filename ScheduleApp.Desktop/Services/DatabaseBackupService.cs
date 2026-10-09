@@ -33,7 +33,7 @@ namespace ScheduleApp.Desktop.Services;
 /// Windows account that installed SQL Server Express, that account is already a
 /// sysadmin and both just work with no extra setup.
 /// </summary>
-public class DatabaseBackupService
+public class DatabaseBackupService : IDatabaseBackupService
 {
     private sealed record MoveTarget(string LogicalName, string PhysicalPath);
 
@@ -262,9 +262,7 @@ public class DatabaseBackupService
                 }
             }
 
-            return backupFiles
-                .Select(f => new MoveTarget(f.LogicalName, existingPathByType[f.Type == "D" ? "ROWS" : "LOG"]))
-                .ToList();
+            return [.. backupFiles.Select(f => new MoveTarget(f.LogicalName, existingPathByType[f.Type == "D" ? "ROWS" : "LOG"]))];
         }
 
         // Fresh database -- put the files exactly where SQL Server itself would put them
@@ -282,13 +280,12 @@ public class DatabaseBackupService
             defaultLogPath = reader.GetString(1);
         }
 
-        return backupFiles
+        return [.. backupFiles
             .Select(f => new MoveTarget(
                 f.LogicalName,
                 Path.Combine(
                     f.Type == "D" ? defaultDataPath : defaultLogPath,
-                    databaseName + (f.Type == "D" ? ".mdf" : "_log.ldf"))))
-            .ToList();
+                    databaseName + (f.Type == "D" ? ".mdf" : "_log.ldf"))))];
     }
 
     /// <summary>Splits a ScheduleDb connection string into the database name it points
@@ -318,4 +315,14 @@ public class DatabaseBackupService
     private static string BracketIdentifier(string identifier) => $"[{identifier.Replace("]", "]]")}]";
 
     private static string QuoteLiteral(string value) => $"'{value.Replace("'", "''")}'";
+}
+
+/// <summary>What Backup &amp; Restore asks of <see cref="DatabaseBackupService"/>.</summary>
+public interface IDatabaseBackupService
+{
+    Task BackupAsync(string connectionString, string destinationPath, CancellationToken cancellationToken = default);
+
+    Task RestoreAsync(string connectionString, string sourcePath, CancellationToken cancellationToken = default);
+
+    Task<string?> TryGetDefaultBackupFolderAsync(string connectionString, CancellationToken cancellationToken = default);
 }

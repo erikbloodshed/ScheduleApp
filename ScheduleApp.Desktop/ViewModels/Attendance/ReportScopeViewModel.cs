@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
+using System.Reactive.Linq;
 using ScheduleApp.Core.Models;
 using ScheduleApp.Desktop.Services;
 using ScheduleApp.Desktop.ViewModels;
 using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
@@ -24,10 +26,10 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// DepartmentGroupViewModel). Un-checking individual employees narrows the report to
 /// everyone still checked. GetSelectedPins turns whatever's checked into a report
 /// request's TargetPins (or null for "everyone" when every loaded employee is still
-/// checked) -- ReportViewModel calls it when building a run and listens for
-/// SelectedEmployeeCount/TotalEmployeeCount changes to know when it can run.
-/// SelectionScopeText describes the current scope for display.</summary>
-public class ReportScopeViewModel : ReactiveViewModel
+/// checked) -- ReportViewModel calls it when building a run and follows SelectionChanges
+/// to know when to re-filter and re-run. SelectionScopeText describes the current scope
+/// for display.</summary>
+public partial class ReportScopeViewModel : ReactiveViewModel
 {
     /// <summary>Replaces the raw IScheduleRepository this class used to read
     /// GetActiveDepartmentsWithEmployeesAsync/GetActiveUnassignedEmployeesAsync through
@@ -37,21 +39,62 @@ public class ReportScopeViewModel : ReactiveViewModel
     private readonly ActiveRosterProvider _rosterProvider;
     private readonly ViewStateStore _viewStateStore;
 
+    private readonly IObservable<bool> _canSelectAllTree;
+    private readonly IObservable<bool> _canClearTreeSelection;
+
     public ReportScopeViewModel(ActiveRosterProvider rosterProvider, ViewStateStore viewStateStore)
     {
         _rosterProvider = rosterProvider;
         _viewStateStore = viewStateStore;
 
-        LoadEmployeeTreeCommand = ReactiveCommand.CreateFromTask(async () => await LoadEmployeeTreeAsync());
-        SelectAllTreeCommand = ReactiveCommand.Create(SelectAllTree, CanExecuteFrom(CanSelectAllTree));
-        ClearTreeSelectionCommand = ReactiveCommand.Create(ClearTreeSelection, CanExecuteFrom(CanClearTreeSelection));
+        // One shared stream, connected for this ViewModel's whole life, so every subscriber
+        // hears each change in the order it subscribed -- SelectionVersion's own count first
+        // (below), so a ReportViewModel reacting to the same change already reads the new
+        // version.
+        var selectionChanges = Observable.Switch(this.WhenAnyValue(x => x.LoadedTree)
+                .Select(tree => EmployeeTreeBuilder.SelectionChanges(tree).StartWith(RxVoid.Default)))
+            .Publish();
+        SelectionChanges = selectionChanges;
+        selectionChanges.Subscribe(_ => SelectionVersion++);
+
+        _totalEmployeeCountHelper = this.WhenAnyValue(x => x.LoadedTree)
+            .Select(tree => tree.Sum(d => d.Employees.Count))
+            .ToProperty(this, x => x.TotalEmployeeCount);
+        _selectedEmployeeCountHelper = selectionChanges
+            .Select(_ => CountSelected())
+            .ToProperty(this, x => x.SelectedEmployeeCount);
+        // Recomputed on every checkbox change, not just on a new count: unchecking one
+        // employee and checking another keeps the count but can change which departments
+        // are fully checked.
+        _selectionScopeTextHelper = selectionChanges
+            .Select(_ => DescribeSelection())
+            .ToProperty(this, x => x.SelectionScopeText);
+        selectionChanges.Connect();
+
+        _canSelectAllTree = this.WhenAnyValue(x => x.SelectedEmployeeCount, x => x.TotalEmployeeCount,
+            (selected, total) => selected < total);
+        _canClearTreeSelection = this.WhenAnyValue(x => x.SelectedEmployeeCount).Select(selected => selected > 0);
+
+        this.WhenAnyValue(x => x.SearchText).Skip(1).Subscribe(_ => ApplySearchFilter());
     }
 
-    public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = new();
+    public ObservableCollection<DepartmentGroupViewModel> Departments { get; } = [];
 
     /// <summary>The departments SearchText hasn't hidden, each showing its VisibleEmployees --
     /// what the Summary page's SfTreeView binds to (see EmployeeTreeSearchFilter.Apply).</summary>
-    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = new();
+    public ObservableCollection<DepartmentGroupViewModel> VisibleDepartments { get; } = [];
+
+    /// <summary>The tree LoadEmployeeTreeAsync last built, once it's in Departments -- what
+    /// SelectionChanges and the counts follow.</summary>
+    [Reactive]
+    internal partial IReadOnlyList<DepartmentGroupViewModel> LoadedTree { get; private set; } = [];
+
+    /// <summary>One value each time what's checked may have changed: a (re)load of the tree,
+    /// and every checkbox change after it -- including one that leaves the count the same
+    /// (unchecking one employee and checking another), which SelectedEmployeeCount's own
+    /// change notification would miss. ReportViewModel follows this to re-filter its grid
+    /// and re-run the report.</summary>
+    public IObservable<RxVoid> SelectionChanges { get; }
 
     /// <summary>Set once LoadEmployeeTreeAsync has applied the saved report-scope
     /// selection for the first time this run -- guards against a later reload (the "↻
@@ -72,15 +115,14 @@ public class ReportScopeViewModel : ReactiveViewModel
     /// merged) on every subsequent reload, including via the "↻ Refresh" button.</summary>
     public IReadOnlyList<Employee> LoadedEmployees { get; private set; } = [];
 
-    /// <summary>Bumped every time a checkbox in the tree actually flips (see
-    /// OnEmployeeNodeSelectionChanged) -- i.e. every real change to what
-    /// GetSelectedPins() would return, including the initial tree load/reload
-    /// itself. ReportViewModel folds this into its own "has anything this tab cares
-    /// about actually changed since the last successful run" check (see
-    /// ReportViewModel.ShouldAutoReload) so that narrowing/widening the report scope and
-    /// then switching back to the Summary tab picks up the new scope, the same way it
-    /// did before that check existed -- without this, comparing only PeriodStart/
-    /// PeriodEnd there would miss a scope-only change entirely.</summary>
+    /// <summary>Bumped on every value of SelectionChanges -- i.e. every real change to what
+    /// GetSelectedPins() would return, including the initial tree load/reload itself.
+    /// ReportViewModel folds this into its own "has anything this tab cares about actually
+    /// changed since the last successful run" check (see ReportViewModel.ShouldAutoReload)
+    /// so that narrowing/widening the report scope and then switching back to the Summary
+    /// tab picks up the new scope, the same way it did before that check existed -- without
+    /// this, comparing only PeriodStart/PeriodEnd there would miss a scope-only change
+    /// entirely.</summary>
     public int SelectionVersion { get; private set; }
 
     /// <summary>Free-text filter for the tree, comma-separated same as the Punch Records
@@ -90,30 +132,15 @@ public class ReportScopeViewModel : ReactiveViewModel
     /// are visible (EmployeeNodeViewModel.IsVisible, DepartmentGroupViewModel.IsVisible)
     /// rather than which are checked -- searching and scoping a report are independent,
     /// so typing here never changes what a report would actually include.</summary>
-    public string SearchText
-    {
-        get => _searchText;
-        set
-        {
-            if (EqualityComparer<string>.Default.Equals(_searchText, value)) return;
-            this.RaisePropertyChanging();
-            _searchText = value;
-            OnSearchTextChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private string _searchText = string.Empty;
-
-    private void OnSearchTextChanged(string value) => ApplySearchFilter();
+    [Reactive]
+    public partial string SearchText { get; set; } = string.Empty;
 
     /// <summary>See EmployeeTreeSearchFilter -- shared with the Schedule tab's tree
     /// (MainViewModel) so the two don't carry duplicate copies of the same matching
     /// rule.</summary>
     private void ApplySearchFilter() => EmployeeTreeSearchFilter.Apply(Departments, SearchText, VisibleDepartments);
 
-    public ReactiveCommand<RxVoid, RxVoid> LoadEmployeeTreeCommand { get; }
-
+    [ReactiveCommand]
     private async Task LoadEmployeeTreeAsync()
     {
         Departments.Clear();
@@ -122,8 +149,10 @@ public class ReportScopeViewModel : ReactiveViewModel
 
         LoadedEmployees = [.. departments.SelectMany(d => d.Employees), .. unassigned];
 
-        foreach (var group in EmployeeTreeBuilder.Build(departments, unassigned, OnEmployeeNodeSelectionChanged))
+        var tree = EmployeeTreeBuilder.Build(departments, unassigned);
+        foreach (var group in tree)
             Departments.Add(group);
+        LoadedTree = tree;
 
         // Default every employee (and therefore every department) to checked,
         // representing the whole company -- the opposite of the Schedule tab's tree,
@@ -149,15 +178,6 @@ public class ReportScopeViewModel : ReactiveViewModel
             }
         }
 
-        // Any prior (re)load's selection is gone -- make sure the scope display and
-        // buttons reflect the fresh, fully-checked (or just-restored) state.
-        // ReportViewModel's own TryAutoRun re-evaluates itself off SelectedEmployeeCount
-        // changing (see its constructor), so there's no need to reach into it directly
-        // here the way the pre-split code once did.
-        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
-        this.RaisePropertyChanged(nameof(SelectionScopeText));
-        RequeryCanExecute();
-
         // Freshly-built nodes all default to IsVisible = true, so a reload (via "↻
         // Refresh") under an already-typed search term needs this to re-hide whatever
         // still doesn't match, rather than briefly showing everyone until the next
@@ -165,75 +185,63 @@ public class ReportScopeViewModel : ReactiveViewModel
         ApplySearchFilter();
     }
 
-    private void OnEmployeeNodeSelectionChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(EmployeeNodeViewModel.IsSelected)) return;
-
-        SelectionVersion++;
-        this.RaisePropertyChanged(nameof(SelectedEmployeeCount));
-        this.RaisePropertyChanged(nameof(SelectionScopeText));
-        RequeryCanExecute();
-    }
-
     /// <summary>Employees currently checked in the report-scope tree, across every
     /// department (including Unassigned).</summary>
-    public int SelectedEmployeeCount => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
+    [ObservableAsProperty]
+    public partial int SelectedEmployeeCount { get; }
 
     /// <summary>Every employee currently loaded into the tree, across every department
     /// (including Unassigned) -- i.e. what SelectedEmployeeCount equals when everything
     /// is checked.</summary>
-    public int TotalEmployeeCount => Departments.Sum(d => d.Employees.Count);
+    [ObservableAsProperty]
+    public partial int TotalEmployeeCount { get; }
 
     /// <summary>Plain-language description of the current report scope, shown under the
     /// tree: "Whole company" when every loaded employee is checked (the default), the
     /// department name(s) when one or more departments are checked in full and nothing
     /// else is, "Nothing selected" when the tree's been cleared, or a plain headcount
     /// otherwise.</summary>
-    public string SelectionScopeText
+    [ObservableAsProperty(InitialValue = "No employees loaded yet")]
+    public partial string SelectionScopeText { get; }
+
+    private int CountSelected() => Departments.SelectMany(d => d.Employees).Count(n => n.IsSelected);
+
+    private string DescribeSelection()
     {
-        get
+        int total = CountSelected();
+        int all = Departments.Sum(d => d.Employees.Count);
+
+        if (all == 0) return "No employees loaded yet";
+        if (total == all) return "Whole company (all employees checked)";
+        if (total == 0) return "Nothing selected -- check at least one employee to generate a report";
+
+        var fullyCheckedDepartments = Departments
+            .Where(d => d.IsSelected == true && d.Employees.Count > 0)
+            .ToList();
+
+        if (fullyCheckedDepartments.Count > 0 && fullyCheckedDepartments.Sum(d => d.Employees.Count) == total)
         {
-            int total = SelectedEmployeeCount;
-            int all = TotalEmployeeCount;
-
-            if (all == 0) return "No employees loaded yet";
-            if (total == all) return "Whole company (all employees checked)";
-            if (total == 0) return "Nothing selected -- check at least one employee to generate a report";
-
-            var fullyCheckedDepartments = Departments
-                .Where(d => d.IsSelected == true && d.Employees.Count > 0)
-                .ToList();
-
-            if (fullyCheckedDepartments.Count > 0 && fullyCheckedDepartments.Sum(d => d.Employees.Count) == total)
-            {
-                return fullyCheckedDepartments.Count == 1
-                    ? $"Department: {fullyCheckedDepartments[0].Name}"
-                    : $"{fullyCheckedDepartments.Count} departments: {string.Join(", ", fullyCheckedDepartments.Select(d => d.Name))}";
-            }
-
-            return total == 1 ? "1 employee selected" : $"{total} employees selected";
+            return fullyCheckedDepartments.Count == 1
+                ? $"Department: {fullyCheckedDepartments[0].Name}"
+                : $"{fullyCheckedDepartments.Count} departments: {string.Join(", ", fullyCheckedDepartments.Select(d => d.Name))}";
         }
+
+        return total == 1 ? "1 employee selected" : $"{total} employees selected";
     }
 
-    public ReactiveCommand<RxVoid, RxVoid> SelectAllTreeCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canSelectAllTree))]
     private void SelectAllTree()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
             node.IsSelected = true;
     }
 
-    private bool CanSelectAllTree() => SelectedEmployeeCount < TotalEmployeeCount;
-
-    public ReactiveCommand<RxVoid, RxVoid> ClearTreeSelectionCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canClearTreeSelection))]
     private void ClearTreeSelection()
     {
         foreach (var node in Departments.SelectMany(d => d.Employees))
             node.IsSelected = false;
     }
-
-    private bool CanClearTreeSelection() => SelectedEmployeeCount > 0;
 
     /// <summary>Employee IDs (Pin) for whichever employees are checked in the
     /// report-scope tree. Every loaded employee checked (the tree's default state) maps

@@ -19,7 +19,7 @@ namespace ScheduleApp.Attendance;
 /// *any* of the employee's entries is Unscheduled (nothing about it relates
 /// to any schedule at all). See AttendanceWorkflowService.RunAsync.
 /// </summary>
-public sealed class ShiftCalculationResult
+public sealed record ShiftCalculationResult
 {
     public required List<AttendanceSummary> Summaries { get; init; }
     public required List<AttendanceLog> ClaimedPunches { get; init; }

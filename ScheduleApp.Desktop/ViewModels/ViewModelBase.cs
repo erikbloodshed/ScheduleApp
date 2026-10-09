@@ -2,7 +2,6 @@ using System.Reactive.Linq;
 using ReactiveUI;
 using ScheduleApp.Desktop.Services;
 using Serilog;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -12,9 +11,11 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// ReactiveUI (whose unhandled-error path ends at App's DispatcherUnhandledException), and the
 /// Yes/No questions and notices a screen asks go through <see cref="Confirm"/> and
 /// <see cref="Notify"/>, which the View answers with a MessageBox (see
-/// Views/MessageBoxInteractions.cs) -- so the ViewModel itself never shows a window.
+/// Views/ViewInteractions.cs) -- so the ViewModel itself never shows a window.
 ///
-/// Commands get their CanExecute from ReactiveViewModel (CanExecuteFrom/CanExecuteWhen). Row and
+/// Commands are [ReactiveCommand]s whose CanExecute is an observable built from WhenAnyValue
+/// (shared state included -- AttendanceBusyState.IsRunning and the like), and whose failures
+/// reach the status bar through <see cref="ReportFailuresOf(IHandleObservableErrors[])"/>. Row and
 /// node ViewModels (a tree node, a grid row) derive from ReactiveObject directly: they have
 /// nothing to report.
 /// </summary>
@@ -25,25 +26,6 @@ public abstract class ViewModelBase(IStatusBarService statusBarService) : Reacti
     protected IStatusBarService StatusBar { get; } = statusBarService;
 
     protected ILogger Logger => _logger ??= Log.ForContext(GetType());
-
-    /// <summary>
-    /// Runs <paramref name="action"/>. A cancellation (a newer run took over, or the app is
-    /// closing) is quiet; anything else is shown and logged (<see cref="ShowFailure"/>).
-    /// </summary>
-    protected async Task RunSafelyAsync(Func<Task> action, string? failureTitle = null)
-    {
-        try
-        {
-            await action();
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            ShowFailure(ex, failureTitle);
-        }
-    }
 
     /// <summary>
     /// Loads what each of <paramref name="values"/> needs as it comes (an employee or a date
@@ -75,6 +57,30 @@ public abstract class ViewModelBase(IStatusBarService statusBarService) : Reacti
             .Subscribe();
 
     /// <summary>
+    /// Shows and logs whatever <paramref name="commands"/> fail with: a cancellation (a newer run
+    /// took over, or the app is closing) is quiet, anything else goes to
+    /// <see cref="ShowFailure"/> under <paramref name="title"/>. A command's failure
+    /// arrives on its ThrownExceptions, and one nothing observes there is rethrown -- ending at
+    /// App's DispatcherUnhandledException -- so every command that can fail is passed here.
+    ///
+    /// Call it last in the constructor: a [ReactiveCommand] is created the first time it's read,
+    /// and the CanExecute observable it names has to be assigned by then.
+    /// </summary>
+    protected void ReportFailuresOf(string? title, params IHandleObservableErrors[] commands)
+    {
+        foreach (var command in commands)
+        {
+            command.ThrownExceptions
+                .Where(exception => exception is not OperationCanceledException)
+                .Subscribe(exception => ShowFailure(exception, title));
+        }
+    }
+
+    /// <summary><see cref="ReportFailuresOf(string?, IHandleObservableErrors[])"/> under the
+    /// default title.</summary>
+    protected void ReportFailuresOf(params IHandleObservableErrors[] commands) => ReportFailuresOf(null, commands);
+
+    /// <summary>
     /// Shows <paramref name="exception"/> on the status bar in <see cref="Failure"/>'s words, under
     /// <paramref name="title"/>, and logs it: a refusal as a warning, anything else as an error
     /// with its stack.
@@ -93,6 +99,11 @@ public abstract class ViewModelBase(IStatusBarService statusBarService) : Reacti
 
 /// <summary>A Yes/No question for <see cref="ReactiveViewModel.Confirm"/>. A warning is one whose Yes can't be taken back.</summary>
 public sealed record Confirmation(string Title, string Message, bool IsWarning = false);
+
+/// <summary>What <see cref="ReactiveViewModel.PickFileToOpen"/>/<see cref="ReactiveViewModel.PickFileToSave"/>
+/// ask for: the file types to offer (a file dialog's filter string), the name to start with, the
+/// dialog's title, and the folder to start in.</summary>
+public sealed record FileRequest(string Filter, string? FileName = null, string? Title = null, string? InitialDirectory = null);
 
 /// <summary>A message for <see cref="ReactiveViewModel.Notify"/>.</summary>
 public sealed record Notice(string Title, string Message, NoticeKind Kind = NoticeKind.Information);

@@ -46,7 +46,7 @@ internal static class PunchMatching
     /// ShiftCalculationResult.UnclaimedPunches), not for matching itself.</summary>
     public static List<AttendanceLog> AllInWindow(
         IEnumerable<AttendanceLog> punches, DateTime windowStart, DateTime windowEnd) =>
-        punches.Where(p => p.Timestamp >= windowStart && p.Timestamp <= windowEnd).ToList();
+        [.. punches.Where(p => p.Timestamp >= windowStart && p.Timestamp <= windowEnd)];
 
     private static AttendanceLog? PreferDevice(IEnumerable<AttendanceLog> inWindow, bool ascending)
     {

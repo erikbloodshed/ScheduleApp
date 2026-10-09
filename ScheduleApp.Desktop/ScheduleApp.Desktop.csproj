@@ -61,4 +61,10 @@
     <Resource Include="Assets\Tinapayan_Logo.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The view tests reach a view's named elements (internal fields of the XAML) to check
+         its bindings. -->
+    <InternalsVisibleTo Include="ScheduleApp.Desktop.Tests" />
+  </ItemGroup>
+
 </Project>

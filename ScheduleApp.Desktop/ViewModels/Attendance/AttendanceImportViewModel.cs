@@ -1,11 +1,12 @@
 using System.IO;
-using Microsoft.Win32;
+using System.Reactive.Linq;
 using ScheduleApp.Attendance;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Data.Attendance;
 using ScheduleApp.Desktop.Services;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -18,11 +19,13 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// all three end up calling AddLogsAsync/AddAsync, so re-running any one after another is
 /// safe; a punch already on file from one path is just a duplicate from another's
 /// perspective.</summary>
-public class AttendanceImportViewModel : ViewModelBase
+public partial class AttendanceImportViewModel : ViewModelBase
 {
     private readonly IAttendanceLogRepository _attendanceLogRepository;
     private readonly AttendanceBusyState _busy;
     private readonly AttendanceDataVersion _dataVersion;
+
+    private readonly IObservable<bool> _canImportPunchLog;
 
     public AttendanceImportViewModel(
         IAttendanceLogRepository attendanceLogRepository,
@@ -38,36 +41,23 @@ public class AttendanceImportViewModel : ViewModelBase
 
         LogDatFilePath = initialLogDatFile ?? string.Empty;
 
-        _busy.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(AttendanceBusyState.IsRunning))
-                RequeryCanExecute();
-        };
+        _canImportPunchLog = _busy.WhenAnyValue(b => b.IsRunning).Select(isRunning => !isRunning);
 
-        ImportPunchLogCommand = ReactiveCommand.CreateFromTask(() => RunSafelyAsync(ImportPunchLogAsync), CanExecuteFrom(CanImportPunchLog));
+        ReportFailuresOf(ImportPunchLogCommand);
     }
 
-    public string LogDatFilePath
-    {
-        get => _logDatFilePath;
-        set => this.RaiseAndSetIfChanged(ref _logDatFilePath, value);
-    }
+    [Reactive]
+    public partial string LogDatFilePath { get; set; } = string.Empty;
 
-    private string _logDatFilePath = string.Empty;
-
-    public ReactiveCommand<RxVoid, RxVoid> ImportPunchLogCommand { get; }
-
+    /// <summary>Asks for the .dat file (starting from the last one), then imports it. Enabled
+    /// while nothing else on the shared busy state is running.</summary>
+    [ReactiveCommand(CanExecute = nameof(_canImportPunchLog))]
     private async Task ImportPunchLogAsync()
     {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "Punch log (*.dat)|*.dat|All files (*.*)|*.*",
-            FileName = LogDatFilePath,
-        };
-        if (dialog.ShowDialog() != true)
+        if (await PickFileToOpenAsync("Punch log (*.dat)|*.dat|All files (*.*)|*.*", LogDatFilePath) is not { } path)
             return;
 
-        LogDatFilePath = dialog.FileName;
+        LogDatFilePath = path;
 
         // visibly: true -- always an explicit click, never a silent auto-load.
         await _busy.RunAsync(visibly: true, async cancellationToken =>
@@ -98,6 +88,4 @@ public class AttendanceImportViewModel : ViewModelBase
         },
         onError: ex => ShowFailure(ex));
     }
-
-    private bool CanImportPunchLog() => !_busy.IsRunning;
 }

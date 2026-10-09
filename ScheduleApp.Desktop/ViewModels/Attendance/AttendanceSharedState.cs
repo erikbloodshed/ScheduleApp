@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Reactive.Linq;
 using ScheduleApp.Desktop.Services;
 using ReactiveUI;
-using RxVoid = ReactiveUI.Primitives.RxVoid;
+using ReactiveUI.Binding;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Attendance;
 
@@ -12,10 +14,10 @@ namespace ScheduleApp.Desktop.ViewModels.Attendance;
 /// Reports, Load/Export, and every manual-entry action still all need to disable each
 /// other while any one of them is in flight, exactly as before the split. One instance is
 /// constructed by AttendanceViewModel and injected into every child that has a command
-/// gated by it; each of those subscribes to PropertyChanged(IsRunning) in its own
-/// constructor and re-evaluates its own commands' CanExecute, the same way the original
-/// single OnIsRunningChanged handler used to notify all of them at once.</summary>
-public class AttendanceBusyState : ReactiveViewModel, IDisposable
+/// gated by it; each of those builds its commands' CanExecute from WhenAnyValue(IsRunning),
+/// so every one of them re-evaluates the moment it flips, the same way the original single
+/// OnIsRunningChanged handler used to notify all of them at once.</summary>
+public partial class AttendanceBusyState : ReactiveViewModel, IDisposable
 {
     private readonly IStatusBarService _statusBarService;
     private readonly CancellationToken _shutdownToken;
@@ -61,23 +63,19 @@ public class AttendanceBusyState : ReactiveViewModel, IDisposable
         _statusBarService = statusBarService;
         _shutdownToken = shutdownToken;
 
-        CancelCommand = ReactiveCommand.Create(Cancel, CanExecuteFrom(() => IsVisiblyRunning));
+        // Subscribed here, first, so each reaction runs before anything outside this class
+        // hears the change -- in particular, the token source OnIsRunningChanged swaps is
+        // already in place by the time any command or deferred refresh reacts to IsRunning.
+        this.WhenAnyValue(x => x.IsRunning).Skip(1).Subscribe(OnIsRunningChanged);
+        this.WhenAnyValue(x => x.IsVisiblyRunning).Skip(1).Subscribe(OnIsVisiblyRunningChanged);
+
+        _canCancel = this.WhenAnyValue(x => x.IsVisiblyRunning);
     }
 
-    public bool IsRunning
-    {
-        get => _isRunning;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isRunning, value)) return;
-            this.RaisePropertyChanging();
-            _isRunning = value;
-            OnIsRunningChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
+    private readonly IObservable<bool> _canCancel;
 
-    private bool _isRunning;
+    [Reactive]
+    public partial bool IsRunning { get; set; }
 
     /// <summary>True only while an operation the person actually asked for -- a Period
     /// edit, a report-scope tree check/uncheck, or some other explicit action -- is in
@@ -109,24 +107,11 @@ public class AttendanceBusyState : ReactiveViewModel, IDisposable
     /// so it doesn't also flip this property (see RefreshPayrollGroupRowsAsync's own doc
     /// comment), so ShowProgress is never asked to show both at once.
     ///
-    /// CancelCommand's CanExecute is this property, re-asked whenever this class raises
-    /// PropertyChanged (ReactiveViewModel.CanExecuteFrom) -- without that, the Cancel
-    /// button's Visibility would still update (a plain property binding) but WPF would
-    /// never re-query its CanExecute, leaving it shown but stuck disabled.</summary>
-    public bool IsVisiblyRunning
-    {
-        get => _isVisiblyRunning;
-        set
-        {
-            if (EqualityComparer<bool>.Default.Equals(_isVisiblyRunning, value)) return;
-            this.RaisePropertyChanging();
-            _isVisiblyRunning = value;
-            OnIsVisiblyRunningChanged(value);
-            this.RaisePropertyChanged();
-        }
-    }
-
-    private bool _isVisiblyRunning;
+    /// CancelCommand's CanExecute follows this property (WhenAnyValue) -- without that, the
+    /// Cancel button's Visibility would still update (a plain property binding) but its
+    /// CanExecute would never change, leaving it shown but stuck disabled.</summary>
+    [Reactive]
+    public partial bool IsVisiblyRunning { get; set; }
 
     /// <summary>Drives the status bar's left-aligned progress indicator off this
     /// property directly, rather than each of the three pages that share this one
@@ -178,8 +163,7 @@ public class AttendanceBusyState : ReactiveViewModel, IDisposable
     /// but was never something the person asked to wait on, so it shouldn't make a Cancel
     /// button appear enabled either. See IsVisiblyRunning's doc comment above for what
     /// keeps this in sync.</summary>
-    public ReactiveCommand<RxVoid, RxVoid> CancelCommand { get; }
-
+    [ReactiveCommand(CanExecute = nameof(_canCancel))]
     public void Cancel() => _cts?.Cancel();
 
     /// <summary>Runs <paramref name="action"/> wrapped in the exact IsRunning/
@@ -414,8 +398,8 @@ public class AttendanceBusyState : ReactiveViewModel, IDisposable
 
     /// <summary>Creates a fresh CancellationTokenSource exactly when IsRunning transitions
     /// to true, and disposes it (without creating a new one) when IsRunning transitions
-    /// back to false -- IsRunning's setter only invokes this on
-    /// an actual value change, so redundant same-value assignments (there aren't any
+    /// back to false -- this runs only on an actual value change (WhenAnyValue past its
+    /// first, initial value), so redundant same-value assignments (there aren't any
     /// today, but nothing enforces that) can't leak or recreate a source mid-operation.
     /// The previous source (if any) is always safe to dispose here regardless of which
     /// branch runs: by the time IsRunning can change again, whichever Core method was
@@ -516,15 +500,19 @@ public sealed class AttendanceTabActivationGate
 /// "never loaded" regardless, at which point every reader's own null-snapshot check
 /// already forces a real load with no need to consult these at all.
 ///
-/// Deliberately plain auto-incrementing properties on a plain class, not
-/// notifying ReactiveObject properties -- nothing binds to these in XAML or needs to
-/// react the instant one changes; each reader only ever polls the current value at the
-/// one moment it's deciding whether to reload.</summary>
-public sealed class AttendanceDataVersion
+/// Observable, so a reader can react the moment one moves -- the Attendance Summary re-runs
+/// its report when what it shows has changed underneath it -- while the rest only poll the
+/// current value at the one moment they're deciding whether to reload.</summary>
+public sealed partial class AttendanceDataVersion : ReactiveObject
 {
-    public int DeviceLogsVersion { get; private set; }
-    public int ManualLogsVersion { get; private set; }
-    public int ScheduleVersion { get; private set; }
+    [Reactive]
+    public partial int DeviceLogsVersion { get; private set; }
+
+    [Reactive]
+    public partial int ManualLogsVersion { get; private set; }
+
+    [Reactive]
+    public partial int ScheduleVersion { get; private set; }
 
     /// <summary>Bumped whenever a hand-edited punch pairing is saved or reset (see
     /// DayPunchPairingEditorLauncher, the only writer) -- a DayPunchPairing changes
@@ -540,7 +528,8 @@ public sealed class AttendanceDataVersion
     /// a pairing change is not a separate *input* to a payroll computation, but it
     /// does change what the attendance run inside that computation produces, so it
     /// still has to be able to *trigger* one.</summary>
-    public int PairingVersion { get; private set; }
+    [Reactive]
+    public partial int PairingVersion { get; private set; }
 
     /// <summary>Bumped whenever the company-wide Holidays table changes -- by
     /// ScheduleAssignmentViewModel's Mark/Remove Holiday command (the calendar right-click)
@@ -553,7 +542,8 @@ public sealed class AttendanceDataVersion
     /// coarse "did ANYONE's data move" shape the plain BumpSchedule()/DeviceLogsVersion
     /// already have. Not read by ReportViewModel -- a holiday changes payroll, not the
     /// schedule-vs-punches comparison the Attendance Summary tab shows.</summary>
-    public int HolidayVersion { get; private set; }
+    [Reactive]
+    public partial int HolidayVersion { get; private set; }
 
     /// <summary>Unlike the other three counters, this one has exactly one reader in the
     /// whole app: ActiveRosterProvider, which compares this against the version it last
@@ -577,7 +567,8 @@ public sealed class AttendanceDataVersion
     /// it only writes ScheduleEntries, never touches Employee/Department -- the same
     /// distinction ScheduleVersion's own doc comment already draws for ImportEmployeesAsync
     /// in the other direction.</summary>
-    public int RosterVersion { get; private set; }
+    [Reactive]
+    public partial int RosterVersion { get; private set; }
 
     /// <summary>Which employee Pins BumpScheduleForEmployees below has actually been told
     /// were touched, and the ScheduleVersion each was touched at -- lets a reader that only

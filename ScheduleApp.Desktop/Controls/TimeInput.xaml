@@ -5,16 +5,12 @@
              Focusable="False">
     <!-- A masked time field: the hour, minute and AM/PM parts are each typed into or stepped
          with Up/Down, and the clock drop-down picks one with the mouse. Blank (NullValue) is a
-         real state - "not filled in yet" - so it shows nothing rather than a placeholder time.
-         TimeInput.xaml.cs keeps it in step with SelectedTime and sets its pattern and size. -->
+         real state - "not filled in yet" - so it shows nothing rather than a placeholder time,
+         as every DateTimeEdit does (Themes/ControlDefaults.xaml). TimeInput.xaml.cs keeps it in
+         step with SelectedTime and sets its pattern. -->
     <syncfusion:DateTimeEdit x:Name="Editor"
-                             Pattern="CustomPattern"
-                             CustomPattern="h:mm tt"
                              DropDownView="Clock"
-                             IsEmptyDateEnabled="True"
-                             NullValue="{x:Null}"
-                             ShowMaskOnNullValue="False"
+                             MinWidth="120"
                              IsVisibleRepeatButton="False"
-                             VerticalContentAlignment="Center"
                              DateTimeChanged="Editor_DateTimeChanged" />
 </UserControl>

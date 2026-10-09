@@ -12,5 +12,5 @@ public class Department
     /// <summary>Display order of the worksheet tab on export.</summary>
     public int SortOrder { get; set; }
 
-    public ICollection<Employee> Employees { get; set; } = new List<Employee>();
+    public ICollection<Employee> Employees { get; set; } = [];
 }

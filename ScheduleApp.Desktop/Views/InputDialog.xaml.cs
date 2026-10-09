@@ -1,37 +1,40 @@
-using System.Windows;
+using System.Reactive.Linq;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
+using ScheduleApp.Desktop.Reactive;
 
 namespace ScheduleApp.Desktop.Views;
 
-public partial class InputDialog : Controls.AppWindow
+/// <summary>One line of text -- see <see cref="ViewModels.TextPromptViewModel"/>.</summary>
+public partial class InputDialog
 {
-    public string Value => ValueBox.Text;
-
-    public InputDialog(string title, string prompt, string defaultValue = "")
+    /// <summary>Shown for a TextPromptViewModel its opener builds (see
+    /// ReactiveViewModel.ShowDialog); the view locator creates it through this
+    /// constructor.</summary>
+    public InputDialog()
     {
         InitializeComponent();
-        Title = title;
-        PromptText.Text = prompt;
-        ValueBox.Text = defaultValue;
-        // Select-all rather than just placing the caret at the end -- a prefilled
-        // default (see ScheduleAssignmentViewModel.ToggleHolidayForSelectionAsync)
-        // is meant to be a one-keystroke accept-or-replace, not something to
-        // backspace through. Harmless for the no-default callers: an empty box has
-        // nothing to select.
+
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            var viewModel = ViewModel!;
+            ViewInteractions.Register(viewModel, this).DisposeWith(d);
+
+            this.OneWayBind(ViewModel, vm => vm.Title, v => v.Title).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Prompt, v => v.PromptText.Text).DisposeWith(d);
+            this.Bind(ViewModel, vm => vm.Text, v => v.ValueBox.Text).DisposeWith(d);
+            this.BindCommand(ViewModel, vm => vm.AcceptCommand, v => v.OkButton).DisposeWith(d);
+            viewModel.AcceptCommand
+                .Where(accepted => accepted)
+                .Subscribe(_ => DialogResult = true)
+                .DisposeWith(d);
+        });
+
         Loaded += (_, _) =>
         {
             ValueBox.Focus();
             ValueBox.SelectAll();
         };
-    }
-
-    private void OkButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrWhiteSpace(ValueBox.Text))
-        {
-            MessageBox.Show("Please enter a value.", "Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        DialogResult = true;
     }
 }

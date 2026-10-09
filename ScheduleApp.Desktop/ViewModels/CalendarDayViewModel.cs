@@ -1,10 +1,11 @@
 using ReactiveUI;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Core.Models;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
-public class CalendarDayViewModel : ReactiveObject
+public partial class CalendarDayViewModel : ReactiveObject
 {
     public DateOnly Date { get; init; }
     public bool IsCurrentMonth { get; init; }
@@ -37,13 +38,8 @@ public class CalendarDayViewModel : ReactiveObject
 
     /// <summary>Set by MonthCalendarControl's click/drag selection; read by the
     /// "set/clear schedule for selection" commands on MainViewModel.</summary>
-    public bool IsSelected
-    {
-        get => _isSelected;
-        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
-    }
-
-    private bool _isSelected;
+    [Reactive]
+    public partial bool IsSelected { get; set; }
 
     /// <summary>The schedule-vs-punches result for this day, for the little
     /// completion marker in the cell's bottom-left corner (see
@@ -57,13 +53,8 @@ public class CalendarDayViewModel : ReactiveObject
     /// even though its own Status stays PunchStatus.RestDay everywhere else
     /// (payroll, reports, Excel export) -- see
     /// RefreshCalendarAttendanceStatusesAsync's own doc comment.</summary>
-    public PunchStatus? AttendanceStatus
-    {
-        get => _attendanceStatus;
-        set => this.RaiseAndSetIfChanged(ref _attendanceStatus, value);
-    }
-
-    private PunchStatus? _attendanceStatus;
+    [Reactive]
+    public partial PunchStatus? AttendanceStatus { get; set; }
 
     /// <summary>True when this day's computed clock-in or clock-out is a hand-entered
     /// (manual) punch rather than a device tap -- set alongside

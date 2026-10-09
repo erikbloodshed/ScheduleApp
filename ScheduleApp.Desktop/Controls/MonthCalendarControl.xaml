@@ -1,10 +1,11 @@
-<UserControl x:Class="ScheduleApp.Desktop.Controls.MonthCalendarControl"
+<rxui:ReactiveUserControl x:Class="ScheduleApp.Desktop.Controls.MonthCalendarControl"
+             x:TypeArguments="vm:MainViewModel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:rxui="http://reactiveui.net"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
              xmlns:conv="clr-namespace:ScheduleApp.Desktop.Converters"
-             xmlns:coreAttendance="clr-namespace:ScheduleApp.Core.Attendance;assembly=ScheduleApp.Core"
-             x:Name="Root">
+             xmlns:coreAttendance="clr-namespace:ScheduleApp.Core.Attendance;assembly=ScheduleApp.Core">
     <UserControl.Resources>
         <conv:CalendarDayToBrushConverter x:Key="DayBrushConverter" />
     </UserControl.Resources>
@@ -44,7 +45,6 @@
 
         <ItemsControl x:Name="DaysList"
                       Grid.Row="1"
-                      ItemsSource="{Binding Days, ElementName=Root}"
                       MouseMove="DaysList_MouseMove"
                       MouseLeftButtonUp="DaysList_MouseLeftButtonUp">
             <ItemsControl.ItemsPanel>
@@ -225,4 +225,4 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
     </Grid>
-</UserControl>
+</rxui:ReactiveUserControl>

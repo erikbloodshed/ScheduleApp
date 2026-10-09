@@ -1,4 +1,5 @@
 using ReactiveUI;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels.Schedule;
 
@@ -38,13 +39,8 @@ namespace ScheduleApp.Desktop.ViewModels.Schedule;
 /// isn't shared with anything outside the Schedule page, so MainViewModel just `new`s one
 /// up in its own constructor alongside the four child ViewModels, the same way it
 /// constructs them.</summary>
-public class MultiSelectModeState : ReactiveObject
+public partial class MultiSelectModeState : ReactiveObject
 {
-    public bool IsMultiSelectMode
-    {
-        get => _isMultiSelectMode;
-        set => this.RaiseAndSetIfChanged(ref _isMultiSelectMode, value);
-    }
-
-    private bool _isMultiSelectMode;
+    [Reactive]
+    public partial bool IsMultiSelectMode { get; set; }
 }

@@ -1,85 +1,93 @@
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using ReactiveUI;
+using ReactiveUI.Binding;
+using ReactiveUI.Primitives.Disposables;
 using ScheduleApp.Core.Payroll;
 using ScheduleApp.Desktop.Controls;
+using ScheduleApp.Desktop.Converters;
+using ScheduleApp.Desktop.Reactive;
 using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Payroll;
 
 namespace ScheduleApp.Desktop.Views;
 
-/// <summary>Period pickers + the itemized Gross Pay/Deductions/Net Pay breakdown
-/// (PayrollViewModel.Result) for whichever employee is selected on the Payroll tab's tree.
-/// Almost all layout/behavior lives in the .xaml as plain Command bindings straight to
-/// PayrollViewModel (see that file's InlineAdjustmentRowTemplate/AdjustmentGroupTemplate) --
-/// the handlers below are the exceptions, needed only because a
-/// single-value category's (Allowance/Premium Pay/SSS/PhilHealth/Pag-IBIG/Cash Advance)
-/// inline amount box, and an inline-itemized category's (Incentive/OtherCharge) own row
-/// Description/Amount boxes, all commit as they're typed in rather than through an ICommand
-/// the way every button-driven action on this page does -- TextBox has no Command/
-/// CommandParameter of its own to bind that to. The two amount boxes are NumericTextBoxes
-/// and commit through its single ValueCommitted event (see that control's doc comment for
-/// what else it buys: digits-only input, 0.00 formatting, no negatives); the Description
-/// box is a plain TextBox and still needs the older LostFocus + KeyDown pair. Also because
-/// a single-value category's own
-/// "Edit" button doesn't touch the view model at all, just the sibling amount box's own
-/// focus/selection (see EditSingleValueButton_Click) -- and because DeductionLineTemplate's
-/// own Exclude/Include toggle button reaches past its own DataContext (the PayrollLineItem
-/// it's rendering, not the view model) the same way InlineAdjustmentRowTemplate's Delete
-/// button does, rather than a bound
-/// ICommand on PayrollLineItem itself. DataContext is set explicitly to a PayrollViewModel by
-/// PayrollPage's code-behind, not inherited or set here -- see PayrollPage's own doc comment
-/// for why.</summary>
-public partial class PayrollSummaryView : UserControl
+/// <summary>The itemized Gross Pay/Deductions/Net Pay breakdown (PayrollSummaryViewModel.Result)
+/// for whichever employee is selected, with its header and empty state. PayrollPage hands it the
+/// ViewModel.
+///
+/// The per-category and per-row parts are DataTemplates bound to their own items, reaching the
+/// ViewModel's CanEditAdjustmentsNow and Add/Delete commands through this control's ViewModel
+/// property. The handlers below are the exceptions: an amount or description box commits as
+/// it's typed in rather than through an ICommand (a TextBox has none) -- the amount boxes are
+/// NumericTextBoxes committing through ValueCommitted (digits-only, 0.00, once per actual
+/// change), the description box a plain TextBox on LostFocus/Enter. A single-value category's
+/// "Edit" button only focuses its sibling amount box, and the Undertime line's Exclude/Include
+/// toggle reaches past its own PayrollLineItem to the ViewModel.</summary>
+public partial class PayrollSummaryView
 {
     public PayrollSummaryView()
     {
         InitializeComponent();
+
+        this.WhenActivated((MultipleDisposable d) =>
+        {
+            this.OneWayBind(ViewModel, vm => vm.HeaderText, v => v.HeaderText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SelectedEmployee, v => v.PayTypeBadge.Visibility, VisibleWhenNotNull).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SelectedEmployee, v => v.PayTypeText.Text,
+                employee => employee?.EmployeeType.ToString() ?? string.Empty).DisposeWith(d);
+
+            // Refresh, or Cancel while anything's running -- see RefreshOrCancelPayslipCommand.
+            this.BindCommand(ViewModel, vm => vm.RefreshOrCancelPayslipCommand, v => v.RefreshOrCancelButton).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RefreshOrCancelGlyph, v => v.RefreshOrCancelButton.Tag).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.RefreshOrCancelToolTip, v => v.RefreshOrCancelButton.ToolTip).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.SelectedEmployee, v => v.RefreshOrCancelButton.Visibility, VisibleWhenNotNull).DisposeWith(d);
+
+            // The placeholder and the breakdown share one cell; exactly one shows.
+            this.OneWayBind(ViewModel, vm => vm.EmptyStateMessage, v => v.EmptyStateText.Text).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.EmptyStateMessage, v => v.EmptyStatePanel.Visibility, VisibleWhenNotNull).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Result, v => v.BreakdownPanel.Visibility, VisibleWhenNotNull).DisposeWith(d);
+
+            this.OneWayBind(ViewModel, vm => vm.Result, v => v.TotalGrossPayText.Text, result => Amount(result?.TotalGrossPay)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Result, v => v.ComputedGrossPayList.ItemsSource, result => result?.ComputedGrossPay).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.GrossPayAdjustmentGroupRows, v => v.GrossPayGroupList.ItemsSource).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Result, v => v.TotalDeductionsText.Text, result => Amount(result?.TotalDeductions)).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Result, v => v.ComputedDeductionsList.ItemsSource, result => result?.ComputedDeductions).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.DeductionAdjustmentGroupRows, v => v.DeductionGroupList.ItemsSource).DisposeWith(d);
+            this.OneWayBind(ViewModel, vm => vm.Result, v => v.NetPayText.Text, result => Amount(result?.NetPay)).DisposeWith(d);
+        });
     }
 
-    /// <summary>Bound to a single-value category's own "Edit" button (AdjustmentGroupTemplate
-    /// and its Deductions-column copy), which replaced the old "Clear" button -- see
-    /// PayrollAdjustmentGroup.SingleValueAdjustment's own doc comment for why this button
-    /// went from an ICommand to a plain Click handler. No view-model call at all: the button
-    /// sits in the same three-column Grid as the amount box it's editing (Label, Edit,
-    /// TextBox), so the sibling TextBox is found by walking the Grid's own Children rather
-    /// than needing a name or a binding -- Focus() then SelectAll() puts the caret in the box
-    /// with its existing figure highlighted, ready to be typed straight over. The actual
-    /// commit still happens the normal way once focus leaves the box, or on Enter (see
-    /// SingleValueAmountBox_ValueCommitted below), so clicking Edit and clicking away without
-    /// typing anything is a no-op, same as clicking directly into the box always was. The box
-    /// is a NumericTextBox now rather than a plain TextBox -- still a TextBox as far as the
-    /// OfType walk below is concerned, and one that selects its own contents on focus anyway,
-    /// which makes the SelectAll here belt-and-braces rather than load-bearing.</summary>
+    private static Visibility VisibleWhenNotNull(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
+
+    private static string Amount(decimal? amount) => amount is { } value ? NumberConverter.Format(value) : string.Empty;
+
+    /// <summary>A single-value category's "Edit" button: puts the caret in the sibling amount box
+    /// with its figure selected, ready to type over. It sits in the same Grid as the box (Label,
+    /// Edit, box), so the box is found there rather than by name. The commit still happens the
+    /// normal way, so Edit then clicking away without typing changes nothing.</summary>
     private void EditSingleValueButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Parent: Grid grid }) return;
-        if (grid.Children.OfType<TextBox>().FirstOrDefault() is not TextBox box) return;
+        if (grid.Children.OfType<TextBox>().FirstOrDefault() is not { } box) return;
 
         box.Focus();
         box.SelectAll();
     }
 
-    /// <summary>A single-value category's amount box, committed. NumericTextBox raises this
-    /// on Enter and on lost focus alike, once per actual change (see its own doc comment), so
-    /// unlike the LostFocus + KeyDown pair this replaced there's no second, duplicate call
-    /// after Enter for PayrollViewModel.SetSingleValueAsync's unchanged-amount check to
-    /// absorb -- that check still stands, it just isn't what's keeping Enter from writing
-    /// twice any more. InvariantText rather than Text: SetSingleValueAsync parses with
-    /// CultureInfo.InvariantCulture while the box formats itself for the current culture.</summary>
+    /// <summary>A single-value category's amount box, committed (Enter or lost focus, once per
+    /// actual change). InvariantText, since SetSingleValueAsync parses invariant while the box
+    /// formats for the current culture.</summary>
     private void SingleValueAmountBox_ValueCommitted(object? sender, EventArgs e)
     {
         if (sender is not NumericTextBox { DataContext: PayrollAdjustmentGroupRow group } box) return;
-        if (DataContext is not PayrollViewModel viewModel) return;
 
-        _ = viewModel.SetSingleValueAsync(group.Type, box.InvariantText);
+        _ = ViewModel?.SetSingleValueAsync(group.Type, box.InvariantText);
     }
 
-    /// <summary>The older LostFocus/KeyDown/commit split, kept for an inline-itemized row's
-    /// own Description box -- free text, so there's no NumericTextBox.ValueCommitted to hang
-    /// it on the way the two amount boxes now do -- see InlineAdjustmentRowTemplate and
-    /// PayrollViewModel.UpdateInlineDescriptionAsync.</summary>
+    /// <summary>An itemized row's Description box -- free text, so it commits on LostFocus and
+    /// Enter rather than a NumericTextBox's ValueCommitted.</summary>
     private void InlineDescriptionBox_LostFocus(object sender, RoutedEventArgs e) => CommitInlineDescription(sender);
 
     private void InlineDescriptionBox_KeyDown(object sender, KeyEventArgs e)
@@ -94,36 +102,25 @@ public partial class PayrollSummaryView : UserControl
     private void CommitInlineDescription(object sender)
     {
         if (sender is not TextBox { DataContext: PayrollAdjustment adjustment } box) return;
-        if (DataContext is not PayrollViewModel viewModel) return;
 
-        _ = viewModel.UpdateInlineDescriptionAsync(adjustment, box.Text);
+        _ = ViewModel?.UpdateInlineDescriptionAsync(adjustment, box.Text);
     }
 
-    /// <summary>Same single NumericTextBox.ValueCommitted handler as
-    /// SingleValueAmountBox_ValueCommitted above, for an inline-itemized row's own Amount box
-    /// instead -- see InlineAdjustmentRowTemplate and
-    /// PayrollViewModel.UpdateInlineAmountAsync.</summary>
+    /// <summary>An itemized row's Amount box, committed.</summary>
     private void InlineAmountBox_ValueCommitted(object? sender, EventArgs e)
     {
         if (sender is not NumericTextBox { DataContext: PayrollAdjustment adjustment } box) return;
-        if (DataContext is not PayrollViewModel viewModel) return;
 
-        _ = viewModel.UpdateInlineAmountAsync(adjustment, box.InvariantText);
+        _ = ViewModel?.UpdateInlineAmountAsync(adjustment, box.InvariantText);
     }
 
-    /// <summary>DeductionLineTemplate's own Exclude/Include toggle button -- unlike every
-    /// other handler in this file, the sender's DataContext (per DeductionLineTemplate) is
-    /// a PayrollLineItem, not what's being changed. The button only ever renders when
-    /// SupportsWaiver is true (see that property's own doc comment), which today means this
-    /// is always the Undertime line, so reading line.Waived here just tells us which way to
-    /// flip it -- the actual commit is still EmployeeId/period-scoped (see
-    /// IPayrollUndertimeWaiverRepository), not line-scoped, the same as it was for the
-    /// checkbox this replaced.</summary>
+    /// <summary>The Undertime line's Exclude/Include toggle. Its DataContext is the
+    /// PayrollLineItem, which only says which way to flip; the waiver itself is per
+    /// employee/period (see IPayrollUndertimeWaiverRepository).</summary>
     private void UndertimeWaivedToggle_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { DataContext: PayrollLineItem line }) return;
-        if (DataContext is not PayrollViewModel viewModel) return;
 
-        _ = viewModel.SetUndertimeWaivedAsync(!line.Waived);
+        _ = ViewModel?.SetUndertimeWaivedAsync(!line.Waived);
     }
 }

@@ -30,7 +30,7 @@ namespace ScheduleApp.Desktop.Services;
 /// browser's saved-password feature, not a substitute for keeping physical/account access
 /// to the machine itself secure.
 /// </summary>
-public class RememberedSignInStore
+public class RememberedSignInStore : IRememberedSignInStore
 {
     private static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -119,4 +119,14 @@ public class RememberedSignInStore
         public string? Username { get; set; }
         public string? ProtectedPassword { get; set; }
     }
+}
+
+/// <summary>A "Remember me" sign-in, kept between launches.</summary>
+public interface IRememberedSignInStore
+{
+    (string Username, string Password)? TryLoad();
+
+    void Save(string username, string password);
+
+    void Clear();
 }

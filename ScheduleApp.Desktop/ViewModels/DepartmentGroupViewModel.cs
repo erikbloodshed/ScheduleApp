@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Reactive.Linq;
 using ReactiveUI;
+using ReactiveUI.Binding;
 using ScheduleApp.Core.Models;
+using ReactiveUI.SourceGenerators;
 
 namespace ScheduleApp.Desktop.ViewModels;
 
@@ -9,16 +12,16 @@ namespace ScheduleApp.Desktop.ViewModels;
 /// RealDepartment is null -- the synthetic "Unassigned" bucket of employees
 /// with no department yet.
 /// </summary>
-public class DepartmentGroupViewModel : ReactiveObject
+public partial class DepartmentGroupViewModel : ReactiveObject
 {
     public required string Name { get; init; }
     public Department? RealDepartment { get; init; }
-    public List<EmployeeNodeViewModel> Employees { get; init; } = new();
+    public List<EmployeeNodeViewModel> Employees { get; init; } = [];
 
     /// <summary>The employees a search box hasn't hidden (IsVisible), in Employees' order --
     /// what a filtered tree binds its rows to, since SfTreeView can't hide a row itself. Kept
     /// in step by EmployeeTreeSearchFilter.Apply; every employee until that first runs.</summary>
-    public ObservableCollection<EmployeeNodeViewModel> VisibleEmployees { get; } = new();
+    public ObservableCollection<EmployeeNodeViewModel> VisibleEmployees { get; } = [];
 
     /// <summary>Brings VisibleEmployees in line with each employee's IsVisible.</summary>
     public void RefreshVisibleEmployees() => CollectionSync.Sync(VisibleEmployees, Employees.Where(e => e.IsVisible));
@@ -52,13 +55,8 @@ public class DepartmentGroupViewModel : ReactiveObject
     /// IsVisible is. Always true while the search box is empty, and always true on the
     /// Schedule tab's tree, which shares this same view-model shape but has no search box
     /// of its own.</summary>
-    public bool IsVisible
-    {
-        get => _isVisible;
-        set => this.RaiseAndSetIfChanged(ref _isVisible, value);
-    }
-
-    private bool _isVisible = true;
+    [Reactive]
+    public partial bool IsVisible { get; set; } = true;
 
     /// <summary>Bound two-way to the TreeViewItem's own IsExpanded via
     /// ItemContainerStyle, so a manual click still flows back here. ApplySearchFilter
@@ -66,13 +64,8 @@ public class DepartmentGroupViewModel : ReactiveObject
     /// actually on screen instead of tucked behind a collapsed node -- it never forces a
     /// collapse itself, so clearing the search box leaves whatever the person had open
     /// exactly as they left it.</summary>
-    public bool IsExpanded
-    {
-        get => _isExpanded;
-        set => this.RaiseAndSetIfChanged(ref _isExpanded, value);
-    }
-
-    private bool _isExpanded;
+    [Reactive]
+    public partial bool IsExpanded { get; set; }
 
     private bool _suppressChildSync;
 
@@ -82,14 +75,11 @@ public class DepartmentGroupViewModel : ReactiveObject
     {
         RefreshVisibleEmployees();
 
-        foreach (var node in Employees)
-        {
-            node.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(EmployeeNodeViewModel.IsSelected))
-                    RecomputeIsSelected();
-            };
-        }
+        // Each employee's own checkbox, past its current value; the group lives exactly as
+        // long as its employees, so the subscription needs no disposing.
+        Employees.Select(node => node.WhenAnyValue(n => n.IsSelected).Skip(1))
+            .Merge()
+            .Subscribe(_ => RecomputeIsSelected());
 
         RecomputeIsSelected();
     }

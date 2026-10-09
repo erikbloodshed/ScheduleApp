@@ -1,10 +1,10 @@
-<controls:AppWindow x:Class="ScheduleApp.Desktop.Views.PayrollWizardDialog" ShowMinimizeButton="False"
+<controls:ReactiveAppWindow x:Class="ScheduleApp.Desktop.Views.PayrollWizardDialog" ShowMinimizeButton="False"
+        x:TypeArguments="vm:PayrollWizardViewModel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
         xmlns:controls="clr-namespace:ScheduleApp.Desktop.Controls"
         xmlns:vm="clr-namespace:ScheduleApp.Desktop.ViewModels"
-        xmlns:converters="clr-namespace:ScheduleApp.Desktop.Converters"
         xmlns:utilities="clr-namespace:ScheduleApp.Desktop.Utilities"
         Title="New Payroll Run"
         Width="700" Height="600"
@@ -12,86 +12,6 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         utilities:WindowSizing.ConstrainToWorkArea="True">
-    <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibility" />
-        <converters:NumberConverter x:Key="Number" />
-
-        <!-- Step 1's Period dates: the full "MMMM d, yyyy" month name (e.g. "September 16,
-             2026"), matching AttendanceSummaryView/PayrollPage's own Period fields. -->
-        <Style x:Key="PeriodDate" TargetType="syncfusion:DateTimeEdit">
-            <Setter Property="Pattern" Value="CustomPattern" />
-            <Setter Property="CustomPattern" Value="MMMM d, yyyy" />
-            <Setter Property="IsEmptyDateEnabled" Value="True" />
-            <Setter Property="NullValue" Value="{x:Null}" />
-            <Setter Property="ShowMaskOnNullValue" Value="False" />
-            <Setter Property="Width" Value="190" />
-        </Style>
-
-        <!-- Right-aligned numeric grid header, same shape as AttendanceStatusDetailDialog/
-             EmployeeAttendancePanel/AttendanceSummaryView's own copies - see those files for
-             why it's duplicated per-file rather than shared. Used by Step 3's review grid
-             below, whose cells right-align through each column's TextAlignment. -->
-        <Style x:Key="RightAlignedHeader"
-               TargetType="syncfusion:GridHeaderCellControl"
-               BasedOn="{StaticResource GridHeaderCellStyle}">
-            <Setter Property="HorizontalContentAlignment"
-                    Value="Right" />
-        </Style>
-
-        <!-- Step-indicator label styling: gray/normal by default, dark/bold while its own
-             step is current (see PayrollWizardViewModel.IsStep1Active/IsStep2Active/
-             IsStep3Active). Three near-identical styles rather than one parameterized one -
-             each needs a DataTrigger bound to a different property, and a WPF Style can't
-             take a binding path as a parameter. Each is BasedOn StepLabelStyle, not on
-             Step1LabelStyle: a BasedOn style inherits its base's triggers, so steps 2 and 3
-             would also turn bold whenever step 1 was current. -->
-        <Style x:Key="StepLabelStyle"
-               TargetType="TextBlock">
-            <Setter Property="Foreground"
-                    Value="{DynamicResource MutedForegroundBrush}" />
-        </Style>
-        <Style x:Key="Step1LabelStyle"
-               TargetType="TextBlock"
-               BasedOn="{StaticResource StepLabelStyle}">
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsStep1Active}"
-                             Value="True">
-                    <Setter Property="Foreground"
-                            Value="{DynamicResource TextForegroundBrush}" />
-                    <Setter Property="FontWeight"
-                            Value="Bold" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style x:Key="Step2LabelStyle"
-               TargetType="TextBlock"
-               BasedOn="{StaticResource StepLabelStyle}">
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsStep2Active}"
-                             Value="True">
-                    <Setter Property="Foreground"
-                            Value="{DynamicResource TextForegroundBrush}" />
-                    <Setter Property="FontWeight"
-                            Value="Bold" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style x:Key="Step3LabelStyle"
-               TargetType="TextBlock"
-               BasedOn="{StaticResource StepLabelStyle}">
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsStep3Active}"
-                             Value="True">
-                    <Setter Property="Foreground"
-                            Value="{DynamicResource TextForegroundBrush}" />
-                    <Setter Property="FontWeight"
-                            Value="Bold" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -102,56 +22,53 @@
     <Grid Grid.Row="1" Margin="16"
           RowDefinitions="Auto,Auto,*,Auto">
 
-        <!-- Step indicator -->
+        <!-- Step indicator: the current step's label dark and bold, the others muted (see
+             PayrollWizardDialog.xaml.cs). -->
         <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
                     HorizontalAlignment="Center"
                     Margin="0,0,0,12">
-            <TextBlock Text="1. Period &amp; Label"
-                       Style="{StaticResource Step1LabelStyle}" />
+            <TextBlock x:Name="Step1Label" Text="1. Period &amp; Label" />
             <TextBlock Text="  —  "
                        Foreground="{DynamicResource CardBorderBrush}" />
-            <TextBlock Text="2. Employees"
-                       Style="{StaticResource Step2LabelStyle}" />
+            <TextBlock x:Name="Step2Label" Text="2. Employees" />
             <TextBlock Text="  —  "
                        Foreground="{DynamicResource CardBorderBrush}" />
-            <TextBlock Text="3. Calculate &amp; Review"
-                       Style="{StaticResource Step3LabelStyle}" />
+            <TextBlock x:Name="Step3Label" Text="3. Calculate &amp; Review" />
         </StackPanel>
 
         <Separator Grid.Row="1"
                    Margin="0,0,0,16" />
 
         <!-- Step content - three panels layered in the same cell, only the current step's
-             own Visibility is Visible (see IsStep1Visible/IsStep2Visible/IsStep3Visible).
+             own Visibility is Visible (see PayrollWizardViewModel.CurrentStepIndex).
              Chosen over a TabControl so there's no tab strip of its own to keep in sync
              with the step-indicator row above. -->
         <Grid Grid.Row="2">
             <!-- Step 1: Period + Label (build-order step 6) -->
-            <StackPanel Visibility="{Binding IsStep1Visible, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel x:Name="Step1Panel">
                 <TextBlock Text="Period"
                            FontWeight="SemiBold"
                            Margin="0,0,0,6" />
                 <StackPanel Orientation="Horizontal"
                             Margin="0,0,0,16">
-                    <syncfusion:DateTimeEdit Style="{StaticResource PeriodDate}"
-                                             DateTime="{Binding PeriodStart, Mode=TwoWay}"
+                    <syncfusion:DateTimeEdit x:Name="PeriodStartPicker"
+                                             Width="190"
                                              Margin="0,0,8,0" />
                     <TextBlock Text="to"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
-                    <syncfusion:DateTimeEdit Style="{StaticResource PeriodDate}"
-                                             DateTime="{Binding PeriodEnd, Mode=TwoWay}" />
+                    <syncfusion:DateTimeEdit x:Name="PeriodEndPicker"
+                                             Width="190" />
                 </StackPanel>
 
                 <TextBlock Text="Label"
                            FontWeight="SemiBold"
                            Margin="0,0,0,6" />
-                <syncfusion:SfTextBoxExt Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
+                <syncfusion:SfTextBoxExt x:Name="LabelBox"
                                          ToolTip="Shown later in &quot;Load Payroll Group…&quot; -- auto-filled, but editable." />
 
-                <TextBlock Text="{Binding PeriodValidationMessage}"
-                           Visibility="{Binding PeriodValidationMessage, Converter={StaticResource NotNullToVisibility}}"
+                <TextBlock x:Name="PeriodProblemText"
                            Foreground="#B91C1C"
                            TextWrapping="Wrap"
                            Margin="0,10,0,0" />
@@ -163,7 +80,7 @@
                  PayrollWizardViewModel.Departments' own doc comment). SfTreeView can't hide
                  a row, so it binds to the search's VisibleDepartments and each department's
                  VisibleEmployees rather than to Departments/Employees. -->
-            <Grid Visibility="{Binding IsStep2Visible, Converter={StaticResource BoolToVisibility}}">
+            <Grid x:Name="Step2Panel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -176,7 +93,7 @@
                                FontSize="11"
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                Margin="0,0,0,4" />
-                    <syncfusion:SfTextBoxExt Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                    <syncfusion:SfTextBoxExt x:Name="SearchBox"
                                              Watermark="ID, name or department"
                                              ToolTip="Comma-separated ID, name, or department terms (e.g. &quot;342, Cruz, Kitchen&quot;) -- narrows what's shown, not what's checked." />
                 </StackPanel>
@@ -184,7 +101,7 @@
                 <Border Grid.Row="1"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource CardBorderBrush}">
-                    <syncfusion:SfTreeView ItemsSource="{Binding VisibleDepartments}"
+                    <syncfusion:SfTreeView x:Name="EmployeeTree"
                                            SelectionMode="None"
                                            ExpandActionTrigger="Node"
                                            FocusVisualStyle="{x:Null}">
@@ -254,21 +171,19 @@
 
                 <StackPanel Grid.Row="2"
                             Margin="0,8,0,0">
-                    <TextBlock Text="{Binding SelectionScopeText}"
+                    <TextBlock x:Name="ScopeText"
                                FontSize="11"
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                TextWrapping="Wrap"
                                Margin="0,0,0,8" />
                     <StackPanel Orientation="Horizontal">
-                        <syncfusion:ButtonAdv Label="Select All"
+                        <syncfusion:ButtonAdv x:Name="SelectAllButton"
+                                              Label="Select All"
                                               IconTemplate="{StaticResource SelectAllIconTemplate}"
-                                              SizeMode="Normal"
-                                              Command="{Binding SelectAllTreeCommand}"
                                               Margin="0,0,6,0" />
-                        <syncfusion:ButtonAdv Label="Clear"
-                                              IconTemplate="{StaticResource ClearSelectionIconTemplate}"
-                                              SizeMode="Normal"
-                                              Command="{Binding ClearTreeSelectionCommand}" />
+                        <syncfusion:ButtonAdv x:Name="ClearButton"
+                                              Label="Clear"
+                                              IconTemplate="{StaticResource ClearSelectionIconTemplate}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -281,7 +196,7 @@
                  Group" below still writes straight off Step 2's own checked employees
                  rather than off this grid - see SavePayrollGroupAsync's own doc comment
                  for why the two stay independent. -->
-            <Grid Visibility="{Binding IsStep3Visible, Converter={StaticResource BoolToVisibility}}">
+            <Grid x:Name="Step3Panel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -297,14 +212,13 @@
                 <!-- Calculating pulse / error / grid+totals - mutually exclusive, see
                      PayrollWizardViewModel.IsReviewReady's own doc comment. -->
                 <Grid Grid.Row="1">
-                    <TextBlock Text="Calculating payroll for the checked employees…"
-                               Visibility="{Binding IsCalculating, Converter={StaticResource BoolToVisibility}}"
+                    <TextBlock x:Name="CalculatingText"
+                               Text="Calculating payroll for the checked employees…"
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
 
-                    <TextBlock Text="{Binding CalculationErrorMessage}"
-                               Visibility="{Binding CalculationErrorMessage, Converter={StaticResource NotNullToVisibility}}"
+                    <TextBlock x:Name="CalculationErrorText"
                                Foreground="#B91C1C"
                                TextWrapping="Wrap"
                                TextAlignment="Center"
@@ -312,7 +226,7 @@
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
 
-                    <DockPanel Visibility="{Binding IsReviewReady, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel x:Name="ReviewPanel">
                         <!-- Totals strip - same four columns as the grid below, right-aligned
                              under the matching Gross Pay/Deductions/Net Pay cells so the
                              column totals line up under what they're summing. -->
@@ -326,26 +240,26 @@
                                            Text="Total"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center" />
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalNetPay, Converter={StaticResource Number}}"
+                                <TextBlock x:Name="TotalNetPayText"
+                                           DockPanel.Dock="Right"
                                            FontWeight="SemiBold"
                                            TextAlignment="Right"
                                            Width="110"
                                            VerticalAlignment="Center" />
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalDeductions, Converter={StaticResource Number}}"
+                                <TextBlock x:Name="TotalDeductionsText"
+                                           DockPanel.Dock="Right"
                                            TextAlignment="Right"
                                            Width="110"
                                            VerticalAlignment="Center" />
-                                <TextBlock DockPanel.Dock="Right"
-                                           Text="{Binding TotalGrossPay, Converter={StaticResource Number}}"
+                                <TextBlock x:Name="TotalGrossPayText"
+                                           DockPanel.Dock="Right"
                                            TextAlignment="Right"
                                            Width="110"
                                            VerticalAlignment="Center" />
                             </DockPanel>
                         </Border>
 
-                        <syncfusion:SfDataGrid ItemsSource="{Binding ReviewResults}"
+                        <syncfusion:SfDataGrid x:Name="ReviewGrid"
                                                AutoGenerateColumns="False"
                                                AllowEditing="False"
                                                AllowDraggingColumns="False"
@@ -375,36 +289,33 @@
                 <StackPanel Grid.Row="2"
                             HorizontalAlignment="Center"
                             Margin="0,12,0,0">
-                    <syncfusion:ButtonAdv Label="Save Payroll Group"
+                    <syncfusion:ButtonAdv x:Name="SaveButton"
+                                          Label="Save Payroll Group"
                                           IconTemplate="{StaticResource SaveIconTemplate}"
-                                          SizeMode="Normal"
-                                          Command="{Binding SavePayrollGroupCommand}"
                                           HorizontalAlignment="Center" />
 
-                    <TextBlock Text="Saving…"
-                               Visibility="{Binding IsSaving, Converter={StaticResource BoolToVisibility}}"
+                    <TextBlock x:Name="SavingText"
+                               Text="Saving…"
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                HorizontalAlignment="Center"
                                Margin="0,10,0,0" />
 
-                    <TextBlock Text="{Binding SaveErrorMessage}"
-                               Visibility="{Binding SaveErrorMessage, Converter={StaticResource NotNullToVisibility}}"
+                    <TextBlock x:Name="SaveErrorText"
                                Foreground="#B91C1C"
                                TextWrapping="Wrap"
                                MaxWidth="380"
                                TextAlignment="Center"
                                Margin="0,10,0,0" />
 
-                    <TextBlock Text="{Binding SavedRunSummary}"
-                               Visibility="{Binding SavedRunSummary, Converter={StaticResource NotNullToVisibility}}"
+                    <TextBlock x:Name="SavedSummaryText"
                                Foreground="#15803D"
                                TextWrapping="Wrap"
                                MaxWidth="380"
                                TextAlignment="Center"
                                Margin="0,10,0,0" />
 
-                    <TextBlock Text="Changes to the employee list on Step 2 from here on won't be included in this saved run -- click Finish to close, or Cancel and start a new run to save a different selection."
-                               Visibility="{Binding SavedRunSummary, Converter={StaticResource NotNullToVisibility}}"
+                    <TextBlock x:Name="SavedNoteText"
+                               Text="Changes to the employee list on Step 2 from here on won't be included in this saved run -- click Finish to close, or Cancel and start a new run to save a different selection."
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                FontSize="11"
                                TextWrapping="Wrap"
@@ -416,33 +327,29 @@
         </Grid>
 
         <!-- Back / Next (Finish on the last step) / Cancel. Cancel is IsCancel alone, with
-             no CancelCommand: AppWindow closes the window for a cancel ButtonAdv before the
-             button's command would run, and CancelCommand only asks for that same close. -->
+             no command: AppWindow closes the window for a cancel ButtonAdv before the
+             button's command would run. -->
         <StackPanel Grid.Row="3"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,16,0,0">
-            <syncfusion:ButtonAdv Label="Back"
+            <syncfusion:ButtonAdv x:Name="BackButton"
+                                  Label="Back"
                                   Tag="&#xE72B;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding BackCommand}"
                                   MinWidth="80"
                                   Margin="0,0,8,0" />
-            <syncfusion:ButtonAdv Label="{Binding NextButtonText}"
+            <syncfusion:ButtonAdv x:Name="NextButton"
                                   Tag="&#xE72A;"
                                   IconTemplate="{StaticResource TagGlyphIconTemplate}"
-                                  SizeMode="Normal"
-                                  Command="{Binding NextCommand}"
                                   MinWidth="90"
                                   Margin="0,0,8,0"
                                   IsDefault="True" />
             <syncfusion:ButtonAdv Label="Cancel"
                                   IconTemplate="{StaticResource CancelIconTemplate}"
-                                  SizeMode="Normal"
                                   MinWidth="80"
                                   IsCancel="True" />
         </StackPanel>
     </Grid>
 </Grid>
-</controls:AppWindow>
+</controls:ReactiveAppWindow>

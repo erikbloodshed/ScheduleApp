@@ -24,7 +24,7 @@ public class RawUploadLogger
     private const int RetentionDays = 30;
 
     private readonly string _dataDir;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private string? _currentPath;
     private DateOnly _currentDate;
 
