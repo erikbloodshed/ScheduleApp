@@ -256,6 +256,12 @@ public class AdminViewsTests
             Assert.Equal(Visibility.Collapsed, w.SetupAdminPanelControl.Visibility);
             Assert.Equal(Visibility.Collapsed, w.PinPaneButton.Visibility);
 
+            // Nothing behind the card can be reached, by keyboard either: Tab used to walk from
+            // the card into the drawer, where Enter opened a page with nobody signed in.
+            Assert.False(w.NavigationDrawer.IsEnabled);
+            Assert.False(w.ContentFrame.IsEnabled);
+            Assert.Null(w.ContentFrame.Content);
+
             w.SignInPanelControl.UsernameBox.Text = "maria";
             w.SignInPanelControl.PasswordBoxControl.Password = "correct horse";
             await UiThread.IdleAsync();
@@ -266,6 +272,7 @@ public class AdminViewsTests
             Assert.Equal("Schedule Manager -- Signed in as maria", w.Title);
             Assert.Equal(Visibility.Collapsed, w.AuthOverlay.Visibility);
             Assert.Equal(Visibility.Visible, w.PinPaneButton.Visibility);
+            Assert.True(w.NavigationDrawer.IsEnabled);
             Assert.IsType<SchedulePage>(w.ContentFrame.Content);
 
             w.PinPaneButton.Command.Execute(null);

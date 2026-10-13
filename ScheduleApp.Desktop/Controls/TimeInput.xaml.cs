@@ -1,5 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using Syncfusion.Windows.Shared;
 
 namespace ScheduleApp.Desktop.Controls;
 
@@ -17,9 +21,18 @@ namespace ScheduleApp.Desktop.Controls;
 ///   - <see cref="SelectedTimeChanged"/> fires once per actual change, typed or assigned.
 ///   - <see cref="Use24HourClock"/> and <see cref="FocusHour"/>.
 /// It is one ordinary form field, sized like every other (Themes/ControlDefaults.xaml).
+///
+/// A blank field starts at <see cref="BlankStartsAt"/> once it's edited. Left to itself the
+/// editor has nothing to edit while blank: digits typed into it stayed as loose text that
+/// never became a time, and its clock opened on the time of day the dialog happened to be
+/// opened at, which OK then wrote into the field.
 /// </summary>
 public partial class TimeInput : UserControl
 {
+    /// <summary>Where a blank field starts when it's typed into or its clock is opened: the
+    /// time in a new schedule starts with (ApplyScheduleViewModel).</summary>
+    public static readonly TimeOnly BlankStartsAt = new(5, 0);
+
     /// <summary>True while the editor is being written from <see cref="SelectedTime"/>, so its
     /// DateTimeChanged doesn't write the same value straight back.</summary>
     private bool _syncingEditorFromValue;
@@ -97,6 +110,62 @@ public partial class TimeInput : UserControl
         var time = TimeOf(Editor.DateTime);
         if (time != SelectedTime)
             SetCurrentValue(SelectedTimeProperty, time);
+    }
+
+    /// <summary>
+    /// The first digit or Up/Down in a blank field: the field takes <see cref="BlankStartsAt"/>
+    /// with its hour selected, so a digit goes on to replace the hour ("7", "30", "p" reads
+    /// 7:30 PM, as it does in a field that already had a time) and an arrow shows the start
+    /// itself rather than stepping away from a time nobody has seen yet. Any other key leaves
+    /// a blank field blank -- tabbing through one doesn't fill it in.
+    ///
+    /// Here rather than on the editor, so it runs first: the key tunnels down through this
+    /// control, and the editor marks an arrow handled (having done nothing with it, blank)
+    /// before a handler of its own would see it. Not while the clock is open, whose keys come
+    /// through here too.
+    /// </summary>
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+
+        if (Editor.DateTime is not null || Editor.IsDropDownOpen || Keyboard.Modifiers != ModifierKeys.None)
+            return;
+
+        var isDigit = e.Key is (>= Key.D0 and <= Key.D9) or (>= Key.NumPad0 and <= Key.NumPad9);
+        if (!isDigit && e.Key is not (Key.Up or Key.Down))
+            return;
+
+        Editor.DateTime = BlankStart();
+        Editor.Select(0, 1);
+        e.Handled = !isDigit;
+    }
+
+    /// <summary>The clock opened on a blank field shows <see cref="BlankStartsAt"/> instead
+    /// of the editor's own stand-in for "no time", the current one. Only the clock is set: OK
+    /// takes what it shows, and Cancel or Escape leaves the field blank.</summary>
+    private void Editor_ClockPopupOpened(object sender, RoutedEventArgs e)
+    {
+        if (Editor.DateTime is not null)
+            return;
+
+        if (Editor.Template?.FindName("PART_Popup", Editor) is Popup { Child: { } content } && ClockIn(content) is { } clock)
+            clock.DateTime = BlankStart();
+    }
+
+    private static DateTime BlankStart() => DateTime.Today.Add(BlankStartsAt.ToTimeSpan());
+
+    private static Clock? ClockIn(DependencyObject root)
+    {
+        if (root is Clock clock)
+            return clock;
+
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            if (ClockIn(VisualTreeHelper.GetChild(root, i)) is { } found)
+                return found;
+        }
+
+        return null;
     }
 
     /// <summary>The time of day the editor holds, to the minute -- the editor carries a date

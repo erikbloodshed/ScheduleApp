@@ -37,6 +37,14 @@ public partial class DeviceFetchViewModel : ViewModelBase
 
     private readonly IObservable<bool> _canFetchFromDevice;
 
+    /// <summary>Reads the terminal's log -- ZkTecoAttendanceLogReader.FetchAttendanceLogs,
+    /// unless a test hands in a stand-in for the device.</summary>
+    private readonly DeviceFetch _fetchFromDevice;
+
+    /// <summary>One read of a terminal's whole attendance log.</summary>
+    public delegate ZkTecoAttendanceLogReader.FetchResult DeviceFetch(
+        string ip, int port, uint commKey, ZkTransportKind transportKind, CancellationToken cancellationToken);
+
     public DeviceFetchViewModel(
         IAttendanceLogRepository attendanceLogRepository,
         IStatusBarService statusBarService,
@@ -45,9 +53,13 @@ public partial class DeviceFetchViewModel : ViewModelBase
         string? initialDeviceIp,
         int initialDevicePort,
         uint initialDeviceCommKey,
-        string? initialDeviceTransport)
+        string? initialDeviceTransport,
+        DeviceFetch? fetchFromDevice = null)
         : base(statusBarService)
     {
+        _fetchFromDevice = fetchFromDevice
+            ?? ((ip, port, commKey, transportKind, cancellationToken) =>
+                ZkTecoAttendanceLogReader.FetchAttendanceLogs(ip, port, commKey, transportKind, cancellationToken: cancellationToken));
         _attendanceLogRepository = attendanceLogRepository;
         _busy = busy;
         _dataVersion = dataVersion;
@@ -98,9 +110,22 @@ public partial class DeviceFetchViewModel : ViewModelBase
             // single quick round trip already bounded by the device timeout, so Cancel
             // clicked during those just takes effect a beat later, at the next chunk
             // boundary, rather than not at all.
-            var fetchResult = await Task.Run(() =>
-                ZkTecoAttendanceLogReader.FetchAttendanceLogs(ip, port, commKey, transportKind,
-                    cancellationToken: cancellationToken));
+            //
+            // What the device leg fails with is reported here, in the device's own words (which
+            // address, how long it waited, that it may be set to UDP only) rather than by
+            // ShowFailure: Failure reads an exception as the database's or a file's, so a
+            // terminal that didn't answer came out as "The database didn't answer in time."
+            ZkTecoAttendanceLogReader.FetchResult fetchResult;
+            try
+            {
+                fetchResult = await Task.Run(() => _fetchFromDevice(ip, port, commKey, transportKind, cancellationToken));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                StatusBar.ShowError(ex.Message, "Couldn't fetch from the device");
+                Logger.Error(ex, "Device fetch from {Ip}:{Port} failed", ip, port);
+                return;
+            }
 
             var importResult = await _attendanceLogRepository.AddLogsAsync(fetchResult.Logs, cancellationToken);
 

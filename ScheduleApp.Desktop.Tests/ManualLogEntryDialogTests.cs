@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using NSubstitute;
 using ScheduleApp.Core.Attendance;
@@ -31,6 +32,10 @@ public class ManualLogEntryDialogTests
             Assert.Equal(Environment.UserName, dialog.EnteredByBox.Text);
             Assert.Equal("Pick an employee to see that day's machine punches.", dialog.MachinePunchesPlaceholder.Text);
 
+            // No time yet: the field is blank, not the editor's own "No date is selected".
+            Assert.Null(dialog.TimeBox.SelectedTime);
+            Assert.Equal(string.Empty, dialog.TimeBox.Editor.Text);
+
             // The Reason box shows its default grayed out, and follows the punch type.
             Assert.Equal("Clock In", dialog.ReasonBox.Text);
             Assert.Equal(Brushes.Gray, dialog.ReasonBox.Foreground);
@@ -49,6 +54,9 @@ public class ManualLogEntryDialogTests
             Assert.Equal("Espino", vm.EmployeeText);
             Assert.True(dialog.EmployeeSuggestionsPopup.IsOpen);
             Assert.Single(dialog.EmployeeSuggestionsList.Items);
+
+            // The row reads as the suggestion itself, not as an empty host for a view it has none of.
+            Assert.Contains(Descendants<TextBlock>(dialog.EmployeeSuggestionsList), t => t.Text == vm.Suggestions[0]);
 
             vm.Time = new TimeOnly(9, 15);
             await UiThread.IdleAsync();
@@ -76,6 +84,18 @@ public class ManualLogEntryDialogTests
         Assert.True(result);
         Assert.Equal(3, dialog.ViewModel!.AcceptedLog?.EmployeeId);
     });
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+                yield return match;
+            foreach (var descendant in Descendants<T>(child))
+                yield return descendant;
+        }
+    }
 }
 
 public class PunchTimeEntryDialogTests

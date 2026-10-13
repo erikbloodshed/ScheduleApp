@@ -49,7 +49,7 @@ public partial class EmployeesPage : INavigationAware
             ViewInteractions.Register(tree, this).DisposeWith(d);
             ViewInteractions.Register(viewModel.ImportExport, this).DisposeWith(d);
 
-            DepartmentTree.ItemsSource = tree.Departments;
+            ShowDepartments();
 
             this.BindCommand(ViewModel, vm => vm.Tree.AddDepartmentCommand, v => v.AddDepartmentButton).DisposeWith(d);
             this.BindCommand(ViewModel, vm => vm.Tree.DeleteDepartmentCommand, v => v.DeleteDepartmentButton).DisposeWith(d);
@@ -109,11 +109,23 @@ public partial class EmployeesPage : INavigationAware
                     handler => tree.Departments.CollectionChanged -= handler)
                 .Subscribe(_ =>
                 {
+                    ShowDepartments();
                     RebuildSuggestions();
                     DispatchRestoreTreeSelection();
                 })
                 .DisposeWith(d);
         });
+    }
+
+    /// <summary>Hands the tree the departments as they stand, as a list of its own rather than
+    /// the live collection: a load replaces them in one Reset, and SfTreeView answers a Reset by
+    /// emptying itself without reading the new items back -- the tree went blank after every
+    /// add or edit. The old selection goes with the old departments; RestoreTreeSelection puts
+    /// it back.</summary>
+    private void ShowDepartments()
+    {
+        DepartmentTree.SelectedItem = null;
+        DepartmentTree.ItemsSource = ViewModel!.Tree.Departments.ToList();
     }
 
     /// <summary>Every visit picks up whatever's selected now -- the Schedule tab may have

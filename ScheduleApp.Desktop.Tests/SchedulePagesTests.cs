@@ -189,6 +189,7 @@ public sealed class SchedulePagesTests : IDisposable
             await UiThread.IdleAsync();
 
             var kitchen = Vm.Tree.Departments[1];
+            Assert.Equal(Vm.Tree.Departments, page.DepartmentTree.Nodes.Select(n => n.Content));
             Assert.Same(kitchen, page.DepartmentTree.SelectedItem);
             Assert.Same(TestRoster.Node(Vm.Tree.Departments, 4), page.EmployeesGrid.SelectedItem);
             Assert.True(page.EditEmployeeButton.Command.CanExecute(null));
@@ -215,10 +216,11 @@ public sealed class SchedulePagesTests : IDisposable
             _schedule.StatusBar.Received(1).Show(Arg.Any<string>(), "No employee or department found matching \"nobody\".",
                 StatusKind.Caution, Arg.Any<TimeSpan>());
 
-            // A reload (after an edit here) keeps the department showing.
+            // A reload (after an edit here) keeps the departments listed, and the one showing.
             await Vm.Tree.LoadCommand.Execute();
             await SettledAsync();
             await UiThread.IdleAsync();
+            Assert.Equal(Vm.Tree.Departments, page.DepartmentTree.Nodes.Select(n => n.Content));
             Assert.Same(Vm.Tree.Departments[0], page.DepartmentTree.SelectedItem);
         });
 }

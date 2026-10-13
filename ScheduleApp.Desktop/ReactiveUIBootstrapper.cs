@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Threading;
+using ReactiveUI.Binding;
 using ReactiveUI.Builder;
+using Splat;
 
 namespace ScheduleApp.Desktop;
 
@@ -18,10 +20,17 @@ public static class ReactiveUIBootstrapper
         if (Application.Current is null)
             _ = Dispatcher.CurrentDispatcher;
 
+        // WithWpf() registers AutoDataTemplateBindingHook, which gives any list whose ItemsSource
+        // is bound without an ItemTemplate or DisplayMemberPath a template that looks up a view
+        // for each item. No list here shows items that have one -- they're strings and plain
+        // rows -- so every such list drew blank rows instead of WPF's own ToString() text.
+        // It's the only hook WithWpf() registers.
         RxAppBuilder.CreateReactiveUIBuilder()
             .WithCoreServices()
             .WithWpf()
+            .WithRegistration(static resolver => resolver.UnregisterAll<IPropertyBindingHook>())
             .BuildApp();
+        BindingHooks.Refresh();
 
         return true;
     });

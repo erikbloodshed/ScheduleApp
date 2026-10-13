@@ -298,6 +298,18 @@ public class DayPunchPairingDialogTests
     private readonly IManualAttendanceLogRepository _manualLogs = Substitute.For<IManualAttendanceLogRepository>();
 
     [Fact]
+    public Task The_view_locator_finds_the_dialog_for_its_view_model() => UiThread.RunAsync(() =>
+    {
+        var vm = TestPairingDay.Editor(_manualLogs);
+
+        var view = ReactiveUI.Binding.ViewLocator.GetCurrent().ResolveView(vm, null);
+
+        var dialog = Assert.IsType<DayPunchPairingDialog>(view);
+        Assert.Same(vm, dialog.ViewModel);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
     public Task Shows_the_grid_footer_and_buttons_for_a_flexible_day() => UiThread.RunAsync(async () =>
     {
         var dialog = await UiThread.ShowAsync(new DayPunchPairingDialog { ViewModel = TestPairingDay.Editor(_manualLogs) });

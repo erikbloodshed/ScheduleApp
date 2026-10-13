@@ -71,6 +71,13 @@ public partial class MainWindow
                 stage => VisibleWhen(stage == ShellStage.SetupAdmin)).DisposeWith(d);
             this.OneWayBind(ViewModel, vm => vm.Stage, v => v.PinPaneButton.Visibility,
                 stage => VisibleWhen(stage == ShellStage.SignedIn)).DisposeWith(d);
+
+            // The overlay only covers the drawer and its page: it stops the mouse, not the
+            // keyboard, and Tab walked from the card's last button into the drawer behind it,
+            // where Enter opened a page -- and from there its dialogs -- with nobody signed in.
+            // Disabled, nothing behind the card takes focus.
+            this.OneWayBind(ViewModel, vm => vm.Stage, v => v.NavigationDrawer.IsEnabled,
+                stage => stage == ShellStage.SignedIn).DisposeWith(d);
             viewModel.WhenAnyValue(vm => vm.Stage)
                 .Where(stage => stage == ShellStage.SignedIn)
                 .Take(1)
@@ -142,9 +149,13 @@ public partial class MainWindow
     /// <summary>A page item opens its page (its Tag is the page's type); a footer item opens its
     /// dialog (its Tag names it). Attendance itself has no Tag -- the drawer expands its
     /// sub-items, or pops them up off the compact rail, on its own. Unpinned, picking a page
-    /// folds the expanded menu back to the rail, out of the page's way.</summary>
+    /// folds the expanded menu back to the rail, out of the page's way. Nothing opens until
+    /// someone has signed in, however the click got here.</summary>
     private void NavigationDrawer_ItemClicked(object? sender, NavigationItemClickedEventArgs e)
     {
+        if (ViewModel?.Stage != ShellStage.SignedIn)
+            return;
+
         switch (e.Item?.Tag)
         {
             case Type:

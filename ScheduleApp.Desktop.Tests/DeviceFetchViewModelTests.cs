@@ -3,6 +3,7 @@ using System.Windows.Input;
 using NSubstitute;
 using ScheduleApp.Core.Attendance;
 using ScheduleApp.Desktop.Services;
+using ScheduleApp.Desktop.ViewModels;
 using ScheduleApp.Desktop.ViewModels.Attendance;
 using Xunit;
 
@@ -22,8 +23,43 @@ public sealed class DeviceFetchViewModelTests : IDisposable
 
     public void Dispose() => _busy.Dispose();
 
-    private DeviceFetchViewModel NewViewModel(string? ip, int port = 4370) =>
-        new(_logs, _statusBar, _busy, new AttendanceDataVersion(), ip, port, 0, "Tcp");
+    private DeviceFetchViewModel NewViewModel(string? ip, int port = 4370, DeviceFetchViewModel.DeviceFetch? device = null) =>
+        new(_logs, _statusBar, _busy, new AttendanceDataVersion(), ip, port, 0, "Tcp", device);
+
+    [Fact]
+    public async Task A_device_that_doesnt_answer_is_reported_as_the_device_not_the_database()
+    {
+        const string deviceSays = "Could not open a TCP connection to 10.0.0.5:4370 within 4000 ms (attempt 2 of 2).";
+        var vm = NewViewModel("10.0.0.5", device: (_, _, _, _, _) => throw new TimeoutException(deviceSays));
+
+        await vm.FetchFromDeviceCommand.Execute();
+
+        _statusBar.Received(1).Show("Couldn't fetch from the device", deviceSays, StatusKind.Error, Arg.Any<TimeSpan>());
+        _statusBar.DidNotReceive().Show(Arg.Any<string>(), Failure.TimedOutText, Arg.Any<StatusKind>(), Arg.Any<TimeSpan>());
+        await _logs.DidNotReceive().AddLogsAsync(Arg.Any<IReadOnlyList<AttendanceLog>>(), Arg.Any<CancellationToken>());
+        Assert.False(_busy.IsRunning);
+    }
+
+    [Fact]
+    public async Task What_the_device_returns_is_saved_and_counted()
+    {
+        var punches = new List<AttendanceLog> { new() { EmployeeId = 3, Timestamp = new DateTime(2026, 9, 1, 8, 0, 0) } };
+        _logs.AddLogsAsync(Arg.Any<IReadOnlyList<AttendanceLog>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PunchRecordImportResult { NewRecords = 1, DuplicateRecords = 0 }));
+        var vm = NewViewModel("10.0.0.5", device: (_, _, _, _, _) => new Data.Attendance.ZkTecoAttendanceLogReader.FetchResult
+        {
+            Logs = punches,
+            SkippedNonNumericUserIds = 0,
+            DeviceName = "MB560",
+            DeviceSerialNumber = "SN1",
+        });
+
+        await vm.FetchFromDeviceCommand.Execute();
+
+        await _logs.Received(1).AddLogsAsync(punches, Arg.Any<CancellationToken>());
+        _statusBar.Received(1).Show(Arg.Any<string>(), Arg.Is<string>(m => m.Contains("Fetched 1 punch(es) from MB560") && m.Contains("1 new")),
+            StatusKind.Success, Arg.Any<TimeSpan>());
+    }
 
     [Theory]
     [InlineData(null, 4370, "No device IP is configured")]

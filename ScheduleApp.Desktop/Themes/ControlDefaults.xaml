@@ -68,7 +68,9 @@
 
     <!-- A date: "October 1, 2026", typed or picked from the drop-down calendar. Blank is a
          real state - "not filled in yet" - so it shows nothing rather than a placeholder
-         date. TimeInput sets its own time pattern over this. -->
+         date. TimeInput sets its own time pattern over this. NoneDateText is what the editor
+         writes into a blank field, "No date is selected" unless told otherwise - which a
+         blank time field (TimeInput) said too. -->
     <Style TargetType="syncfusion:DateTimeEdit">
         <Setter Property="Height" Value="{StaticResource ControlHeight}" />
         <Setter Property="Pattern" Value="CustomPattern" />
@@ -76,6 +78,7 @@
         <Setter Property="IsEmptyDateEnabled" Value="True" />
         <Setter Property="NullValue" Value="{x:Null}" />
         <Setter Property="ShowMaskOnNullValue" Value="False" />
+        <Setter Property="NoneDateText" Value="" />
     </Style>
 
     <Style TargetType="syncfusion:ComboBoxAdv">

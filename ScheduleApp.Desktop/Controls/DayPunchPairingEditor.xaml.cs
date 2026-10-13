@@ -25,7 +25,13 @@ namespace ScheduleApp.Desktop.Controls;
 /// dragged <see cref="DayPunchPairingCellViewModel"/> travels in the DataObject.
 /// All this code-behind does is turn gestures into ViewModel calls -- the move and
 /// the recompute that follows it live in the ViewModel.
+///
+/// Kept out of the view locator: DayPunchPairingDialog is the view for the editor's
+/// ViewModel (it's what ShowDialog resolves), and hands this control the ViewModel
+/// itself. Two registered views for one ViewModel and the locator returns this one,
+/// which isn't a window.
 /// </summary>
+[ExcludeFromViewRegistration]
 public partial class DayPunchPairingEditor
 {
     private static readonly Brush DefaultSlotBorder = Frozen(Color.FromRgb(0xE2, 0xE5, 0xEA));

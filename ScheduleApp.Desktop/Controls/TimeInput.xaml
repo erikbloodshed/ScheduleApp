@@ -7,10 +7,12 @@
          with Up/Down, and the clock drop-down picks one with the mouse. Blank (NullValue) is a
          real state - "not filled in yet" - so it shows nothing rather than a placeholder time,
          as every DateTimeEdit does (Themes/ControlDefaults.xaml). TimeInput.xaml.cs keeps it in
-         step with SelectedTime and sets its pattern. -->
+         step with SelectedTime, sets its pattern, and starts a blank one at 5:00 AM once it's
+         typed into or its clock is opened. -->
     <syncfusion:DateTimeEdit x:Name="Editor"
                              DropDownView="Clock"
                              MinWidth="120"
                              IsVisibleRepeatButton="False"
-                             DateTimeChanged="Editor_DateTimeChanged" />
+                             DateTimeChanged="Editor_DateTimeChanged"
+                             ClockPopupOpened="Editor_ClockPopupOpened" />
 </UserControl>
